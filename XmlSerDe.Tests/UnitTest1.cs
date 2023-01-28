@@ -258,7 +258,7 @@ namespace XmlSerDe.Tests
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
             XmlSerializerDeserializer910.Deserialize(
-                (@"<XmlObject10><XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1"">  <StringProperty>a</StringProperty><IntProperty>123</IntProperty>  </XmlObjectProperty></XmlObject10>").AsSpan(),
+                (@"   <XmlObject10>   <XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1"">  <StringProperty>a</StringProperty><IntProperty>123</IntProperty>  </XmlObjectProperty></XmlObject10>").AsSpan(),
                 out XmlObject10 xo
                 );
             Xunit.Assert.NotNull(xo);

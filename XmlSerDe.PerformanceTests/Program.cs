@@ -1,12 +1,14 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Exporters;
 using BenchmarkDotNet.Jobs;
+using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Parsers.MicrosoftAntimalwareEngine;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Xml.Serialization;
 using XmlSerDe.Generator.EmbeddedCode;
 using XmlSerDe.PerformanceTests.Subject;
@@ -54,6 +56,17 @@ Job=.NET 6.0  Runtime=.NET 6.0
 |    Old | 18.74 us | 0.372 us | 0.471 us |  1.00 |    0.00 | 4.0894 |  16.76 KB |        1.00 |
 |    New | 13.99 us | 0.201 us | 0.407 us |  0.76 |    0.03 | 0.4272 |   1.76 KB |        0.10 |
 
+
+
+| Method |     Mean |    Error |   StdDev | Ratio | RatioSD |   Gen0 | Allocated | Alloc Ratio |
+|------- |---------:|---------:|---------:|------:|--------:|-------:|----------:|------------:|
+|    Old | 15.54 us | 0.284 us | 0.252 us |  1.00 |    0.00 | 3.9063 |   16392 B |        1.00 |
+|    New | 13.01 us | 0.258 us | 0.242 us |  0.84 |    0.02 | 0.1984 |     848 B |        0.05 |
+
+| Method |     Mean |    Error |   StdDev | Ratio | RatioSD |   Gen0 | Allocated | Alloc Ratio |
+|------- |---------:|---------:|---------:|------:|--------:|-------:|----------:|------------:|
+|    Old | 15.86 us | 0.313 us | 0.487 us |  1.00 |    0.00 | 3.9063 |   16392 B |        1.00 |
+|    New | 13.04 us | 0.148 us | 0.115 us |  0.84 |    0.03 | 0.1984 |     848 B |        0.05 |
 
 
 */
@@ -233,44 +246,45 @@ Job=.NET 6.0  Runtime=.NET 6.0
             }
             );
 
-        public static string AuxXml = @"<InfoContainer>
-<InfoCollection>
-<BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived3Info"">
-<Email>example@example.com</Email>
-</BaseInfo>
-<BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived1Info"">
-<BasePersonificationInfo>my string !@#$%^&amp;*()_+|-=\&#39;;[]{},./&lt;&gt;?</BasePersonificationInfo>
-</BaseInfo>
-<BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived2Info"">
-<HotKeyUsed>false</HotKeyUsed>
-<StepsCounter>1</StepsCounter>
-<EventsTime>
-<SerializeKeyValue>
-<Key>Three</Key>
-<Value>
-<StartTime>2022-09-28T14:51:39.2438815+03:00</StartTime>
-<SecondsSpan>3</SecondsSpan>
-</Value>
-</SerializeKeyValue>
-<SerializeKeyValue>
-<Key>One</Key>
-<Value>
-<StartTime>2022-09-28T14:28:00.5009069+03:00</StartTime>
-<SecondsSpan>0</SecondsSpan>
-</Value>
-</SerializeKeyValue>
-<SerializeKeyValue>
-<Key>Two</Key>
-<Value>
-<StartTime>2022-09-28T14:28:02.3089553+03:00</StartTime>
-<SecondsSpan>1</SecondsSpan>
-</Value>
-</SerializeKeyValue>
-</EventsTime>
-</BaseInfo>
-</InfoCollection>
+        public static string AuxXml = @"
+<InfoContainer>
+    <InfoCollection>
+        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived3Info"">
+            <Email>example@example.com</Email>
+        </BaseInfo>
+        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived1Info"">
+            <BasePersonificationInfo>my string !@#$%^&amp;*()_+|-=\&#39;;[]{},./&lt;&gt;?</BasePersonificationInfo>
+        </BaseInfo>
+        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived2Info"">
+            <HotKeyUsed>false</HotKeyUsed>
+            <StepsCounter>1</StepsCounter>
+            <EventsTime>
+                <SerializeKeyValue>
+                    <Key>Three</Key>
+                    <Value>
+                        <StartTime>2022-09-28T14:51:39.2438815+03:00</StartTime>
+                        <SecondsSpan>3</SecondsSpan>
+                    </Value>
+                </SerializeKeyValue>
+                <SerializeKeyValue>
+                    <Key>One</Key>
+                    <Value>
+                        <StartTime>2022-09-28T14:28:00.5009069+03:00</StartTime>
+                        <SecondsSpan>0</SecondsSpan>
+                    </Value>
+                </SerializeKeyValue>
+                <SerializeKeyValue>
+                    <Key>Two</Key>
+                    <Value>
+                        <StartTime>2022-09-28T14:28:02.3089553+03:00</StartTime>
+                        <SecondsSpan>1</SecondsSpan>
+                    </Value>
+                </SerializeKeyValue>
+            </EventsTime>
+        </BaseInfo>
+    </InfoCollection>
 </InfoContainer>
-".Replace("\r\n", "");
+";
 
         public Fixture()
         {
@@ -1055,6 +1069,160 @@ Job=.NET 6.0  Runtime=.NET 6.0
                 index - iindex
                 );
         }
+
+
+        /*
+
+
+        |           Method |      Mean |     Error |    StdDev | Allocated |
+        |----------------- |----------:|----------:|----------:|----------:|
+        |    RefStructTest | 0.1167 ns | 0.0319 ns | 0.0327 ns |         - |
+        | ReturnStructTest | 5.4232 ns | 0.1375 ns | 0.1528 ns |         - |
+
+
+        */
+
+        //[Benchmark]
+        //public ReturnStruct RefStructTest()
+        //{
+        //    ReturnStruct result = new();
+        //    RefMethod0(ref result);
+        //    return result;
+        //}
+        //private void RefMethod0(ref ReturnStruct result)
+        //{
+        //    RefMethod1(ref result);
+        //    if (result.Field1 > 0)
+        //    {
+        //        return;
+        //    }
+        //    result = new ReturnStruct();
+        //}
+        //private void RefMethod1(ref ReturnStruct result)
+        //{
+        //    RefMethod2(ref result);
+        //    if (result.Field1 > 0)
+        //    {
+        //        return;
+        //    }
+        //    result = new ReturnStruct();
+        //}
+        //private void RefMethod2(ref ReturnStruct result)
+        //{
+        //    RefMethod3(ref result);
+        //    if(result.Field1 > 0)
+        //    {
+        //        return;
+        //    }
+        //    result = new ReturnStruct();
+        //}
+        //private void RefMethod3(ref ReturnStruct result)
+        //{
+        //    result = new ReturnStruct(0, 0, 0, 0);
+        //}
+
+
+        //[Benchmark]
+        //public ReturnStruct ReturnStructTest()
+        //{
+        //    return ReturnMethod0();
+        //}
+
+        //private ReturnStruct ReturnMethod0()
+        //{
+        //    var r = ReturnMethod1();
+        //    if (r.Field1 > 0)
+        //    {
+        //        return r;
+        //    }
+        //    return new ReturnStruct();
+        //}
+        //private ReturnStruct ReturnMethod1()
+        //{
+        //    var r = ReturnMethod2();
+        //    if (r.Field1 > 0)
+        //    {
+        //        return r;
+        //    }
+        //    return new ReturnStruct();
+        //}
+        //private ReturnStruct ReturnMethod2()
+        //{
+        //    var r = ReturnMethod3();
+        //    if(r.Field1 > 0)
+        //    {
+        //        return r;
+        //    }
+        //    return new ReturnStruct();
+        //}
+        //private ReturnStruct ReturnMethod3()
+        //{
+        //    return new ReturnStruct(0, 0, 0, 0);
+        //}
+
+
+        //public readonly ref struct ReturnStruct
+        //{
+        //    public readonly long Field1;
+        //    public readonly long Field2;
+        //    public readonly long Field3;
+        //    public readonly long Field4;
+
+        //    public ReturnStruct(int field1, int field2, int field3, int field4)
+        //    {
+        //        Field1 = field1;
+        //        Field2 = field2;
+        //        Field3 = field3;
+        //        Field4 = field4;
+        //    }
+        //}
+
+        //[Benchmark]
+        //public int FieldSpan()
+        //{
+        //    return new Field().Do();
+        //}
+        //[Benchmark]
+        //public int LocalSpan()
+        //{
+        //    return new Local().Do();
+        //}
+
+        //private readonly ref struct Field
+        //{
+        //    private readonly ReadOnlySpan<char> _f = "1234567890q".AsSpan();
+        //    public Field()
+        //    {
+        //    }
+
+        //    public readonly int Do()
+        //    {
+        //        var sum = 0;
+        //        for (var i = 0; i < 300; i++)
+        //        {
+        //            sum += GetSpanLength(_f);
+        //        }
+        //        return sum;
+        //    }
+        //    [MethodImpl(MethodImplOptions.NoInlining)]
+        //    private static int GetSpanLength(ReadOnlySpan<char> span) => span.Length;
+        //}
+
+        //private readonly ref struct Local
+        //{
+        //    public readonly int Do()
+        //    {
+        //        var sum = 0;
+        //        for (var i = 0; i < 300; i++)
+        //        {
+        //            sum += GetSpanLength("1234567890q".AsSpan());
+        //        }
+        //        return sum;
+        //    }
+        //    [MethodImpl(MethodImplOptions.NoInlining)]
+        //    private static int GetSpanLength(ReadOnlySpan<char> span) => span.Length;
+        //}
+
 
     }
 

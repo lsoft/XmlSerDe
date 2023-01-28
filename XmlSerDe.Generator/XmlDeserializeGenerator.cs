@@ -48,7 +48,7 @@ namespace XmlSerDe.Generator
             {
                 context.AddSource(
                     "XmlSerDeHelper.cs",
-                    GeneratorResources.EmbeddedHelperCode
+                    GeneratorResources.EmbeddedHelperCode.Replace("//{REMOVE THIS COMMENT}", "")
                     );
 
                 var bsg = new BuiltinSourceProducer(

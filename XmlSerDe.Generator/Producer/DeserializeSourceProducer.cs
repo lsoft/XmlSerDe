@@ -318,10 +318,10 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             _sb.AppendLine($$"""
             if(!internals.IsEmpty)
             {
-                {{typeof(XmlNode2).FullName}} child;
+                {{typeof(XmlNode2).FullName}} child = new();
                 while(true)
                 {
-                    child = {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(internals);
+                    {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(internals, ref child);
                     if(child.IsEmpty)
                     {
                         break;
@@ -435,10 +435,10 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         }
 
                         var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                        {{typeof(XmlNode2).FullName}} child2;
+                        {{typeof(XmlNode2).FullName}} child2 = new();
                         while(true)
                         {
-                            child2 = {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(childInternals);
+                            {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(childInternals, ref child2);
                             if(child2.{{nameof(XmlNode2.IsEmpty)}})
                             {
                                 break;

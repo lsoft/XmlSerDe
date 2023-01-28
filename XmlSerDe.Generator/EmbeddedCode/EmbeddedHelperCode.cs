@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using roschar = System.ReadOnlySpan<char>;
@@ -66,6 +67,9 @@ namespace XmlSerDe.Generator.EmbeddedCode
 
     public readonly ref struct XmlNode2
     {
+        private readonly roschar _xmlnsHttp = "http://www.w3.org/2001/XMLSchema-instance".AsSpan();
+        private readonly roschar _typeHttp = "type".AsSpan();
+
         /// <summary>
         /// Struct is empty.
         /// </summary>
@@ -107,10 +111,9 @@ namespace XmlSerDe.Generator.EmbeddedCode
         /// <summary>
         /// Get first child of its node.
         /// </summary>
-        public readonly XmlNode2 GetFirstChild()
+        public readonly void GetFirstChild(ref XmlNode2 result)
         {
-            var result = GetFirst(Internals);
-            return result;
+            GetFirst(Internals, ref result);
         }
 
         /// <summary>
@@ -133,48 +136,55 @@ namespace XmlSerDe.Generator.EmbeddedCode
         /// </summary>
         public readonly roschar GetPreciseNodeType()
         {
+            ParsedAttribute parsedAttribute = new();
+
             //ищем xmlns
-            var xmlns = ParseAttribute(
+            ParseAttribute(
                 Head.FullHead,
-                Head.NodeType.Length + 1,
+                Head.PrefixLength + Head.NodeType.Length + 1,
                 "xmlns".AsSpan(),
                 roschar.Empty,
-                "http://www.w3.org/2001/XMLSchema-instance".AsSpan()
+                _xmlnsHttp,//"http://www.w3.org/2001/XMLSchema-instance".AsSpan(),
+                ref parsedAttribute
                 );
-            if(xmlns.IsEmpty)
+            if(parsedAttribute.IsEmpty)
             {
                 return roschar.Empty;
             }
 
             //ищем тип
-            var type = ParseAttribute(
+            ParseAttribute(
                 Head.FullHead,
-                Head.NodeType.Length + 1,
-                xmlns.Name,
-                "type".AsSpan(),
-                roschar.Empty
+                Head.PrefixLength + Head.NodeType.Length + 1,
+                parsedAttribute.Name,
+                _typeHttp,//"type".AsSpan(),
+                roschar.Empty,
+                ref parsedAttribute
                 );
-            if(type.IsEmpty)
+            if(parsedAttribute.IsEmpty)
             {
                 return roschar.Empty;
             }
 
-            return type.Value;
+            return parsedAttribute.Value;
         }
 
-        public static XmlNode2 GetFirst(
-            roschar nodes
+        public static void GetFirst(
+            roschar nodes,
+            ref XmlNode2 result
             )
         {
             var length = GetFirstLength(nodes);
             if (length == 0)
             {
-                return new XmlNode2();
+                result = new XmlNode2();
+                return;
             }
 
-            return new XmlNode2(nodes.Slice(0, length));
+            result = new XmlNode2(nodes.Slice(0, length));
         }
 
+        //{REMOVE THIS COMMENT}[MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static int GetFirstLength(
             roschar nodes
             )
@@ -348,8 +358,7 @@ namespace XmlSerDe.Generator.EmbeddedCode
                 return new ScanHeadResult();
             }
 
-            var index = fullnode.Length - trimmed.Length;
-            var firstNonSpace = index;
+            var firstNonSpace = fullnode.Length - trimmed.Length;
 
             //ищем конец имени ноды
             var endOfNameIndex = trimmed.IndexOfAny(
@@ -363,11 +372,11 @@ namespace XmlSerDe.Generator.EmbeddedCode
                 );
             var chm1 = trimmed[endOfHeadIndex - 1];
             var isBodyLess = chm1 == '/';
-            index += endOfHeadIndex;
 
             return new ScanHeadResult(
-                fullnode.Slice(firstNonSpace, index + 1),
+                fullnode.Slice(0, firstNonSpace + endOfHeadIndex + 1),
                 fullnode.Slice(firstNonSpace + 1, nodeTypeLength - firstNonSpace - 1),
+                firstNonSpace,
                 isBodyLess
                 );
         }
@@ -439,20 +448,23 @@ namespace XmlSerDe.Generator.EmbeddedCode
         //}
 
 
-        private static ParsedAttribute ParseAttribute(
+        private static void ParseAttribute(
             roschar internalsOfHead,
             int index,
             roschar requiredPrefix,
             roschar requiredName,
-            roschar requiredValue
+            roschar requiredValue,
+            ref ParsedAttribute result
             )
         {
+            AttributeProcessResult apr = new();
             while (true)
             {
-                var apr = ParseFirstFoundAttribute(internalsOfHead, index);
+                ParseFirstFoundAttribute(internalsOfHead, index, ref apr);
                 if (apr.Attribute.IsEmpty)
                 {
-                    return apr.Attribute;
+                    result = apr.Attribute;
+                    return;
                 }
 
                 if (requiredPrefix.IsEmpty || requiredPrefix.SequenceEqual(apr.Attribute.Prefix))
@@ -462,7 +474,8 @@ namespace XmlSerDe.Generator.EmbeddedCode
                         if (requiredValue.IsEmpty || requiredValue.SequenceEqual(apr.Attribute.Value))
                         {
                             //нашли что нужно
-                            return apr.Attribute;
+                            result = apr.Attribute;
+                            return;
                         }
                     }
                 }
@@ -471,9 +484,10 @@ namespace XmlSerDe.Generator.EmbeddedCode
             }
         }
 
-        private static AttributeProcessResult ParseFirstFoundAttribute(
+        private static void ParseFirstFoundAttribute(
             roschar internalsOfHead,
-            int iindex
+            int iindex,
+            ref AttributeProcessResult result
             )
         {
             var trimmed = internalsOfHead.Slice(iindex).TrimStart();
@@ -484,10 +498,12 @@ namespace XmlSerDe.Generator.EmbeddedCode
             if (c == '/' || c == '>')
             {
                 //нода закрылась, атрибутов нету
-                return new AttributeProcessResult();
+                result = new AttributeProcessResult();
+                return;
             }
 
             var prefix = internalsOfHead.Slice(trimmedLength, iofa0);
+            //var prefix = trimmed.Slice(trimmedLength, iofa0 - trimmedLength);
             //var afterPrefixIndex = trimmedLength + iofa0 + 1;
             trimmed = trimmed.Slice(iofa0 + 1);
 
@@ -506,7 +522,7 @@ namespace XmlSerDe.Generator.EmbeddedCode
             var value = trimmed.Slice(0, iofa3);
             //var endValueIndex = startValueIndex + iofa3;
 
-            return new AttributeProcessResult(
+            result = new AttributeProcessResult(
                 new ParsedAttribute(prefix, name, value),
                 trimmedLength + iofa0 + iofa1 + iofa2 + iofa3 + 4 - iindex
                 );
@@ -584,6 +600,11 @@ namespace XmlSerDe.Generator.EmbeddedCode
         public readonly bool IsEmpty;
         public readonly roschar FullHead;
         public readonly roschar NodeType;
+
+        /// <summary>
+        /// Количество пробелов (и переносов строк) до начала головы в FullHead
+        /// </summary>
+        public readonly int PrefixLength;
         public readonly bool IsBodyless;
 
         public ScanHeadResult()
@@ -591,14 +612,16 @@ namespace XmlSerDe.Generator.EmbeddedCode
             IsEmpty = true;
             FullHead = roschar.Empty;
             NodeType = roschar.Empty;
+            PrefixLength = 0;
             IsBodyless = true;
         }
 
-        public ScanHeadResult(roschar fullHead, roschar nodeType, bool isBodyless)
+        public ScanHeadResult(roschar fullHead, roschar nodeType, int prefixLength, bool isBodyless)
         {
             IsEmpty = FullHead.IsEmpty && nodeType.IsEmpty;
             FullHead = fullHead;
             NodeType = nodeType;
+            PrefixLength = prefixLength;
             IsBodyless = isBodyless;
         }
     }
