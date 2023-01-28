@@ -10,18 +10,18 @@ namespace XmlSerDe.Tests
 {
 
 
-    [XmlSubject(typeof(XmlObject1))] //[XmlSubject(typeof(XmlObject1))]
+    [XmlSubject(typeof(XmlObject1))]
     public partial class XmlSerializerDeserializer1
     {
     }
 
-    [XmlSubject(typeof(XmlObject2))] //[XmlSubject(typeof(XmlObject2))]
+    [XmlSubject(typeof(XmlObject2))]
     public partial class XmlSerializerDeserializer2
     {
     }
 
-    [XmlSubject(typeof(XmlObject2))] //[XmlSubject(typeof(XmlObject2))]
-    [XmlSubject(typeof(XmlObject3))] //[XmlSubject(typeof(XmlObject3))]
+    [XmlSubject(typeof(XmlObject2))]
+    [XmlSubject(typeof(XmlObject3))]
     public partial class XmlSerializerDeserializer23
     {
     }
@@ -31,18 +31,18 @@ namespace XmlSerDe.Tests
     [XmlDerivedSubject(typeof(XmlObject4Abstract), typeof(XmlObject4Specific2))]
     [XmlSubject(typeof(XmlObject4Specific1))]
     [XmlSubject(typeof(XmlObject4Specific2))]
-    [XmlSubject(typeof(XmlObject5))] //[XmlSubject(typeof(XmlObject5))]
+    [XmlSubject(typeof(XmlObject5))]
     public partial class XmlSerializerDeserializer45
     {
     }
 
-    [XmlSubject(typeof(XmlObject6))] //[XmlSubject(typeof(XmlObject6))]
+    [XmlSubject(typeof(XmlObject6))]
     public partial class XmlSerializerDeserializer6
     {
     }
 
     [XmlSubject(typeof(XmlObject7))]
-    [XmlSubject(typeof(XmlObject8))] //[XmlSubject(typeof(XmlObject8))]
+    [XmlSubject(typeof(XmlObject8))]
     public partial class XmlSerializerDeserializer78
     {
     }
@@ -62,7 +62,7 @@ namespace XmlSerDe.Tests
     [XmlDerivedSubject(typeof(XmlObject11Abstract), typeof(XmlObject11Specific2))]
     [XmlSubject(typeof(XmlObject11Specific1))]
     [XmlSubject(typeof(XmlObject11Specific2))]
-    [XmlSubject(typeof(XmlObject12))] //[XmlSubject(typeof(XmlObject12))]
+    [XmlSubject(typeof(XmlObject12))]
     public partial class XmlSerializerDeserializer1112
     {
     }

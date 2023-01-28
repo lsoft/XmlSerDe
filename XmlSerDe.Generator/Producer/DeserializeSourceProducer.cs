@@ -212,7 +212,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
             }
 
-            if(subject.IsAbstract)
+            if (subject.IsAbstract)
             {
                 _sb.AppendLine($$"""
             throw new InvalidOperationException("Cannot instanciate abstract class {{ssGlobalName}}");
@@ -295,6 +295,17 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             _sb.AppendLine($$"""
             if(!internals.IsEmpty)
             {
+
+""");
+            foreach (var member in EnumerateMembers(members))
+            {
+                _sb.AppendLine($$"""
+                var {{member.Name}}Span = "{{member.Name}}".AsSpan();
+""");
+                
+            }
+
+            _sb.AppendLine($$"""
                 {{typeof(XmlNode2).FullName}} child = new();
                 while(true)
                 {
@@ -308,7 +319,31 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
 
             var memberIndex = 0;
-            foreach(var member in members)
+            foreach (var member in EnumerateMembers(members))
+            {
+                var memberType = ParseMember(member);
+
+                GenerateMember(memberIndex, member, memberType);
+                memberIndex++;
+            }
+
+            _sb.AppendLine($$"""
+
+                    internals = internals.Slice(child.FullNode.Length);
+                    if(internals.IsEmpty)
+                    {
+                        break;
+                    }
+                }
+            }
+""");
+        }
+
+        private readonly IEnumerable<ISymbol> EnumerateMembers(
+            List<ISymbol> members
+            )
+        {
+            foreach (var member in members)
             {
                 if (member.DeclaredAccessibility.In(Accessibility.Private, Accessibility.Protected)) //TODO: what about other Accessibilities?
                 {
@@ -329,34 +364,27 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     }
                 }
 
-                INamedTypeSymbol memberType;
-                if (member is IPropertySymbol property1)
-                {
-                    memberType = (INamedTypeSymbol)property1.Type;
-                }
-                else if (member is IFieldSymbol field1)
-                {
-                    memberType = (INamedTypeSymbol)field1.Type;
-                }
-                else
-                {
-                    throw new NotImplementedException($"Unknown member type: {member.GetType().Name}");
-                }
+                yield return member;
+            }
+        }
 
-                GenerateMember(memberIndex, member, memberType);
-                memberIndex++;
+        private static INamedTypeSymbol ParseMember(ISymbol member)
+        {
+            INamedTypeSymbol memberType;
+            if (member is IPropertySymbol property1)
+            {
+                memberType = (INamedTypeSymbol)property1.Type;
+            }
+            else if (member is IFieldSymbol field1)
+            {
+                memberType = (INamedTypeSymbol)field1.Type;
+            }
+            else
+            {
+                throw new NotImplementedException($"Unknown member type: {member.GetType().Name}");
             }
 
-            _sb.AppendLine($$"""
-
-                    internals = internals.Slice(child.FullNode.Length);
-                    if(internals.IsEmpty)
-                    {
-                        break;
-                    }
-                }
-            }
-""");
+            return memberType;
         }
 
         private readonly void GenerateMember(
@@ -376,7 +404,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                 _sb.AppendLine($$"""
                     //{{memberType.ToFullDisplayString()}}
-                    {{elseif}}if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         result.{{member.Name}} = {{finalClause}};
                     }
@@ -386,7 +414,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 _sb.AppendLine($$"""
                     //Enum
-                    {{elseif}}if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         var child2 = child.{{nameof(XmlNode2.Internals)}};
                         result.{{member.Name}} = ({{memberType.ToGlobalDisplayString()}})Enum.Parse(typeof({{memberType.ToGlobalDisplayString()}}), child2);
@@ -404,7 +432,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                 _sb.AppendLine($$"""
                     //List<T>
-                    {{elseif}}if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         if(result.{{member.Name}} == default)
                         {
@@ -467,7 +495,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     }
                     else
                     {
-                        if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
+                        if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                         {
                             var childInternals = child.{{nameof(XmlNode2.Internals)}};
                             {{classAndMethodName}}(childInternals, out {{memberType.ToGlobalDisplayString()}} iresult);
@@ -486,7 +514,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                     _sb.AppendLine($$"""
                     //custom type
-                    {{elseif}}if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         var childInternals = child.{{nameof(XmlNode2.Internals)}};
                         {{classAndMethodName}}(childInternals, out {{memberType.ToGlobalDisplayString()}} iresult);

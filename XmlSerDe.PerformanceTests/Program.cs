@@ -221,13 +221,13 @@ Job=.NET 6.0  Runtime=.NET 6.0
             }
 
 #else
-            //BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(Fixture).Assembly);
+            BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(Fixture).Assembly);
 
-            var span = Fixture.AuxXml.AsSpan();
-            for (var cc = 0; cc < 150000; cc++)
-            {
-                XmlSerializerDeserializer.Deserialize(span, out InfoContainer r);
-            }
+            //var span = Fixture.AuxXml.AsSpan();
+            //for (var cc = 0; cc < 150000; cc++)
+            //{
+            //    XmlSerializerDeserializer.Deserialize(span, out InfoContainer r);
+            //}
 #endif
         }
     }
