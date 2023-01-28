@@ -10,6 +10,7 @@ using XmlSerDe.Generator.EmbeddedCode;
 using System.Reflection;
 using System.Xml.Linq;
 using System.Xml.Serialization;
+using System.Data;
 
 namespace XmlSerDe.Generator.Producer
 {
@@ -26,8 +27,6 @@ namespace XmlSerDe.Generator.Producer
 
         private StringBuilder _sb;
         private Random _rnd;
-
-        private readonly BuiltinCollection _builtins;
 
         public DeserializeSourceProducer(
             Compilation compilation,
@@ -49,29 +48,6 @@ namespace XmlSerDe.Generator.Producer
             _deSubjectGlobalType = _deSubject.ToGlobalDisplayString();
             _deSubjectReflectionFormat1 = _deSubject.ToReflectionFormat(false);
             _ssic = CreateSubjects();
-
-            _builtins = new BuiltinCollection(
-                    new List<Builtin>
-                    {
-                        new Builtin("global::System.DateTime.Parse({0})", _compilation.DateTime(), false),
-                        new Builtin("global::System.Boolean.Parse({0})", _compilation.Bool(), false),
-                        new Builtin("global::System.Net.WebUtility.HtmlDecode({0})", _compilation.String(), true),
-
-                        new Builtin("global::System.SByte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", _compilation.SByte(), false),
-                        new Builtin("global::System.Byte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", _compilation.Byte(), false),
-
-                        new Builtin("global::System.UInt16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", _compilation.UInt16(), false),
-                        new Builtin("global::System.Int16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", _compilation.Int16(), false),
-
-                        new Builtin("global::System.UInt32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", _compilation.UInt32(), false),
-                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", _compilation.Int32(), false),
-
-                        new Builtin("global::System.UInt64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", _compilation.UInt64(), false),
-                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", _compilation.Int64(), false),
-                        //TODO other builtin branches
-                    }
-                    );
-
 
             _sb = null!; //просто заткнуть проверку, 2 строками ниже оно инициализируется
             _rnd = null!; //просто заткнуть проверку, строкой ниже оно инициализируется
@@ -111,74 +87,12 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     );
             }
 
-            GenerateBuiltinMethods();
-
             _sb.AppendLine($$"""
     }
 }
 """);
 
             return _sb.ToString();
-        }
-
-        private void GenerateBuiltinMethods()
-        {
-            _sb.AppendLine($$"""
-
-        public static void {{HeadDeserializeMethodName}}(roschar fullNode, out string result)
-        {
-            var xmlNode = new {{typeof(XmlNode2).FullName}}(fullNode);
-            
-            var xmlNodeDeclareType = xmlNode.GetDeclaredNodeType();
-            if(!xmlNodeDeclareType.SequenceEqual("string".AsSpan()))
-            {
-                throw new InvalidOperationException("Unknown type " + xmlNodeDeclareType.ToString() + " (should be a string)");
-            }
-
-            result = System.Net.WebUtility.HtmlDecode(
-                xmlNode.{{nameof(XmlNode2.Internals)}}.ToString()
-                );
-        }
-""");
-
-            var scopeds = new List<(string, string)>();
-            scopeds.Add(("dateTime", "global::System.DateTime"));
-            scopeds.Add(("boolean", "global::System.Boolean"));
-            scopeds.Add(("unsignedByte", "global::System.Byte"));
-            
-            scopeds.Add(("byte", "global::System.SByte"));
-            scopeds.Add(("unsignedShort", "global::System.UInt16"));
-            
-            scopeds.Add(("short", "global::System.Int16"));
-            scopeds.Add(("unsignedInt", "global::System.UInt32"));
-            
-            scopeds.Add(("int", "global::System.Int32"));
-            scopeds.Add(("unsignedLong", "global::System.UInt64"));
-            
-            scopeds.Add(("long", "global::System.Int64"));
-            scopeds.Add(("decimal", "global::System.Decimal"));
-            //TODO other builtin branches
-
-            foreach (var scoped in scopeds)
-            {
-                _sb.AppendLine($$"""
-        public static void {{HeadDeserializeMethodName}}(roschar fullNode, out {{scoped.Item2}} result)
-        {
-            var xmlNode = new {{typeof(XmlNode2).FullName}}(fullNode);
-            var xmlNodePreciseType = xmlNode.GetPreciseNodeType();
-
-            if(!xmlNodePreciseType.SequenceEqual("{{scoped.Item1}}".AsSpan()))
-            {
-                throw new InvalidOperationException("Unknown type " + xmlNodePreciseType.ToString());
-            }
-
-            result = {{scoped.Item2}}.Parse(
-                xmlNode.{{nameof(XmlNode2.Internals)}}.ToString()
-                );
-        }
-""");
-
-            }
         }
 
         private SerializationSubjectInfoCollection CreateSubjects()
@@ -289,7 +203,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             var roscharVarName = withHeadMethod ? "fullNode" : "internals";
             var privatePublic = withHeadMethod ? "public" : "private";
             var methodName = withHeadMethod ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
-            //var additionalArgument = withHeadMethod ? "" : $"{nameof(ScanHeadResult)} head, ";
 
             var ssGlobalName = subject.ToGlobalDisplayString();
 
@@ -316,7 +229,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                 _sb.AppendLine($$"""
 
-                throw new InvalidOperationException("Unknown type " + xmlNodePreciseType.ToString());
+                throw new InvalidOperationException("(1) Unknown type " + xmlNodePreciseType.ToString());
             }
 
 """);
@@ -364,11 +277,13 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
             foreach (var d in derived)
             {
+                var classAndMethodName = DetermineClassName(d) + "." + HeadlessDeserializeMethodName;
+
                 _sb.AppendLine($$"""
                 //{{nameof(GenerateDispatch)}}
                 if (xmlNodePreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
                 {
-                    {{HeadlessDeserializeMethodName}}(xmlNodeInternals, out {{d.ToGlobalDisplayString()}} iresult);
+                    {{classAndMethodName}}(xmlNodeInternals, out {{d.ToGlobalDisplayString()}} iresult);
                     result = iresult;
                     return;
                 }
@@ -377,15 +292,20 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         }
 
 
-        private readonly void GenerateDispatch2(string memberName, SerializationSubjectInfo subject)
+        private readonly void GenerateDispatch2(
+            List<INamedTypeSymbol> derived,
+            string memberName
+            )
         {
-            foreach (var d in subject.Derived)
+            foreach (var d in derived)
             {
+                var classAndMethodName = DetermineClassName(d) + "." + HeadlessDeserializeMethodName;
+
                 _sb.AppendLine($$"""
                         //{{nameof(GenerateDispatch2)}}
                         if (childPreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
                         {
-                            {{HeadlessDeserializeMethodName}}(childInternals, out {{d.ToGlobalDisplayString()}} iresult);
+                            {{classAndMethodName}}(childInternals, out {{d.ToGlobalDisplayString()}} iresult);
                             result.{{memberName}} = iresult;
                         }
 """);
@@ -470,39 +390,24 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
             var elseif = index > 0 ? "else " : "";
 
-            var processed = false;
-            foreach(var v in _builtins.Builtins)
+            if(BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType, out var builtin))
             {
-                var converterClause = v.ConverterClause;
-                var symbol = v.Symbol;
-                var needToStringClause = v.NeedToStringClause;
+                var finalClause = string.Format(
+                    builtin.ConverterClause,
+                    $"child.{nameof(XmlNode2.Internals)}"
+                    );
 
-                if (SymbolEqualityComparer.Default.Equals(memberType, symbol))
-                {
-                    var toStringSuffix = needToStringClause ? ".ToString()" : "";
-                    var finalClause = string.Format(
-                        converterClause,
-                        $"child.{nameof(XmlNode2.Internals)}{toStringSuffix}"
-                        );
-
-                    _sb.AppendLine($$"""
-                    //{{symbol.ToFullDisplayString()}}
+                _sb.AppendLine($$"""
+                    //{{memberType.ToFullDisplayString()}}
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
                     {
                         result.{{member.Name}} = {{finalClause}};
                     }
 """);
-                    processed = true;
-                    break;
-                }
-
             }
-
-            if (!processed)
+            else if (memberType.EnumUnderlyingType != null)
             {
-                if (memberType.EnumUnderlyingType != null)
-                {
-                    _sb.AppendLine($$"""
+                _sb.AppendLine($$"""
                     //Enum
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
                     {
@@ -510,14 +415,17 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         result.{{member.Name}} = ({{memberType.ToGlobalDisplayString()}})Enum.Parse(typeof({{memberType.ToGlobalDisplayString()}}), child2);
                     }
 """);
-                }
-                //TODO array and other collections
-                else if (
-                    memberType.TypeArguments.Length > 0
-                    && (SymbolEqualityComparer.Default.Equals(memberType, _compilation.List(memberType.TypeArguments[0])))
-                    )
-                {
-                    _sb.AppendLine($$"""
+            }
+            //TODO array and other collections
+            else if (
+                memberType.TypeArguments.Length > 0
+                && (SymbolEqualityComparer.Default.Equals(memberType, _compilation.List(memberType.TypeArguments[0])))
+                )
+            {
+                var listItemType = (INamedTypeSymbol)memberType.TypeArguments[0];
+                var classAndMethodName = DetermineClassName(listItemType) + "." + HeadDeserializeMethodName;
+
+                _sb.AppendLine($$"""
                     //List<T>
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
                     {
@@ -536,7 +444,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                                 break;
                             }
 
-                            {{HeadDeserializeMethodName}}(child2.{{nameof(XmlNode2.FullNode)}}, out {{memberType.TypeArguments[0].ToGlobalDisplayString()}} iresult);
+                            {{classAndMethodName}}(child2.{{nameof(XmlNode2.FullNode)}}, out {{listItemType.ToGlobalDisplayString()}} iresult);
                             result.{{member.Name}}.Add(iresult);
 
                             childInternals = childInternals.Slice(
@@ -549,22 +457,24 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         }
                     }
 """);
-                }
-                else
+            }
+            else
+            {
+                //здесь, вероятно, какой-то другой тип
+
+                if (!_ssic.TryGetSubject(memberType, out var subject))
                 {
-                    //здесь, вероятно, какой-то другой тип
+                    throw new InvalidOperationException($"(2) Unknown type {memberType.ToGlobalDisplayString()}");
+                }
 
-                    if (!_ssic.TryGetSubject(memberType, out var subject))
-                    {
-                        throw new InvalidOperationException($"Unknown type {memberType.ToGlobalDisplayString()}");
-                    }
+                if (memberType.IsAbstract || subject.Derived.Count > 0)
+                {
+                    //тут могут быть вариации
+                    //генерируем метод с проверками наследников
 
-                    if (memberType.IsAbstract || subject.Derived.Count > 0)
-                    {
-                        //тут могут быть вариации
-                        //генерируем метод с проверками наследников
+                    var classAndMethodName = DetermineClassName(memberType) + "." + HeadlessDeserializeMethodName;
 
-                        _sb.AppendLine($$"""
+                    _sb.AppendLine($$"""
                     //custom type
                     var childPreciseType = child.GetPreciseNodeType();
                     {{elseif}}if(!childPreciseType.IsEmpty)
@@ -574,45 +484,57 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
 
 
-                        GenerateDispatch2(member.Name, subject);
+                    GenerateDispatch2(subject.Derived, member.Name);
 
-                        _sb.AppendLine($$"""
+                    _sb.AppendLine($$"""
                     }
                     else
                     {
                         if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
                         {
                             var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                            {{HeadlessDeserializeMethodName}}(childInternals, out {{memberType.ToGlobalDisplayString()}} iresult);
+                            {{classAndMethodName}}(childInternals, out {{memberType.ToGlobalDisplayString()}} iresult);
                             result.{{member.Name}} = iresult;
                         }
                     }
 """);
-                    }
-                    else
-                    {
-                        //здесь всё четко, нет никаких вариаций типов и соотв. не должно быть типа в дочерней ноде
+                }
+                else
+                {
+                    //здесь всё четко, нет никаких вариаций типов и соотв. не должно быть типа в дочерней ноде
 
-                        var withHeadBody = memberType.IsAbstract;
-                        var methodName = withHeadBody ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
+                    var withHeadBody = memberType.IsAbstract;
+                    var methodName = withHeadBody ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
+                    var classAndMethodName = DetermineClassName(memberType) + "." + methodName;
 
-                        _sb.AppendLine($$"""
+                    _sb.AppendLine($$"""
                     //custom type
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
                     {
                         var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                        {{methodName}}(childInternals, out {{memberType.ToGlobalDisplayString()}} iresult);
+                        {{classAndMethodName}}(childInternals, out {{memberType.ToGlobalDisplayString()}} iresult);
                         result.{{member.Name}} = iresult;
                     }
 """);
 
-                    }
-
                 }
+
             }
         }
 
-        private void GenerateUsings()
+        private readonly string DetermineClassName(INamedTypeSymbol listItemType)
+        {
+            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out _))
+            {
+                return typeof(BuiltinSourceProducer).Namespace + "." + BuiltinSourceProducer.BuiltinCodeParserClassName;
+            }
+            else
+            {
+                return _deSubject.ToGlobalDisplayString();
+            }
+        }
+
+        private readonly void GenerateUsings()
         {
             var foundUsings = new List<UsingDirectiveSyntax>();
 
@@ -628,7 +550,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
         }
 
-        private void GrabUsings(
+        private static void GrabUsings(
             INamedTypeSymbol symbol,
             ref List<UsingDirectiveSyntax> foundUsings
             )
@@ -651,7 +573,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 foundUsings.AddRange(fu);
             }
         }
-
 
         private static List<ISymbol> GetMembersOrderByInheritance(
             INamedTypeSymbol serializationSubject

@@ -51,6 +51,17 @@ namespace XmlSerDe.Generator
                     GeneratorResources.EmbeddedHelperCode
                     );
 
+                var bsg = new BuiltinSourceProducer(
+                    compilation
+                    );
+                var builtinCode = bsg.GenerateBuiltinMethods(
+                    );
+                context.AddSource(
+                    $"{BuiltinSourceProducer.BuiltinCodeParserClassName}.cs",
+                    builtinCode
+                    );
+
+
                 var generated = InternalExecute(context, compilation, classesSyntax);
                 foreach (var gen in generated)
                 {
@@ -59,7 +70,9 @@ namespace XmlSerDe.Generator
             }
             catch (Exception excp)
             {
-                var msg = excp.Message;
+                var msg = (excp.Message + Environment.NewLine + excp.StackTrace)
+                    .Replace('\r', ' ')
+                    .Replace('\n', ' ');
 
                 context.ReportDiagnostic(
                     Diagnostic.Create(
@@ -113,10 +126,6 @@ namespace XmlSerDe.Generator
                     {
                         throw new InvalidOperationException($"Class {ctgs.ToFullDisplayString()} should be partial");
                     }
-                    //if (ctgs.Constructors.All(c => c.Parameters.Length > 0))
-                    //{
-                    //    throw new InvalidOperationException($"Class {ctgs.ToFullDisplayString()} should have parameterless constructor");
-                    //}
 
                     var sp = new DeserializeSourceProducer(
                         compilation,

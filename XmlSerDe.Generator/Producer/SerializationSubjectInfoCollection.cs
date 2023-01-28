@@ -35,7 +35,7 @@ namespace XmlSerDe.Generator.Producer
             }
 
             info = default;
-            return true;
+            return false;
         }
     }
 }

@@ -8,12 +8,12 @@ namespace XmlSerDe.Generator.Producer
     {
         public readonly string ConverterClause;
         public readonly INamedTypeSymbol Symbol;
-        public readonly bool NeedToStringClause;
+        public readonly string XmlTypeName;
 
         public Builtin(
             string parseInvocation,
             INamedTypeSymbol symbol,
-            bool needToStringClause
+            string xmlTypeName
             )
         {
             if (parseInvocation is null)
@@ -23,7 +23,7 @@ namespace XmlSerDe.Generator.Producer
 
             ConverterClause = parseInvocation;
             Symbol = symbol;
-            NeedToStringClause = needToStringClause;
+            XmlTypeName = xmlTypeName;
         }
     }
 }

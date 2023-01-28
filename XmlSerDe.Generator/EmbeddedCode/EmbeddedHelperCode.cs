@@ -107,7 +107,7 @@ namespace XmlSerDe.Generator.EmbeddedCode
         /// <summary>
         /// Get first child of its node.
         /// </summary>
-        public XmlNode2 GetFirstChild()
+        public readonly XmlNode2 GetFirstChild()
         {
             var result = GetFirst(Internals);
             return result;

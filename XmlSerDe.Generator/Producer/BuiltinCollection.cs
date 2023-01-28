@@ -20,14 +20,24 @@ namespace XmlSerDe.Generator.Producer
             Builtins = builtins;
         }
 
-        public bool Contains(INamedTypeSymbol target)
+        public bool TryGet(INamedTypeSymbol target, out Builtin rbuiltin)
         {
             if (target is null)
             {
                 throw new ArgumentNullException(nameof(target));
             }
 
-            return Builtins.Any(b => SymbolEqualityComparer.Default.Equals(b.Symbol, target));
+            foreach(var builtin in Builtins)
+            {
+                if (SymbolEqualityComparer.Default.Equals(builtin.Symbol, target))
+                {
+                    rbuiltin = builtin;
+                    return true;
+                }
+            }
+
+            rbuiltin = default;
+            return false;
         }
     }
 }
