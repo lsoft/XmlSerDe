@@ -18,7 +18,6 @@ namespace XmlSerDe.Generator
     [Generator(LanguageNames.CSharp)]
     public class XmlDeserializeGenerator : IIncrementalGenerator
     {
-        public static readonly string RootAttributeFullName = typeof(XmlRootAttribute).FullName;
         public static readonly string SubjectAttributeFullName = typeof(XmlSubjectAttribute).FullName;
         public static readonly string DerivedSubjectAttributeFullName = typeof(XmlDerivedSubjectAttribute).FullName;
 
@@ -100,7 +99,7 @@ namespace XmlSerDe.Generator
                 return result;
             }
 
-            INamedTypeSymbol? markerAttribute = compilation.GetTypeByMetadataName(RootAttributeFullName);
+            INamedTypeSymbol? markerAttribute = compilation.GetTypeByMetadataName(SubjectAttributeFullName);
             if (markerAttribute == null)
             {
                 // If this is null, the compilation couldn't find the marker attribute type
@@ -191,7 +190,6 @@ namespace XmlSerDe.Generator
             foreach(var attributeSymbol in nts.GetAttributes())
             {
                 if(attributeSymbol.AttributeClass?.ToFullDisplayString().In(
-                    RootAttributeFullName,
                     SubjectAttributeFullName,
                     DerivedSubjectAttributeFullName
                     ) ?? false)

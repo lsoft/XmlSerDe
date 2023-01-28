@@ -11,22 +11,6 @@ using roschar = System.ReadOnlySpan<char>;
 namespace XmlSerDe.Generator.EmbeddedCode
 {
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
-    public class XmlRootAttribute : Attribute
-    {
-        public readonly Type RootType;
-
-        public XmlRootAttribute(Type rootType)
-        {
-            if (rootType is null)
-            {
-                throw new ArgumentNullException(nameof(rootType));
-            }
-
-            RootType = rootType;
-        }
-    }
-
-    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
     public class XmlSubjectAttribute : Attribute
     {
         public readonly Type SubjectType;

@@ -14,7 +14,7 @@ namespace XmlSerDe.PerformanceTests
 
     [XmlSubject(typeof(SerializeKeyValue))]
     [XmlSubject(typeof(PerformanceTime))]
-    [XmlRoot(typeof(InfoContainer))]
+    [XmlSubject(typeof(InfoContainer))]
     [XmlSubject(typeof(BaseInfo))]
     [XmlDerivedSubject(typeof(BaseInfo), typeof(Derived1Info))]
     [XmlSubject(typeof(Derived1Info))]

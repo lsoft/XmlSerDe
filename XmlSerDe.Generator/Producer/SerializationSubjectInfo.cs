@@ -7,12 +7,10 @@ namespace XmlSerDe.Generator.Producer
 {
     internal readonly struct SerializationSubjectInfo
     {
-        public readonly bool IsRoot;
         public readonly INamedTypeSymbol Subject;
         public readonly List<INamedTypeSymbol> Derived;
 
         public SerializationSubjectInfo(
-            bool isRoot,
             INamedTypeSymbol subject
             )
         {
@@ -20,7 +18,7 @@ namespace XmlSerDe.Generator.Producer
             {
                 throw new ArgumentNullException(nameof(subject));
             }
-            IsRoot = isRoot;
+
             Subject = subject;
             Derived = new List<INamedTypeSymbol>();
         }

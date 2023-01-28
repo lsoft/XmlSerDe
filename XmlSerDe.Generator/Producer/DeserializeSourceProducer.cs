@@ -107,7 +107,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     continue;
                 }
                 var fsa = attrSymbol.ToFullDisplayString();
-                if (fsa.NotIn(XmlDeserializeGenerator.RootAttributeFullName, XmlDeserializeGenerator.SubjectAttributeFullName, XmlDeserializeGenerator.DerivedSubjectAttributeFullName))
+                if (fsa.NotIn(XmlDeserializeGenerator.SubjectAttributeFullName, XmlDeserializeGenerator.DerivedSubjectAttributeFullName))
                 {
                     continue;
                 }
@@ -116,29 +116,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     continue;
                 }
 
-                if (fsa == XmlDeserializeGenerator.RootAttributeFullName)
-                {
-
-                    var ca0 = attribute.ConstructorArguments[0];
-                    if (ca0.Kind != TypedConstantKind.Type)
-                    {
-                        throw new InvalidOperationException("Something wrong with attributes 0");
-                    }
-
-                    var type = (INamedTypeSymbol)ca0.Value!;
-                    var typegn = type.ToGlobalDisplayString();
-                    if (result.ContainsKey(typegn))
-                    {
-                        throw new InvalidOperationException($"Type is already contains in the attribute list: {typegn}");
-                    }
-
-                    var ssi = new SerializationSubjectInfo(
-                        true,
-                        type
-                        );
-                    result[typegn] = ssi;
-                }
-                else if (fsa == XmlDeserializeGenerator.SubjectAttributeFullName)
+                if (fsa == XmlDeserializeGenerator.SubjectAttributeFullName)
                 {
                     var ca0 = attribute.ConstructorArguments[0];
                     if (ca0.Kind != TypedConstantKind.Type)
@@ -153,7 +131,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         throw new InvalidOperationException($"Type is already contains in the attribute list: {typegn}");
                     }
                     var ssi = new SerializationSubjectInfo(
-                        false,
                         type
                         );
                     result[typegn] = ssi;
