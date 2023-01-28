@@ -160,35 +160,35 @@ namespace XmlSerDe.Tests
             Xunit.Assert.Equal(123, xo4specific.IntProperty);
         }
 
-        //[Fact]
-        //public void XmlObject45_Test1()
-        //{
-        //    //var ms = new MemoryStream();
-        //    //new XmlSerializer(
-        //    //    typeof(XmlObject5), new Type[] { typeof(XmlObject4Abstract), typeof(XmlObject4Specific2), typeof(XmlObject4Specific1) }).Serialize(
-        //    //        ms,
-        //    //        new XmlObject5()
-        //    //        {
-        //    //            XmlObjectProperty = new XmlObject4Specific1
-        //    //            {
-        //    //                StringProperty = "a",
-        //    //                IntProperty = 123
-        //    //            }
-        //    //        }
-        //    //    );
-        //    //var q = Encoding.UTF8.GetString(ms.ToArray());
+        [Fact]
+        public void XmlObject45_Test1()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject5), new Type[] { typeof(XmlObject4Abstract), typeof(XmlObject4Specific2), typeof(XmlObject4Specific1) }).Serialize(
+            //        ms,
+            //        new XmlObject5()
+            //        {
+            //            XmlObjectProperty = new XmlObject4Specific1
+            //            {
+            //                StringProperty = "a",
+            //                IntProperty = 123
+            //            }
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-        //    XmlSerializerDeserializer45.Deserialize(
-        //        (@"<XmlObject5 xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance""><XmlObjectProperty p3:type=""XmlObject4Specific1""> <StringProperty>MyString</StringProperty><IntProperty>123</IntProperty>   </XmlObjectProperty></XmlObject5>").AsSpan(),
-        //        out XmlObject5 xo
-        //        );
-        //    Xunit.Assert.NotNull(xo);
-        //    Xunit.Assert.NotNull(xo.XmlObjectProperty);
-        //    var xo4specific = xo.XmlObjectProperty as XmlObject4Specific1;
-        //    Xunit.Assert.NotNull(xo4specific);
-        //    Xunit.Assert.Equal("MyString", xo4specific.StringProperty);
-        //    Xunit.Assert.Equal(123, xo4specific.IntProperty);
-        //}
+            XmlSerializerDeserializer45.Deserialize(
+                (@"<XmlObject5 xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance""><XmlObjectProperty p3:type=""XmlObject4Specific1""> <StringProperty>MyString</StringProperty><IntProperty>123</IntProperty>   </XmlObjectProperty></XmlObject5>").AsSpan(),
+                out XmlObject5 xo
+                );
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.NotNull(xo.XmlObjectProperty);
+            var xo4specific = xo.XmlObjectProperty as XmlObject4Specific1;
+            Xunit.Assert.NotNull(xo4specific);
+            Xunit.Assert.Equal("MyString", xo4specific.StringProperty);
+            Xunit.Assert.Equal(123, xo4specific.IntProperty);
+        }
 
 
 

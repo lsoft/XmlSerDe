@@ -9,6 +9,7 @@ using XmlSerDe.Generator.Helper;
 using XmlSerDe.Generator.EmbeddedCode;
 using System.Reflection;
 using System.Xml.Linq;
+using System.Xml.Serialization;
 
 namespace XmlSerDe.Generator.Producer
 {
@@ -274,27 +275,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             )
         {
             var subject = ssi.Subject;
-            //if (subject.IsAbstract)
-            //{
-            //    //этот класс абстрактный, его в любом случае надо генерировать с головой"
-            //    //так как он может использоваться в коллекциях
-            //    //также его надо генерировать без головы (если не в коллекции)
-            //    GenerateMethod(subject, ssi.Derived, true);
-            //    GenerateMethod(subject, ssi.Derived, false);
-            //}
-            //else
-            //if (ssi.IsRoot)
-            //{
-            //    //этот класс задан как root для десериализации
-            //    //сгенерируем оба метода
-            //    GenerateMethod(subject, ssi.Derived, true);
-            //    GenerateMethod(subject, ssi.Derived, false);
-            //}
-            //else
-            //{
-            //    //этот класс не может быть root
-            //    GenerateMethod(subject, ssi.Derived, false);
-            //}
 
             GenerateMethod(subject, ssi.Derived, true);
             GenerateMethod(subject, ssi.Derived, false);
@@ -373,22 +353,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
         }
 
-        //private readonly bool UseWithHeadMethod(
-        //    INamedTypeSymbol target
-        //    )
-        //{
-        //    if(_builtins.Contains(target))
-        //    {
-        //        return false;
-        //    }
-
-        //    var withHeadMethod =
-        //        target.IsAbstract
-        //        || (_ssic.TryGetSubject(target, out var ssi) && ssi.IsRoot)
-        //        ;
-
-        //    return withHeadMethod;
-        //}
 
         private readonly void GenerateDispatch(
             List<INamedTypeSymbol> derived
@@ -400,14 +364,11 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
             foreach (var d in derived)
             {
-                //var withHeadMethod = UseWithHeadMethod(d);
-                var methodName = HeadlessDeserializeMethodName;// withHeadMethod ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
-
                 _sb.AppendLine($$"""
                 //{{nameof(GenerateDispatch)}}
                 if (xmlNodePreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
                 {
-                    {{methodName}}(xmlNodeInternals, out {{d.ToGlobalDisplayString()}} iresult);
+                    {{HeadlessDeserializeMethodName}}(xmlNodeInternals, out {{d.ToGlobalDisplayString()}} iresult);
                     result = iresult;
                     return;
                 }
@@ -420,14 +381,11 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
             foreach (var d in subject.Derived)
             {
-                //var withHeadMethod = UseWithHeadMethod(d);
-                var methodName = HeadlessDeserializeMethodName; // withHeadMethod ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
-
                 _sb.AppendLine($$"""
                         //{{nameof(GenerateDispatch2)}}
                         if (childPreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
                         {
-                            {{methodName}}(childInternals, out {{d.ToGlobalDisplayString()}} iresult);
+                            {{HeadlessDeserializeMethodName}}(childInternals, out {{d.ToGlobalDisplayString()}} iresult);
                             result.{{memberName}} = iresult;
                         }
 """);
@@ -459,9 +417,19 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 {
                     continue;
                 }
-                if (member is IPropertySymbol property && property.SetMethod == null)
+                if (member is IPropertySymbol property)
                 {
-                    continue;
+                    if (property.SetMethod == null)
+                    {
+                        continue;
+                    }
+
+                    var propertyAttributes = property.GetAttributes();
+                    var ignoreAttribute = propertyAttributes.FirstOrDefault(a => a.AttributeClass != null && a.AttributeClass.ToFullDisplayString() == typeof(XmlIgnoreAttribute).FullName);
+                    if (ignoreAttribute != null)
+                    {
+                        continue;
+                    }
                 }
 
                 INamedTypeSymbol memberType;
@@ -549,11 +517,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     && (SymbolEqualityComparer.Default.Equals(memberType, _compilation.List(memberType.TypeArguments[0])))
                     )
                 {
-                    //var withHeadMethod = UseWithHeadMethod(memberType);
-                    var methodName = //withHeadMethod ? HeadDeserializeMethodName : HeadlessDeserializeMethodName
-                        HeadDeserializeMethodName
-                        ;
-
                     _sb.AppendLine($$"""
                     //List<T>
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
@@ -573,7 +536,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                                 break;
                             }
 
-                            {{methodName}}(child2.{{nameof(XmlNode2.FullNode)}}, out {{memberType.TypeArguments[0].ToGlobalDisplayString()}} iresult);
+                            {{HeadDeserializeMethodName}}(child2.{{nameof(XmlNode2.FullNode)}}, out {{memberType.TypeArguments[0].ToGlobalDisplayString()}} iresult);
                             result.{{member.Name}}.Add(iresult);
 
                             childInternals = childInternals.Slice(
@@ -613,9 +576,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                         GenerateDispatch2(member.Name, subject);
 
-                        //var withHeadBody = memberType.IsAbstract; //UseWithHeadMethod(memberType);
-                        var methodName = HeadlessDeserializeMethodName; // withHeadBody ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
-
                         _sb.AppendLine($$"""
                     }
                     else
@@ -623,7 +583,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         if(childDeclaredNodeType.SequenceEqual("{{member.Name}}".AsSpan()))
                         {
                             var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                            {{methodName}}(childInternals, out {{memberType.ToGlobalDisplayString()}} iresult);
+                            {{HeadlessDeserializeMethodName}}(childInternals, out {{memberType.ToGlobalDisplayString()}} iresult);
                             result.{{member.Name}} = iresult;
                         }
                     }
@@ -633,7 +593,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     {
                         //здесь всё четко, нет никаких вариаций типов и соотв. не должно быть типа в дочерней ноде
 
-                        var withHeadBody = memberType.IsAbstract; //UseWithHeadMethod(memberType);
+                        var withHeadBody = memberType.IsAbstract;
                         var methodName = withHeadBody ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
 
                         _sb.AppendLine($$"""
@@ -724,120 +684,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         private string RandomSuffix()
         {
             return _rnd.Next(int.MaxValue).ToString();
-        }
-    }
-
-    internal readonly struct SerializationSubjectInfoCollection
-    {
-        public readonly IReadOnlyList<SerializationSubjectInfo> Infos;
-
-        public SerializationSubjectInfoCollection(List<SerializationSubjectInfo> infos)
-        {
-            if (infos is null)
-            {
-                throw new ArgumentNullException(nameof(infos));
-            }
-
-            Infos = infos;
-        }
-
-        public bool TryGetSubject(
-            INamedTypeSymbol target,
-            out SerializationSubjectInfo info
-            )
-        {
-            for (int i = 0; i < Infos.Count; i++)
-            {
-                var ssi = Infos[i];
-                if (SymbolEqualityComparer.Default.Equals(ssi.Subject, target))
-                {
-                    info = ssi;
-                    return true;
-                }
-            }
-
-            info = default;
-            return true;
-        }
-    }
-
-    internal readonly struct SerializationSubjectInfo
-    {
-        public readonly bool IsRoot;
-        public readonly INamedTypeSymbol Subject;
-        public readonly List<INamedTypeSymbol> Derived;
-
-        public SerializationSubjectInfo(
-            bool isRoot,
-            INamedTypeSymbol subject
-            )
-        {
-            if (subject is null)
-            {
-                throw new ArgumentNullException(nameof(subject));
-            }
-            IsRoot = isRoot;
-            Subject = subject;
-            Derived = new List<INamedTypeSymbol>();
-        }
-
-       public void AddDerived(INamedTypeSymbol derived)
-        {
-            if (derived is null)
-            {
-                throw new ArgumentNullException(nameof(derived));
-            }
-
-            Derived.Add(derived);
-        }
-
-    }
-
-    internal readonly struct Builtin
-    {
-        public readonly string ConverterClause;
-        public readonly INamedTypeSymbol Symbol;
-        public readonly bool NeedToStringClause;
-
-        public Builtin(
-            string parseInvocation,
-            INamedTypeSymbol symbol,
-            bool needToStringClause
-            )
-        {
-            if (parseInvocation is null)
-            {
-                throw new ArgumentNullException(nameof(parseInvocation));
-            }
-
-            ConverterClause = parseInvocation;
-            Symbol = symbol;
-            NeedToStringClause = needToStringClause;
-        }
-    }
-
-    internal readonly struct BuiltinCollection
-    {
-        public readonly IReadOnlyList<Builtin> Builtins;
-
-        public BuiltinCollection(List<Builtin> builtins)
-        {
-            if (builtins is null)
-            {
-                throw new ArgumentNullException(nameof(builtins));
-            }
-
-            Builtins = builtins;
-        }
-
-        public bool Contains(INamedTypeSymbol target)
-        {
-            if (target is null)
-            {
-                throw new ArgumentNullException(nameof(target));
-            }
-
-            return Builtins.Any(b => SymbolEqualityComparer.Default.Equals(b.Symbol, target));
         }
     }
 }
