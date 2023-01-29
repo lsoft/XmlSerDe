@@ -51,8 +51,9 @@ namespace XmlSerDe.Generator.EmbeddedCode
 
     public readonly ref struct XmlNode2
     {
-        private readonly roschar _xmlnsHttp = "http://www.w3.org/2001/XMLSchema-instance".AsSpan();
-        private readonly roschar _typeHttp = "type".AsSpan();
+        private readonly roschar _xmlnsSpan = "xmlns".AsSpan();
+        private readonly roschar _xmlnsHttpSpan = "http://www.w3.org/2001/XMLSchema-instance".AsSpan();
+        private readonly roschar _typeSpan = "type".AsSpan();
 
         /// <summary>
         /// Struct is empty.
@@ -65,9 +66,31 @@ namespace XmlSerDe.Generator.EmbeddedCode
         public readonly roschar FullNode;
 
         /// <summary>
-        /// Head of this node.
+        /// Вся голова этой ноды. Для
+        /// <SomeNode a:b="c" > </SomeNode>
+        /// возвращает
+        /// <SomeNode a:b="c" >
+        /// (а также пробелы перед нодой).
         /// </summary>
-        public readonly ScanHeadResult Head;
+        public readonly roschar FullHead;
+
+        /// <summary>
+        /// Тип этой ноды. Для
+        /// <SomeNode a:b="c" > </SomeNode>
+        /// возвращает
+        /// SomeNode
+        /// </summary>
+        public readonly roschar DeclaredNodeType;
+
+        /// <summary>
+        /// Количество пробелов (и переносов строк) до начала головы в FullHead
+        /// </summary>
+        public readonly int FullHeadPrefixLength;
+        
+        /// <summary>
+        /// Закрытая нода <SomeNode /> (без отдельного закрывающего тега)
+        /// </summary>
+        public readonly bool IsBodyless;
 
         /// <summary>
         /// Internals of this node (including spaces).
@@ -78,7 +101,10 @@ namespace XmlSerDe.Generator.EmbeddedCode
         {
             IsEmpty = true;
             FullNode = roschar.Empty;
-            Head = new ScanHeadResult();
+            FullHead = roschar.Empty;
+            DeclaredNodeType = roschar.Empty;
+            FullHeadPrefixLength = 0;
+            IsBodyless = true;
             Internals = roschar.Empty;
         }
 
@@ -88,8 +114,32 @@ namespace XmlSerDe.Generator.EmbeddedCode
         {
             IsEmpty = fullNode.IsEmpty;
             FullNode = fullNode;
-            Head = ScanHead(fullNode);
-            Internals = GetInternalsOf(fullNode, Head);
+
+            if (fullNode.IsEmpty)
+            {
+                FullHead = roschar.Empty;
+                DeclaredNodeType = roschar.Empty;
+                FullHeadPrefixLength = 0;
+                IsBodyless = true;
+                Internals = roschar.Empty;
+                return;
+            }
+
+            var trimmed = fullNode.TrimStart();
+            if (trimmed.IsEmpty)
+            {
+                FullHead = roschar.Empty;
+                DeclaredNodeType = roschar.Empty;
+                FullHeadPrefixLength = 0;
+                IsBodyless = true;
+                Internals = roschar.Empty;
+                return;
+            }
+
+            FullHeadPrefixLength = fullNode.Length - trimmed.Length;
+            ScanHead_Core(fullNode, trimmed, out var fullHeadLength, out DeclaredNodeType, out IsBodyless);
+            FullHead = fullNode.Slice(0, fullHeadLength);
+            Internals = GetInternalsOf();
         }
 
         /// <summary>
@@ -98,17 +148,6 @@ namespace XmlSerDe.Generator.EmbeddedCode
         public readonly void GetFirstChild(ref XmlNode2 result)
         {
             GetFirst(Internals, ref result);
-        }
-
-        /// <summary>
-        /// for
-        /// <BaseType xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="ChildType"></BaseType>
-        /// it's a
-        /// BaseType
-        /// </summary>
-        public readonly roschar GetDeclaredNodeType()
-        {
-            return Head.NodeType;
         }
 
         /// <summary>
@@ -124,11 +163,11 @@ namespace XmlSerDe.Generator.EmbeddedCode
 
             //ищем xmlns
             ParseAttribute(
-                Head.FullHead,
-                Head.PrefixLength + Head.NodeType.Length + 1,
-                "xmlns".AsSpan(),
+                FullHead,
+                FullHeadPrefixLength + DeclaredNodeType.Length + 1,
+                _xmlnsSpan,
                 roschar.Empty,
-                _xmlnsHttp,//"http://www.w3.org/2001/XMLSchema-instance".AsSpan(),
+                _xmlnsHttpSpan,
                 ref parsedAttribute
                 );
             if(parsedAttribute.IsEmpty)
@@ -138,10 +177,10 @@ namespace XmlSerDe.Generator.EmbeddedCode
 
             //ищем тип
             ParseAttribute(
-                Head.FullHead,
-                Head.PrefixLength + Head.NodeType.Length + 1,
+                FullHead,
+                FullHeadPrefixLength + DeclaredNodeType.Length + 1,
                 parsedAttribute.Name,
-                _typeHttp,//"type".AsSpan(),
+                _typeSpan,
                 roschar.Empty,
                 ref parsedAttribute
                 );
@@ -153,6 +192,7 @@ namespace XmlSerDe.Generator.EmbeddedCode
             return parsedAttribute.Value;
         }
 
+        //{REMOVE THIS COMMENT}[MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static void GetFirst(
             roschar nodes,
             ref XmlNode2 result
@@ -173,18 +213,29 @@ namespace XmlSerDe.Generator.EmbeddedCode
             roschar nodes
             )
         {
-            var shr = ScanHead(nodes);
-            if (shr.IsEmpty)
+            if (nodes.IsEmpty)
             {
                 return 0;
             }
-            if (shr.IsBodyless)
+            var trimmed = nodes.TrimStart();
+            if (trimmed.IsEmpty)
+            {
+                return 0;
+            }
+            ScanHead_Core(nodes, trimmed, out var fullHeadLength, out var nodeType, out var isBodyLess);
+            if (fullHeadLength == 0)
+            {
+                return 0;
+            }
+            if (isBodyLess)
             {
                 return 0;
             }
 
+            var nodeTypeLength = nodeType.Length;
+
             //теперь сканируем до закрывающего тега
-            var index = shr.FullHead.Length;
+            var index = fullHeadLength;
             while (true)
             {
                 var sliced = nodes.Slice(index);
@@ -198,22 +249,22 @@ namespace XmlSerDe.Generator.EmbeddedCode
                 {
                     //это закрывающий тег, надо сравнить его с нашим
                     var eq = MemoryExtensions.SequenceEqual(
-                        shr.NodeType,
-                        nodes.Slice(index + 2, shr.NodeType.Length)
+                        nodeType,
+                        nodes.Slice(index + 2, nodeTypeLength)
                         );
                     if (!eq)
                     {
                         //не наша нода, битый XML?
-                        throw new InvalidOperationException($"Something wrong with node {shr.NodeType.ToString()}");
+                        throw new InvalidOperationException($"Something wrong with node {nodeType.ToString()}");
                     }
                     //сравним последний символ
-                    if (nodes[index + 2 + shr.NodeType.Length] != '>')
+                    if (nodes[index + 2 + nodeTypeLength] != '>')
                     {
-                        throw new InvalidOperationException($"Something wrong with node {shr.NodeType.ToString()}");
+                        throw new InvalidOperationException($"Something wrong with node {nodeType.ToString()}");
                     }
 
                     //успех, нашли закрывающий тег
-                    return index + 2 + shr.NodeType.Length + 1;
+                    return index + 2 + nodeTypeLength + 1;
                 }
                 else
                 {
@@ -226,211 +277,74 @@ namespace XmlSerDe.Generator.EmbeddedCode
             }
         }
 
-        //public static XmlNode2 GetFirst(
-        //    roschar nodes
-        //    )
-        //{
-        //    var shr = ScanHead(nodes);
-        //    if (shr.IsEmpty)
-        //    {
-        //        return new XmlNode2();
-        //    }
-        //    if (shr.IsBodyless)
-        //    {
-        //        return new XmlNode2();
-        //    }
-
-        //    //теперь сканируем до закрывающего тега
-        //    var index = shr.FullHead.Length;
-        //    while (true)
-        //    {
-        //        var ch0 = nodes[index];
-        //        if (ch0 == '<')
-        //        {
-        //            //возможно, это закрывающий тег, или открывающий дочерней ноды
-        //            //TODO: или это камент, пока не поддерживается
-        //            var ch1 = nodes[index + 1];
-        //            if (ch1 == '/')
-        //            {
-        //                //это закрывающий тег, надо сравнить его с нашим
-        //                var compareResult = MemoryExtensions.SequenceCompareTo(
-        //                    shr.NodeType,
-        //                    nodes.Slice(index + 2, shr.NodeType.Length)
-        //                    );
-        //                if (compareResult != 0)
-        //                {
-        //                    //не наша нода, битый XML?
-        //                    throw new InvalidOperationException($"Something wrong with node {shr.NodeType.ToString()}");
-        //                }
-        //                //сравним последний символ
-        //                if (nodes[index + 2 + shr.NodeType.Length] != '>')
-        //                {
-        //                    throw new InvalidOperationException($"Something wrong with node {shr.NodeType.ToString()}");
-        //                }
-
-        //                //успех, нашли закрывающий тег
-        //                return new XmlNode2(nodes.Slice(0, index + 2 + shr.NodeType.Length + 1));
-        //            }
-        //            else
-        //            {
-        //                //это открывающий тег дочерней ноды
-        //                var innerNodes = nodes.Slice(index);
-        //                var child = GetFirst(innerNodes);
-        //                //получили дочернюю ноду, пропускаем ее
-        //                index += child.FullNode.Length;
-        //            }
-        //        }
-        //        else
-        //        {
-        //            index++;
-        //        }
-        //    }
-        //}
-
-        private static roschar GetInternalsOf(
-            roschar fullNode,
-            ScanHeadResult head
+        private readonly roschar GetInternalsOf(
             )
         {
-            if(head.IsEmpty)
+            if(FullHead.IsEmpty)
             {
                 return roschar.Empty;
             }
-            if (head.IsBodyless)
+            if (IsBodyless)
             {
                 return roschar.Empty;
             }
 
             //теперь ищем </ с конца
-            var cindex = fullNode.LastIndexOf("</".AsSpan());
+            var cindex = FullNode.LastIndexOf("</".AsSpan());
             if (cindex < 0)
             {
                 throw new InvalidOperationException("Closing tag not found.");
             }
-            if (cindex + head.NodeType.Length + 3 > fullNode.Length)
+            if (cindex + DeclaredNodeType.Length + 3 > FullNode.Length)
             {
                 //выход на пределы строки
                 throw new InvalidOperationException("Closing tag not found.");
             }
 
             var compareResult = MemoryExtensions.SequenceCompareTo(
-                head.NodeType,
-                fullNode.Slice(cindex + 2, head.NodeType.Length)
+                DeclaredNodeType,
+                FullNode.Slice(cindex + 2, DeclaredNodeType.Length)
                 );
             if (compareResult != 0)
             {
                 throw new InvalidOperationException("Mismatched closing tag found.");
             }
-            if (fullNode[cindex + 2 + head.NodeType.Length] != '>')
+            if (FullNode[cindex + 2 + DeclaredNodeType.Length] != '>')
             {
                 throw new InvalidOperationException("Broken closing tag found.");
             }
 
-            return fullNode.Slice(head.FullHead.Length, cindex - head.FullHead.Length);
+            return FullNode.Slice(FullHead.Length, cindex - FullHead.Length);
         }
 
-        private static ScanHeadResult ScanHead(roschar fullnode)
+        //{REMOVE THIS COMMENT}[MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void ScanHead_Core(
+            roschar fullnode,
+            roschar trimmed,
+            out int fullHeadLength,
+            out roschar nodeType,
+            out bool isBodyLess
+            )
         {
-            if (fullnode.IsEmpty)
-            {
-                return new ScanHeadResult();
-            }
-
-            var trimmed = fullnode.TrimStart();
-            if (trimmed.IsEmpty)
-            {
-                return new ScanHeadResult();
-            }
-
-            var firstNonSpace = fullnode.Length - trimmed.Length;
+            var headSpaceCount = fullnode.Length - trimmed.Length;
 
             //ищем конец имени ноды
             var endOfNameIndex = trimmed.IndexOfAny(
                 '/', '>', ' '
                 );
-            var nodeTypeLength = firstNonSpace + endOfNameIndex;
+            var nodeTypeLength = headSpaceCount + endOfNameIndex;
 
             //ищем конец головы
             var endOfHeadIndex = trimmed.IndexOf(
                 '>'
                 );
             var chm1 = trimmed[endOfHeadIndex - 1];
-            var isBodyLess = chm1 == '/';
+            isBodyLess = chm1 == '/';
 
-            return new ScanHeadResult(
-                fullnode.Slice(0, firstNonSpace + endOfHeadIndex + 1),
-                fullnode.Slice(firstNonSpace + 1, nodeTypeLength - firstNonSpace - 1),
-                firstNonSpace,
-                isBodyLess
-                );
+            fullHeadLength = headSpaceCount + endOfHeadIndex + 1;
+            //fullHead = fullnode.Slice(0, headSpaceCount + endOfHeadIndex + 1);
+            nodeType = fullnode.Slice(headSpaceCount + 1, nodeTypeLength - headSpaceCount - 1);
         }
-
-        //private static ScanHeadResult ScanHead(roschar fullnode)
-        //{
-        //    if(fullnode.IsEmpty)
-        //    {
-        //        return new ScanHeadResult();
-        //    }
-
-        //    var index = 0;
-
-        //    //пропускаем пробелы
-        //    var firstNonSpace = 0;
-        //    while (true)
-        //    {
-        //        if(index == fullnode.Length)
-        //        {
-        //            return new ScanHeadResult();
-        //        }
-
-        //        var ch = fullnode[index];
-        //        if (!char.IsWhiteSpace(ch))
-        //        {
-        //            firstNonSpace = index;
-        //            break;
-        //        }
-        //        index++;
-        //    }
-
-        //    //ищем конец имени ноды
-        //    var nodeTypeLength = 0;
-        //    while (true)
-        //    {
-        //        var ch = fullnode[index];
-        //        if(ch == '/' || ch == '>')
-        //        {
-        //            nodeTypeLength = index;
-        //            break;
-        //        }
-        //        if (char.IsWhiteSpace(ch))
-        //        {
-        //            nodeTypeLength = index;
-        //            index++;
-        //            break;
-        //        }
-        //        index++;
-        //    }
-
-        //    //ищем конец головы
-        //    while (true)
-        //    {
-        //        var ch = fullnode[index];
-        //        if(ch == '>')
-        //        {
-        //            var chm1 = fullnode[index - 1];
-        //            var isBodyLess = chm1 == '/';
-        //            //var isBodyLessIndex = isBodyLess ? 1 : 0;
-
-        //            return new ScanHeadResult(
-        //                fullnode.Slice(firstNonSpace, index + 1),
-        //                fullnode.Slice(firstNonSpace + 1, nodeTypeLength - firstNonSpace - 1 /*- isBodyLessIndex*/),
-        //                isBodyLess
-        //                );
-        //        }
-        //        index++;
-        //    }
-        //}
-
 
         private static void ParseAttribute(
             roschar internalsOfHead,
@@ -487,126 +401,24 @@ namespace XmlSerDe.Generator.EmbeddedCode
             }
 
             var prefix = internalsOfHead.Slice(trimmedLength, iofa0);
-            //var prefix = trimmed.Slice(trimmedLength, iofa0 - trimmedLength);
-            //var afterPrefixIndex = trimmedLength + iofa0 + 1;
             trimmed = trimmed.Slice(iofa0 + 1);
 
             var iofa1 = trimmed.IndexOfAny("=".AsSpan());
             var name = trimmed.Slice(0, iofa1);
-            //var afterNameIndex = afterPrefixIndex + iofa1;
             trimmed = trimmed.Slice(iofa1 + 1);
 
             var iofa2 = trimmed.IndexOfAny("\"".AsSpan());
             //найдено начало значения
-            //var startValueIndex = afterNameIndex + iofa2 + 1;
             trimmed = trimmed.Slice(iofa2 + 1);
 
             var iofa3 = trimmed.IndexOfAny("\"".AsSpan());
             //найден конец значения
             var value = trimmed.Slice(0, iofa3);
-            //var endValueIndex = startValueIndex + iofa3;
 
             result = new AttributeProcessResult(
                 new ParsedAttribute(prefix, name, value),
                 trimmedLength + iofa0 + iofa1 + iofa2 + iofa3 + 4 - iindex
                 );
-        }
-
-        //private static AttributeProcessResult ParseFirstFoundAttribute(
-        //    roschar internalsOfHead,
-        //    int iindex
-        //    )
-        //{
-        //    var index = iindex;
-
-        //    //пропускаем пробелы
-        //    while (char.IsWhiteSpace(internalsOfHead[index]))
-        //    {
-        //        index++;
-        //    }
-
-        //    var startIndex = index;
-
-        //    bool foundFirstQuote = false;
-        //    var prefix = roschar.Empty; //before :
-        //    var name = roschar.Empty; //after :
-        //    var value = roschar.Empty; //inside ""
-
-        //    while (true)
-        //    {
-        //        var c = internalsOfHead[index];
-
-        //        if ((c == '/' || c == '>') && !foundFirstQuote)
-        //        {
-        //            //нода закрылась, атрибутов нету
-        //            return new AttributeProcessResult();
-        //        }
-        //        else if (c == ':' && !foundFirstQuote)
-        //        {
-        //            prefix = internalsOfHead.Slice(startIndex, index - startIndex);
-        //            startIndex = index + 1;
-        //        }
-        //        else if (c == '=' && !foundFirstQuote)
-        //        {
-        //            name = internalsOfHead.Slice(startIndex, index - startIndex);
-        //            startIndex = index + 1;
-        //        }
-        //        else if (c == '"' && !foundFirstQuote)
-        //        {
-        //            //найдено начало значения
-        //            startIndex = index + 1;
-        //            foundFirstQuote = true;
-        //        }
-        //        else if (c == '"' && foundFirstQuote)
-        //        {
-        //            //найден конец значения
-        //            value = internalsOfHead.Slice(startIndex, index - startIndex);
-        //        }
-
-        //        index++;
-
-        //        if (!value.IsEmpty)
-        //        {
-        //            break;
-        //        }
-        //    }
-
-        //    return new AttributeProcessResult(
-        //        new ParsedAttribute(prefix, name, value),
-        //        index - iindex
-        //        );
-        //}
-
-    }
-
-    public readonly ref struct ScanHeadResult
-    {
-        public readonly bool IsEmpty;
-        public readonly roschar FullHead;
-        public readonly roschar NodeType;
-
-        /// <summary>
-        /// Количество пробелов (и переносов строк) до начала головы в FullHead
-        /// </summary>
-        public readonly int PrefixLength;
-        public readonly bool IsBodyless;
-
-        public ScanHeadResult()
-        {
-            IsEmpty = true;
-            FullHead = roschar.Empty;
-            NodeType = roschar.Empty;
-            PrefixLength = 0;
-            IsBodyless = true;
-        }
-
-        public ScanHeadResult(roschar fullHead, roschar nodeType, int prefixLength, bool isBodyless)
-        {
-            IsEmpty = FullHead.IsEmpty && nodeType.IsEmpty;
-            FullHead = fullHead;
-            NodeType = nodeType;
-            PrefixLength = prefixLength;
-            IsBodyless = isBodyless;
         }
     }
 

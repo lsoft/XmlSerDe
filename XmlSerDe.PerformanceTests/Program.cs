@@ -12,6 +12,7 @@ using System.Runtime.CompilerServices;
 using System.Xml.Serialization;
 using XmlSerDe.Generator.EmbeddedCode;
 using XmlSerDe.PerformanceTests.Subject;
+using roschar = System.ReadOnlySpan<char>;
 
 namespace XmlSerDe.PerformanceTests
 {
@@ -68,6 +69,19 @@ Job=.NET 6.0  Runtime=.NET 6.0
 |    Old | 15.86 us | 0.313 us | 0.487 us |  1.00 |    0.00 | 3.9063 |   16392 B |        1.00 |
 |    New | 13.04 us | 0.148 us | 0.115 us |  0.84 |    0.03 | 0.1984 |     848 B |        0.05 |
 
+| Method |     Mean |    Error |   StdDev | Ratio | RatioSD |   Gen0 | Allocated | Alloc Ratio |
+|------- |---------:|---------:|---------:|------:|--------:|-------:|----------:|------------:|
+|    Old | 16.08 us | 0.312 us | 0.486 us |  1.00 |    0.00 | 3.9063 |   16392 B |        1.00 |
+|    New | 12.22 us | 0.232 us | 0.276 us |  0.76 |    0.03 | 0.1831 |     848 B |        0.05 |
+
+| Method |     Mean |    Error |   StdDev | Ratio |   Gen0 | Allocated | Alloc Ratio |
+|------- |---------:|---------:|---------:|------:|-------:|----------:|------------:|
+|    Old | 15.80 us | 0.248 us | 0.220 us |  1.00 | 3.9063 |   16392 B |        1.00 |
+|    New | 11.31 us | 0.174 us | 0.145 us |  0.72 | 0.1984 |     848 B |        0.05 |
+
+
+
+
 
 */
 
@@ -76,6 +90,8 @@ Job=.NET 6.0  Runtime=.NET 6.0
         static void Main(string[] args)
         {
 #if DEBUG
+            //new Fixture().GetFirstLength_New_Test();
+
             var oldr = new Fixture().Old();
             var newr = new Fixture().New();
 

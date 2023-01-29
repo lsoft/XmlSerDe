@@ -95,7 +95,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
         public static void {{DeserializeSourceProducer.HeadDeserializeMethodName}}(roschar fullNode, out {{builtin.Symbol.ToGlobalDisplayString()}} result)
         {
             var xmlNode = new {{typeof(XmlNode2).FullName}}(fullNode);
-            var xmlNodeDeclaredType = xmlNode.GetDeclaredNodeType();
+            var xmlNodeDeclaredType = xmlNode.{{nameof(XmlNode2.DeclaredNodeType)}};
 
             if(!xmlNodeDeclaredType.SequenceEqual("{{builtin.XmlTypeName}}".AsSpan()))
             {

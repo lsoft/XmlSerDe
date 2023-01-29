@@ -192,10 +192,10 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 _sb.AppendLine($$"""
             var xmlNode = new {{typeof(XmlNode2).FullName}}({{roscharVarName}});
-            var xmlNodePreciseType = xmlNode.GetPreciseNodeType();
+            var xmlNodePreciseType = xmlNode.{{nameof(XmlNode2.GetPreciseNodeType)}}();
             if(xmlNodePreciseType.IsEmpty)
             {
-                xmlNodePreciseType = xmlNode.GetDeclaredNodeType();
+                xmlNodePreciseType = xmlNode.{{nameof(XmlNode2.DeclaredNodeType)}};
             }
 
             if(!xmlNodePreciseType.SequenceEqual(nameof({{ssGlobalName}}).AsSpan()))
@@ -314,7 +314,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     {
                         break;
                     }
-                    var childDeclaredNodeType = child.{{nameof(XmlNode2.GetDeclaredNodeType)}}();
+                    var childDeclaredNodeType = child.{{nameof(XmlNode2.DeclaredNodeType)}};
 
 """);
 
@@ -481,7 +481,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                     _sb.AppendLine($$"""
                     //custom type
-                    var childPreciseType = child.GetPreciseNodeType();
+                    var childPreciseType = child.{{nameof(XmlNode2.GetPreciseNodeType)}}();
                     {{elseif}}if(!childPreciseType.IsEmpty)
                     {
                         var childInternals = child.{{nameof(XmlNode2.Internals)}};
