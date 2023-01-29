@@ -22,6 +22,7 @@ namespace XmlSerDe.PerformanceTests
     [XmlSubject(typeof(Derived2Info))]
     [XmlDerivedSubject(typeof(BaseInfo), typeof(Derived3Info))]
     [XmlSubject(typeof(Derived3Info))]
+    [XmlFactory(typeof(InfoContainer), "global::" + "XmlSerDe.PerformanceTests.Subject" + "." + nameof(CachedInfoContainer) + "." + nameof(CachedInfoContainer.Reuse) + "()")]
     public partial class XmlSerializerDeserializer
     {
     }

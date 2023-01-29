@@ -11,6 +11,29 @@ using roschar = System.ReadOnlySpan<char>;
 namespace XmlSerDe.Generator.EmbeddedCode
 {
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
+    public class XmlFactoryAttribute : Attribute
+    {
+        public readonly Type SubjectType;
+        public readonly string InvocationStatement;
+
+        public XmlFactoryAttribute(Type subjectType, string invocationStatement)
+        {
+            if (subjectType is null)
+            {
+                throw new ArgumentNullException(nameof(subjectType));
+            }
+            if (invocationStatement is null)
+            {
+                throw new ArgumentNullException(nameof(invocationStatement));
+            }
+
+            SubjectType = subjectType;
+            InvocationStatement = invocationStatement;
+        }
+
+    }
+
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
     public class XmlSubjectAttribute : Attribute
     {
         public readonly Type SubjectType;

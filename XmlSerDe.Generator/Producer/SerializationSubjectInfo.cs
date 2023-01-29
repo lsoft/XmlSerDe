@@ -9,6 +9,7 @@ namespace XmlSerDe.Generator.Producer
     {
         public readonly INamedTypeSymbol Subject;
         public readonly List<INamedTypeSymbol> Derived;
+        public readonly string? FactoryInvocation;
 
         public SerializationSubjectInfo(
             INamedTypeSymbol subject
@@ -21,9 +22,21 @@ namespace XmlSerDe.Generator.Producer
 
             Subject = subject;
             Derived = new List<INamedTypeSymbol>();
+            FactoryInvocation = null;
         }
 
-       public void AddDerived(INamedTypeSymbol derived)
+        private SerializationSubjectInfo(
+            INamedTypeSymbol subject,
+            List<INamedTypeSymbol> derived,
+            string? factoryInvocation
+            )
+        {
+            Subject = subject;
+            Derived = derived;
+            FactoryInvocation = factoryInvocation;
+        }
+
+        public void AddDerived(INamedTypeSymbol derived)
         {
             if (derived is null)
             {
@@ -33,6 +46,14 @@ namespace XmlSerDe.Generator.Producer
             Derived.Add(derived);
         }
 
+        public SerializationSubjectInfo WithFactoryInvocation(string factoryInvocation)
+        {
+            return new SerializationSubjectInfo(
+                Subject,
+                Derived,
+                factoryInvocation
+                );
+        }
     }
 }
 #endif

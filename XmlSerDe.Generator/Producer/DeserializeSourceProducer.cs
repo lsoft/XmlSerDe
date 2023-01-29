@@ -47,11 +47,12 @@ namespace XmlSerDe.Generator.Producer
             _deSubject = deSubject;
             _deSubjectGlobalType = _deSubject.ToGlobalDisplayString();
             _deSubjectReflectionFormat1 = _deSubject.ToReflectionFormat(false);
-            _ssic = CreateSubjects();
 
             _sb = null!; //просто заткнуть проверку, 2 строками ниже оно инициализируется
             _rnd = null!; //просто заткнуть проверку, строкой ниже оно инициализируется
             Prepare();
+
+            _ssic = CreateSubjects();
         }
 
         /// <summary>
@@ -60,9 +61,6 @@ namespace XmlSerDe.Generator.Producer
         public string GenerateDeserializer(
             )
         {
-
-            Prepare();
-
             GenerateUsings();
             _sb.AppendLine("using roschar = System.ReadOnlySpan<char>;");
 
@@ -107,7 +105,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     continue;
                 }
                 var fsa = attrSymbol.ToFullDisplayString();
-                if (fsa.NotIn(XmlDeserializeGenerator.SubjectAttributeFullName, XmlDeserializeGenerator.DerivedSubjectAttributeFullName))
+                if (fsa.NotIn(XmlDeserializeGenerator.SubjectAttributeFullName, XmlDeserializeGenerator.DerivedSubjectAttributeFullName, XmlDeserializeGenerator.FactoryAttributeFullName))
                 {
                     continue;
                 }
@@ -116,6 +114,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     continue;
                 }
 
+                //_sb.AppendLine("//fsa: " + fsa);
                 if (fsa == XmlDeserializeGenerator.SubjectAttributeFullName)
                 {
                     var ca0 = attribute.ConstructorArguments[0];
@@ -135,18 +134,41 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         );
                     result[typegn] = ssi;
                 }
-                else
+                else if (fsa == XmlDeserializeGenerator.FactoryAttributeFullName)
                 {
                     var ca0 = attribute.ConstructorArguments[0];
                     if (ca0.Kind != TypedConstantKind.Type)
                     {
                         throw new InvalidOperationException("Something wrong with attributes 2");
                     }
+                    var type = (INamedTypeSymbol)ca0.Value!;
+                    var typegn = type.ToGlobalDisplayString();
+                    if (!result.ContainsKey(typegn))
+                    {
+                        throw new InvalidOperationException($"Type is not contains in the attribute list: {typegn}");
+                    }
+
+                    var ca1 = attribute.ConstructorArguments[1];
+                    if (ca1.Kind != TypedConstantKind.Primitive)
+                    {
+                        throw new InvalidOperationException("Something wrong with attributes 3");
+                    }
+
+                    var factoryInvocation = (string)ca1.Value!;
+                    result[typegn] = result[typegn].WithFactoryInvocation(factoryInvocation);
+                }
+                else
+                {
+                    var ca0 = attribute.ConstructorArguments[0];
+                    if (ca0.Kind != TypedConstantKind.Type)
+                    {
+                        throw new InvalidOperationException("Something wrong with attributes 4");
+                    }
 
                     var ca1 = attribute.ConstructorArguments[1];
                     if (ca1.Kind != TypedConstantKind.Type)
                     {
-                        throw new InvalidOperationException("Something wrong with attributes 3");
+                        throw new InvalidOperationException("Something wrong with attributes 5");
                     }
 
                     var type = (INamedTypeSymbol)ca0.Value!;
@@ -167,13 +189,14 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
             var subject = ssi.Subject;
 
-            GenerateMethod(subject, ssi.Derived, true);
-            GenerateMethod(subject, ssi.Derived, false);
+            GenerateMethod(subject, ssi.Derived, ssi.FactoryInvocation, true);
+            GenerateMethod(subject, ssi.Derived, ssi.FactoryInvocation, false);
         }
 
         private void GenerateMethod(
             INamedTypeSymbol subject,
             List<INamedTypeSymbol> derived,
+            string? factoryInvocation,
             bool withHeadMethod
             )
         {
@@ -227,9 +250,18 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
                 }
 
-                _sb.AppendLine($$"""
+                if (!string.IsNullOrEmpty(factoryInvocation))
+                {
+                    _sb.AppendLine($$"""
+            result = {{factoryInvocation}};
+""");
+                }
+                else
+                {
+                    _sb.AppendLine($$"""
             result = new {{ssGlobalName}}();
 """);
+                }
 
                 var members = GetMembersOrderByInheritance(subject);
                 if (members.Count > 0)
