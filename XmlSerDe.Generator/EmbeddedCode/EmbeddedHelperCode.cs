@@ -30,15 +30,37 @@ namespace XmlSerDe.Generator.EmbeddedCode
             SubjectType = subjectType;
             InvocationStatement = invocationStatement;
         }
+    }
 
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
+    public class XmlParserAttribute : Attribute
+    {
+        public readonly Type SubjectType;
+        public readonly string ParserStatement;
+
+        public XmlParserAttribute(Type subjectType, string parserStatement)
+        {
+            if (subjectType is null)
+            {
+                throw new ArgumentNullException(nameof(subjectType));
+            }
+            if (parserStatement is null)
+            {
+                throw new ArgumentNullException(nameof(parserStatement));
+            }
+
+            SubjectType = subjectType;
+            ParserStatement = parserStatement;
+        }
     }
 
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
     public class XmlSubjectAttribute : Attribute
     {
         public readonly Type SubjectType;
+        public readonly bool IsRoot;
 
-        public XmlSubjectAttribute(Type subjectType)
+        public XmlSubjectAttribute(Type subjectType, bool isRoot)
         {
             if (subjectType is null)
             {
@@ -46,6 +68,7 @@ namespace XmlSerDe.Generator.EmbeddedCode
             }
 
             SubjectType = subjectType;
+            IsRoot = isRoot;
         }
     }
 
@@ -71,6 +94,7 @@ namespace XmlSerDe.Generator.EmbeddedCode
             DerivedType = derivedType;
         }
     }
+
 
     public readonly ref struct XmlNode2
     {
@@ -120,6 +144,11 @@ namespace XmlSerDe.Generator.EmbeddedCode
         /// </summary>
         public readonly roschar Internals;
 
+        /// <summary>
+        /// Attribute name for xmlns.
+        /// </summary>
+        public readonly roschar XmlnsAttributeName;
+
         public XmlNode2()
         {
             IsEmpty = true;
@@ -129,10 +158,12 @@ namespace XmlSerDe.Generator.EmbeddedCode
             FullHeadPrefixLength = 0;
             IsBodyless = true;
             Internals = roschar.Empty;
+            XmlnsAttributeName = roschar.Empty;
         }
 
         public XmlNode2(
-            roschar fullNode
+            roschar fullNode,
+            roschar xmlnsAttributeName
             )
         {
             IsEmpty = fullNode.IsEmpty;
@@ -163,14 +194,32 @@ namespace XmlSerDe.Generator.EmbeddedCode
             ScanHead_Core(fullNode, trimmed, out var fullHeadLength, out DeclaredNodeType, out IsBodyless);
             FullHead = fullNode.Slice(0, fullHeadLength);
             Internals = GetInternalsOf();
+
+            if (xmlnsAttributeName.IsEmpty)
+            {
+                XmlnsAttributeName = GetXmlnsAttributeName();
+            }
+            else
+            {
+                XmlnsAttributeName = xmlnsAttributeName;
+            }
         }
 
-        /// <summary>
-        /// Get first child of its node.
-        /// </summary>
-        public readonly void GetFirstChild(ref XmlNode2 result)
+        //{REMOVE THIS COMMENT}[MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private readonly roschar GetXmlnsAttributeName()
         {
-            GetFirst(Internals, ref result);
+            //ищем xmlns
+            ParseAttribute(
+                FullHead,
+                FullHeadPrefixLength + DeclaredNodeType.Length + 1,
+                _xmlnsSpan,
+                roschar.Empty,
+                _xmlnsHttpSpan,
+                out var parsedAttribute
+                );
+
+            //may be empty
+            return parsedAttribute.Name;
         }
 
         /// <summary>
@@ -180,44 +229,32 @@ namespace XmlSerDe.Generator.EmbeddedCode
         /// ChildType
         /// If xmlns and type does not exists, then roschar.Empty
         /// </summary>
+        //{REMOVE THIS COMMENT}[MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public readonly roschar GetPreciseNodeType()
         {
-            ParsedAttribute parsedAttribute = new();
-
-            //ищем xmlns
-            ParseAttribute(
-                FullHead,
-                FullHeadPrefixLength + DeclaredNodeType.Length + 1,
-                _xmlnsSpan,
-                roschar.Empty,
-                _xmlnsHttpSpan,
-                ref parsedAttribute
-                );
-            if(parsedAttribute.IsEmpty)
+            if(XmlnsAttributeName.IsEmpty)
             {
                 return roschar.Empty;
             }
 
-            //ищем тип
+            //ищем точный тип
             ParseAttribute(
                 FullHead,
                 FullHeadPrefixLength + DeclaredNodeType.Length + 1,
-                parsedAttribute.Name,
+                XmlnsAttributeName,
                 _typeSpan,
                 roschar.Empty,
-                ref parsedAttribute
+                out var parsedAttribute
                 );
-            if(parsedAttribute.IsEmpty)
-            {
-                return roschar.Empty;
-            }
 
+            //may be empty
             return parsedAttribute.Value;
         }
 
         //{REMOVE THIS COMMENT}[MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static void GetFirst(
             roschar nodes,
+            roschar xmlnsAttributeName,
             ref XmlNode2 result
             )
         {
@@ -228,7 +265,7 @@ namespace XmlSerDe.Generator.EmbeddedCode
                 return;
             }
 
-            result = new XmlNode2(nodes.Slice(0, length));
+            result = new XmlNode2(nodes.Slice(0, length), xmlnsAttributeName);
         }
 
         //{REMOVE THIS COMMENT}[MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -375,13 +412,13 @@ namespace XmlSerDe.Generator.EmbeddedCode
             roschar requiredPrefix,
             roschar requiredName,
             roschar requiredValue,
-            ref ParsedAttribute result
+            out ParsedAttribute result
             )
         {
             AttributeProcessResult apr = new();
             while (true)
             {
-                ParseFirstFoundAttribute(internalsOfHead, index, ref apr);
+                ParseFirstFoundAttribute(internalsOfHead, index, out apr);
                 if (apr.Attribute.IsEmpty)
                 {
                     result = apr.Attribute;
@@ -408,7 +445,7 @@ namespace XmlSerDe.Generator.EmbeddedCode
         private static void ParseFirstFoundAttribute(
             roschar internalsOfHead,
             int iindex,
-            ref AttributeProcessResult result
+            out AttributeProcessResult result
             )
         {
             var trimmed = internalsOfHead.Slice(iindex).TrimStart();

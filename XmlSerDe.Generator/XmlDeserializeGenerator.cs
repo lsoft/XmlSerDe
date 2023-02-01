@@ -21,6 +21,7 @@ namespace XmlSerDe.Generator
         public static readonly string SubjectAttributeFullName = typeof(XmlSubjectAttribute).FullName;
         public static readonly string DerivedSubjectAttributeFullName = typeof(XmlDerivedSubjectAttribute).FullName;
         public static readonly string FactoryAttributeFullName = typeof(XmlFactoryAttribute).FullName;
+        public static readonly string ParserAttributeFullName = typeof(XmlParserAttribute).FullName;
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {

@@ -76,7 +76,10 @@ Job=.NET 6.0  Runtime=.NET 6.0
 |    Old | 16.05 us | 0.299 us | 0.307 us |  1.00 |    0.00 | 3.9063 |   16392 B |        1.00 |
 |    New | 11.34 us | 0.212 us | 0.165 us |  0.71 |    0.02 | 0.1678 |     736 B |        0.04 |
 
-
+|     Method |     Mean |    Error |   StdDev | Ratio |   Gen0 | Allocated | Alloc Ratio |
+|----------- |---------:|---------:|---------:|------:|-------:|----------:|------------:|
+| System.Xml | 15.92 us | 0.234 us | 0.219 us |  1.00 | 3.9063 |   16392 B |        1.00 |
+|   XmlSerDe | 11.80 us | 0.112 us | 0.137 us |  0.74 | 0.1678 |     736 B |        0.04 |
 
 */
 
@@ -178,24 +181,25 @@ public class DeserializeFixture
 
     public DeserializeFixture()
     {
-        _ = Old();
-        _ = New();
+        //heat up
+        _ = SystemXml();
+        _ = XmlSerDe();
 
         CheckForEquality();
     }
 
     private void CheckForEquality()
     {
-        var oldr = Old();
-        var newr = New();
+        var systemr = SystemXml();
+        var xmlserder = XmlSerDe();
 
-        if (oldr.InfoCollection.Count != newr.InfoCollection.Count)
+        if (systemr.InfoCollection.Count != xmlserder.InfoCollection.Count)
         {
             throw new Exception("InfoCollection.Count");
         }
         {
-            var oldau = (Derived3Info)oldr.InfoCollection[0];
-            var newau = (Derived3Info)newr.InfoCollection[0];
+            var oldau = (Derived3Info)systemr.InfoCollection[0];
+            var newau = (Derived3Info)xmlserder.InfoCollection[0];
             if (oldau.InfoType != newau.InfoType)
             {
                 throw new Exception("InfoType");
@@ -210,8 +214,8 @@ public class DeserializeFixture
             }
         }
         {
-            var oldau = (Derived1Info)oldr.InfoCollection[1];
-            var newau = (Derived1Info)newr.InfoCollection[1];
+            var oldau = (Derived1Info)systemr.InfoCollection[1];
+            var newau = (Derived1Info)xmlserder.InfoCollection[1];
             if (oldau.InfoType != newau.InfoType)
             {
                 throw new Exception("InfoType");
@@ -222,8 +226,8 @@ public class DeserializeFixture
             }
         }
         {
-            var oldau = (Derived2Info)oldr.InfoCollection[2];
-            var newau = (Derived2Info)newr.InfoCollection[2];
+            var oldau = (Derived2Info)systemr.InfoCollection[2];
+            var newau = (Derived2Info)xmlserder.InfoCollection[2];
             if (oldau.InfoType != newau.InfoType)
             {
                 throw new Exception("InfoType");
@@ -260,8 +264,8 @@ public class DeserializeFixture
         }
     }
 
-    [Benchmark(Baseline = true)]
-    public InfoContainer Old()
+    [Benchmark(Baseline = true, Description = "System.Xml")]
+    public InfoContainer SystemXml()
     {
         using (var reader = new StringReader(AuxXml))
         {
@@ -271,8 +275,8 @@ public class DeserializeFixture
 
     }
 
-    [Benchmark]
-    public InfoContainer New()
+    [Benchmark(Description = "XmlSerDe")]
+    public InfoContainer XmlSerDe()
     {
         XmlSerializerDeserializer.Deserialize(AuxXml.AsSpan(), out InfoContainer r);
         return r;

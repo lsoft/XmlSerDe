@@ -52,7 +52,7 @@ namespace XmlSerDe.Generator.Producer
             _rnd = null!; //просто заткнуть проверку, строкой ниже оно инициализируется
             Prepare();
 
-            _ssic = CreateSubjects();
+            _ssic = CreateSubjects(_deSubject);
         }
 
         /// <summary>
@@ -93,11 +93,18 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             return _sb.ToString();
         }
 
-        private SerializationSubjectInfoCollection CreateSubjects()
+        private static SerializationSubjectInfoCollection CreateSubjects(
+            INamedTypeSymbol deSubject
+            )
         {
+            if (deSubject is null)
+            {
+                throw new ArgumentNullException(nameof(deSubject));
+            }
+
             var result = new Dictionary<string, SerializationSubjectInfo>();
 
-            foreach (var attribute in _deSubject.GetAttributes())
+            foreach (var attribute in deSubject.GetAttributes())
             {
                 var attrSymbol = attribute.AttributeClass;
                 if (attrSymbol is null)
@@ -105,7 +112,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     continue;
                 }
                 var fsa = attrSymbol.ToFullDisplayString();
-                if (fsa.NotIn(XmlDeserializeGenerator.SubjectAttributeFullName, XmlDeserializeGenerator.DerivedSubjectAttributeFullName, XmlDeserializeGenerator.FactoryAttributeFullName))
+                if (fsa.NotIn(XmlDeserializeGenerator.SubjectAttributeFullName, XmlDeserializeGenerator.DerivedSubjectAttributeFullName, XmlDeserializeGenerator.FactoryAttributeFullName, XmlDeserializeGenerator.ParserAttributeFullName))
                 {
                     continue;
                 }
@@ -122,15 +129,23 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     {
                         throw new InvalidOperationException("Something wrong with attributes 1");
                     }
-
                     var type = (INamedTypeSymbol)ca0.Value!;
                     var typegn = type.ToGlobalDisplayString();
                     if (result.ContainsKey(typegn))
                     {
                         throw new InvalidOperationException($"Type is already contains in the attribute list: {typegn}");
                     }
+
+                    var ca1 = attribute.ConstructorArguments[1];
+                    if (ca1.Kind != TypedConstantKind.Primitive)
+                    {
+                        throw new InvalidOperationException("Something wrong with attributes 2");
+                    }
+                    var isRoot = (bool)ca1.Value!;
+
                     var ssi = new SerializationSubjectInfo(
-                        type
+                        type,
+                        isRoot
                         );
                     result[typegn] = ssi;
                 }
@@ -139,7 +154,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     var ca0 = attribute.ConstructorArguments[0];
                     if (ca0.Kind != TypedConstantKind.Type)
                     {
-                        throw new InvalidOperationException("Something wrong with attributes 2");
+                        throw new InvalidOperationException("Something wrong with attributes 3");
                     }
                     var type = (INamedTypeSymbol)ca0.Value!;
                     var typegn = type.ToGlobalDisplayString();
@@ -151,24 +166,47 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     var ca1 = attribute.ConstructorArguments[1];
                     if (ca1.Kind != TypedConstantKind.Primitive)
                     {
-                        throw new InvalidOperationException("Something wrong with attributes 3");
+                        throw new InvalidOperationException("Something wrong with attributes 4");
                     }
 
                     var factoryInvocation = (string)ca1.Value!;
                     result[typegn] = result[typegn].WithFactoryInvocation(factoryInvocation);
+                }
+                else if (fsa == XmlDeserializeGenerator.ParserAttributeFullName)
+                {
+                    var ca0 = attribute.ConstructorArguments[0];
+                    if (ca0.Kind != TypedConstantKind.Type)
+                    {
+                        throw new InvalidOperationException("Something wrong with attributes 5");
+                    }
+                    var type = (INamedTypeSymbol)ca0.Value!;
+                    var typegn = type.ToGlobalDisplayString();
+                    if (!result.ContainsKey(typegn))
+                    {
+                        throw new InvalidOperationException($"Type is not contains in the attribute list: {typegn}");
+                    }
+
+                    var ca1 = attribute.ConstructorArguments[1];
+                    if (ca1.Kind != TypedConstantKind.Primitive)
+                    {
+                        throw new InvalidOperationException("Something wrong with attributes 6");
+                    }
+
+                    var parserInvocation = (string)ca1.Value!;
+                    result[typegn] = result[typegn].WithParserInvocation(parserInvocation);
                 }
                 else
                 {
                     var ca0 = attribute.ConstructorArguments[0];
                     if (ca0.Kind != TypedConstantKind.Type)
                     {
-                        throw new InvalidOperationException("Something wrong with attributes 4");
+                        throw new InvalidOperationException("Something wrong with attributes 7");
                     }
 
                     var ca1 = attribute.ConstructorArguments[1];
                     if (ca1.Kind != TypedConstantKind.Type)
                     {
-                        throw new InvalidOperationException("Something wrong with attributes 5");
+                        throw new InvalidOperationException("Something wrong with attributes 8");
                     }
 
                     var type = (INamedTypeSymbol)ca0.Value!;
@@ -189,14 +227,35 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
             var subject = ssi.Subject;
 
-            GenerateMethod(subject, ssi.Derived, ssi.FactoryInvocation, true);
-            GenerateMethod(subject, ssi.Derived, ssi.FactoryInvocation, false);
+            GenerateMethod(subject, ssi.Derived, ssi.FactoryInvocation, ssi.ParserInvocation, true);
+            GenerateMethod(subject, ssi.Derived, ssi.FactoryInvocation, ssi.ParserInvocation, false);
+
+            if(ssi.IsRoot)
+            {
+                GenerateRootMethod(subject);
+            }
+        }
+
+
+        private void GenerateRootMethod(
+            INamedTypeSymbol subject
+            )
+        {
+            var ssGlobalName = subject.ToGlobalDisplayString();
+
+            _sb.AppendLine($$"""
+        public static void {{HeadDeserializeMethodName}}(roschar xmlFullNode, out {{ssGlobalName}} result)
+        {
+            {{HeadDeserializeMethodName}}(xmlFullNode, roschar.Empty, out result);
+        }
+""");
         }
 
         private void GenerateMethod(
             INamedTypeSymbol subject,
             List<INamedTypeSymbol> derived,
             string? factoryInvocation,
+            string? parserInvocation,
             bool withHeadMethod
             )
         {
@@ -207,14 +266,14 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             var ssGlobalName = subject.ToGlobalDisplayString();
 
             _sb.AppendLine($$"""
-        {{privatePublic}} static void {{methodName}}(roschar {{roscharVarName}}, out {{ssGlobalName}} result)
+        {{privatePublic}} static void {{methodName}}(roschar {{roscharVarName}}, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
         {
 """);
 
             if (withHeadMethod)
             {
                 _sb.AppendLine($$"""
-            var xmlNode = new {{typeof(XmlNode2).FullName}}({{roscharVarName}});
+            var xmlNode = new {{typeof(XmlNode2).FullName}}({{roscharVarName}}, xmlnsAttributeName);
             var xmlNodePreciseType = xmlNode.{{nameof(XmlNode2.GetPreciseNodeType)}}();
             if(xmlNodePreciseType.IsEmpty)
             {
@@ -266,7 +325,11 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 var members = GetMembersOrderByInheritance(subject);
                 if (members.Count > 0)
                 {
-                    GenerateMembers(members, withHeadMethod);
+                    GenerateMembers(
+                        members,
+                        withHeadMethod,
+                        parserInvocation
+                        );
                 }
             }
 
@@ -292,7 +355,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 //{{nameof(GenerateDispatch)}}
                 if (xmlNodePreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
                 {
-                    {{classAndMethodName}}(xmlNodeInternals, out {{d.ToGlobalDisplayString()}} iresult);
+                    {{classAndMethodName}}(xmlNodeInternals, xmlNode.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult);
                     result = iresult;
                     return;
                 }
@@ -314,7 +377,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         //{{nameof(GenerateDispatch2)}}
                         if (childPreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
                         {
-                            {{classAndMethodName}}(childInternals, out {{d.ToGlobalDisplayString()}} iresult);
+                            {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult);
                             result.{{memberName}} = iresult;
                         }
 """);
@@ -322,8 +385,16 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         }
 
 
-        private void GenerateMembers(List<ISymbol> members, bool withHeadMethod)
+        private void GenerateMembers(
+            List<ISymbol> members,
+            bool withHeadMethod,
+            string? parserInvocation
+            )
         {
+            var xmlnsAttributeNameVarName = withHeadMethod
+                ? $"xmlNode.{nameof(XmlNode2.XmlnsAttributeName)}"
+                : $"xmlnsAttributeName";
+
             _sb.AppendLine($$"""
             if(!internals.IsEmpty)
             {
@@ -341,7 +412,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 {{typeof(XmlNode2).FullName}} child = new();
                 while(true)
                 {
-                    {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(internals, ref child);
+                    {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(internals, {{xmlnsAttributeNameVarName}} /*1*/, ref child);
                     if(child.IsEmpty)
                     {
                         break;
@@ -355,7 +426,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 var memberType = ParseMember(member);
 
-                GenerateMember(memberIndex, member, memberType);
+                GenerateMember(memberIndex, member, memberType, parserInvocation);
                 memberIndex++;
             }
 
@@ -422,12 +493,13 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         private readonly void GenerateMember(
             int index,
             ISymbol member,
-            INamedTypeSymbol memberType
+            INamedTypeSymbol memberType,
+            string? parserInvocation
             )
         {
             var elseif = index > 0 ? "else " : "";
 
-            if(BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType, out var builtin))
+            if(string.IsNullOrEmpty(parserInvocation) && BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType, out var builtin))
             {
                 var finalClause = string.Format(
                     builtin.ConverterClause,
@@ -444,7 +516,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
             else if (memberType.EnumUnderlyingType != null)
             {
-                _sb.AppendLine($$"""
+                if (string.IsNullOrEmpty(parserInvocation))
+                {
+                    _sb.AppendLine($$"""
                     //Enum
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
@@ -452,6 +526,23 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         result.{{member.Name}} = ({{memberType.ToGlobalDisplayString()}})Enum.Parse(typeof({{memberType.ToGlobalDisplayString()}}), child2);
                     }
 """);
+                }
+                else
+                {
+                    var fullParserInvocation = string.Format(
+                        parserInvocation,
+                        "child2"
+                        );
+
+                    _sb.AppendLine($$"""
+                    //Enum
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
+                    {
+                        var child2 = child.{{nameof(XmlNode2.Internals)}};
+                        result.{{member.Name}} = {{fullParserInvocation}};
+                    }
+""");
+                }
             }
             //TODO array and other collections
             else if (
@@ -475,13 +566,13 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         {{typeof(XmlNode2).FullName}} child2 = new();
                         while(true)
                         {
-                            {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(childInternals, ref child2);
+                            {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(childInternals, child.XmlnsAttributeName, ref child2);
                             if(child2.{{nameof(XmlNode2.IsEmpty)}})
                             {
                                 break;
                             }
 
-                            {{classAndMethodName}}(child2.{{nameof(XmlNode2.FullNode)}}, out {{listItemType.ToGlobalDisplayString()}} iresult);
+                            {{classAndMethodName}}(child2.{{nameof(XmlNode2.FullNode)}}, child2.XmlnsAttributeName, out {{listItemType.ToGlobalDisplayString()}} iresult);
                             result.{{member.Name}}.Add(iresult);
 
                             childInternals = childInternals.Slice(
@@ -530,7 +621,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                         {
                             var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                            {{classAndMethodName}}(childInternals, out {{memberType.ToGlobalDisplayString()}} iresult);
+                            {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{memberType.ToGlobalDisplayString()}} iresult);
                             result.{{member.Name}} = iresult;
                         }
                     }
@@ -549,7 +640,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                        {{classAndMethodName}}(childInternals, out {{memberType.ToGlobalDisplayString()}} iresult);
+                        {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{memberType.ToGlobalDisplayString()}} iresult);
                         result.{{member.Name}} = iresult;
                     }
 """);

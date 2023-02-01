@@ -92,9 +92,9 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 
 
                 sb.AppendLine($$"""
-        public static void {{DeserializeSourceProducer.HeadDeserializeMethodName}}(roschar fullNode, out {{builtin.Symbol.ToGlobalDisplayString()}} result)
+        public static void {{DeserializeSourceProducer.HeadDeserializeMethodName}}(roschar fullNode, roschar xmlnsAttributeName, out {{builtin.Symbol.ToGlobalDisplayString()}} result)
         {
-            var xmlNode = new {{typeof(XmlNode2).FullName}}(fullNode);
+            var xmlNode = new {{typeof(XmlNode2).FullName}}(fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.{{nameof(XmlNode2.DeclaredNodeType)}};
 
             if(!xmlNodeDeclaredType.SequenceEqual("{{builtin.XmlTypeName}}".AsSpan()))
