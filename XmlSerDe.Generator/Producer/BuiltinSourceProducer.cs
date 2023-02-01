@@ -45,6 +45,8 @@ namespace XmlSerDe.Generator.Producer
                     new List<Builtin>
                     {
                         new Builtin("global::System.DateTime.Parse({0})", compilation.DateTime(), "dateTime"),
+                        new Builtin("global::System.DateTime.Parse({0})", compilation.NDateTime(), "dateTime"),
+
                         new Builtin("global::System.Boolean.Parse({0})", compilation.Bool(), "boolean"),
                         new Builtin("global::System.Net.WebUtility.HtmlDecode({0}.ToString())", compilation.String(), "string"),
 
@@ -56,9 +58,11 @@ namespace XmlSerDe.Generator.Producer
 
                         new Builtin("global::System.UInt32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt32(), "unsignedInt"),
                         new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int32(), "int"),
+                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt32(), "int"),
 
                         new Builtin("global::System.UInt64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt64(), "unsignedLong"),
                         new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int64(), "long"),
+                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt64(), "long"),
 
                         new Builtin("global::System.Decimal.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Decimal(), "decimal"),
                         //TODO other builtin branches

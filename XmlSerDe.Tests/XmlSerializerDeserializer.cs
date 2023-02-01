@@ -71,4 +71,8 @@ namespace XmlSerDe.Tests
     {
     }
 
+    [XmlSubject(typeof(XmlObject14), true)]
+    public partial class XmlSerializerDeserializer14
+    {
+    }
 }

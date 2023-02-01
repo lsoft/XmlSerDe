@@ -1,5 +1,6 @@
 ﻿#if NETSTANDARD
 using System;
+using System.Reflection.Metadata;
 using Microsoft.CodeAnalysis;
 
 namespace XmlSerDe.Generator.Helper
@@ -113,6 +114,21 @@ namespace XmlSerDe.Generator.Helper
             return compilation.GetTypeByMetadataName("System.DateTime")!;
         }
 
+        public static INamedTypeSymbol NDateTime(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(DateTime(compilation))
+                    ;
+        }
+
         public static INamedTypeSymbol Bool(
             this Compilation compilation
             )
@@ -197,6 +213,21 @@ namespace XmlSerDe.Generator.Helper
             return compilation.GetTypeByMetadataName("System.Int32")!;
         }
 
+        public static INamedTypeSymbol NInt32(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(Int32(compilation))
+                    ;
+        }
+
         public static INamedTypeSymbol UInt64(
             this Compilation compilation
             )
@@ -220,6 +251,22 @@ namespace XmlSerDe.Generator.Helper
 
             return compilation.GetTypeByMetadataName("System.Int64")!;
         }
+
+        public static INamedTypeSymbol NInt64(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(Int64(compilation))
+                    ;
+        }
+
 
         public static INamedTypeSymbol Byte(
             this Compilation compilation

@@ -331,6 +331,50 @@ namespace XmlSerDe.Tests
 
 
 
+        [Fact]
+        public void XmlObject14_Test0()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject14), new Type[] { }).Serialize(
+            //        ms,
+            //        new XmlObject14()
+            //        {
+            //            NullableDateTime = null
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer14.Deserialize(@"<XmlObject14 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><NullableDateTime xsi:nil=""true"" /></XmlObject14>".AsSpan(), out XmlObject14 xo);
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Null(xo.NullableDateTime);
+        }
+
+        [Fact]
+        public void XmlObject14_Test1()
+        {
+            var dt = new DateTime(638108474082389138);
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject14), new Type[] { }).Serialize(
+            //        ms,
+            //        new XmlObject14()
+            //        {
+            //            NullableDateTime = dt
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer14.Deserialize(@"<XmlObject14 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><NullableDateTime>2023-02-01T11:23:28.2389138</NullableDateTime></XmlObject14>".AsSpan(), out XmlObject14 xo);
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(dt, xo.NullableDateTime);
+        }
+
+
+
+
+
+
         //        [Fact]
         //        public void TestGenerator()
         //        {
