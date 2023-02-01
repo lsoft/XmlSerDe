@@ -415,10 +415,9 @@ namespace XmlSerDe.Generator.EmbeddedCode
             out ParsedAttribute result
             )
         {
-            AttributeProcessResult apr = new();
             while (true)
             {
-                ParseFirstFoundAttribute(internalsOfHead, index, out apr);
+                ParseFirstFoundAttribute(internalsOfHead, index, out var apr);
                 if (apr.Attribute.IsEmpty)
                 {
                     result = apr.Attribute;

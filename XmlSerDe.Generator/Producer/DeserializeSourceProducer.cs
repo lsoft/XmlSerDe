@@ -260,13 +260,12 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             )
         {
             var roscharVarName = withHeadMethod ? "fullNode" : "internals";
-            var privatePublic = withHeadMethod ? "public" : "private";
             var methodName = withHeadMethod ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
 
             var ssGlobalName = subject.ToGlobalDisplayString();
 
             _sb.AppendLine($$"""
-        {{privatePublic}} static void {{methodName}}(roschar {{roscharVarName}}, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
+        private static void {{methodName}}(roschar {{roscharVarName}}, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
         {
 """);
 
