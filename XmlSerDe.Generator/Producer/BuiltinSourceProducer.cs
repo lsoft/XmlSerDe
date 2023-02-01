@@ -47,6 +47,9 @@ namespace XmlSerDe.Generator.Producer
                         new Builtin("global::System.DateTime.Parse({0})", compilation.DateTime(), "dateTime"),
                         new Builtin("global::System.DateTime.Parse({0})", compilation.NDateTime(), "dateTime"),
 
+                        new Builtin("global::System.Guid.Parse({0})", compilation.Guid(), "guid"),
+                        new Builtin("global::System.Guid.Parse({0})", compilation.NGuid(), "guid"),
+
                         new Builtin("global::System.Boolean.Parse({0})", compilation.Bool(), "boolean"),
                         new Builtin("global::System.Net.WebUtility.HtmlDecode({0}.ToString())", compilation.String(), "string"),
 

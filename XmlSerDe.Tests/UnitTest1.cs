@@ -345,10 +345,12 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer14.Deserialize(@"<XmlObject14 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><NullableDateTime xsi:nil=""true"" /></XmlObject14>".AsSpan(), out XmlObject14 xo);
+            XmlSerializerDeserializer14.Deserialize(@"<XmlObject14 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><NullableDateTime xsi:nil=""true"" /><NullableGuid xsi:nil=""true"" /></XmlObject14>".AsSpan(), out XmlObject14 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Null(xo.NullableDateTime);
+            Xunit.Assert.Null(xo.NullableGuid);
         }
+
 
         [Fact]
         public void XmlObject14_Test1()
@@ -365,9 +367,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer14.Deserialize(@"<XmlObject14 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><NullableDateTime>2023-02-01T11:23:28.2389138</NullableDateTime></XmlObject14>".AsSpan(), out XmlObject14 xo);
+            XmlSerializerDeserializer14.Deserialize(@"<XmlObject14 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><NullableDateTime>2023-02-01T11:23:28.2389138</NullableDateTime><NullableGuid>268450C0-C71B-4440-A04E-D83ABFBD9FAC</NullableGuid></XmlObject14>".AsSpan(), out XmlObject14 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(dt, xo.NullableDateTime);
+            Xunit.Assert.Equal(new Guid("268450C0-C71B-4440-A04E-D83ABFBD9FAC"), xo.NullableGuid);
         }
 
 

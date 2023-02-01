@@ -13,5 +13,11 @@ namespace XmlSerDe.Tests
             get;
             set;
         }
+
+        public Guid? NullableGuid
+        {
+            get;
+            set;
+        }
     }
 }

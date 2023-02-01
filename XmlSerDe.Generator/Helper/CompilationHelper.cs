@@ -102,6 +102,33 @@ namespace XmlSerDe.Generator.Helper
             return compilation.GetTypeByMetadataName("System.Object")!;
         }
 
+        public static INamedTypeSymbol Guid(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return compilation.GetTypeByMetadataName("System.Guid")!;
+        }
+
+        public static INamedTypeSymbol NGuid(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(Guid(compilation))
+                    ;
+        }
+
         public static INamedTypeSymbol DateTime(
             this Compilation compilation
             )
