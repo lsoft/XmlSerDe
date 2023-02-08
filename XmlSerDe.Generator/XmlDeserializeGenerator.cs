@@ -128,7 +128,7 @@ namespace XmlSerDe.Generator
                         throw new InvalidOperationException($"Class {ctgs.ToFullDisplayString()} should be partial");
                     }
 
-                    var sp = new DeserializeSourceProducer(
+                    var sp = new ClassSourceProducer(
                         compilation,
                         classToGenerate.Symbol
                         );

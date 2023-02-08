@@ -152,7 +152,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 
 
                 sb.AppendLine($$"""
-        public static void {{DeserializeSourceProducer.HeadDeserializeMethodName}}(roschar fullNode, roschar xmlnsAttributeName, out {{builtin.Symbol.ToGlobalDisplayString()}} result)
+        public static void {{ClassSourceProducer.HeadDeserializeMethodName}}(roschar fullNode, roschar xmlnsAttributeName, out {{builtin.Symbol.ToGlobalDisplayString()}} result)
         {
             var xmlNode = new {{typeof(XmlNode2).FullName}}(fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.{{nameof(XmlNode2.DeclaredNodeType)}};
