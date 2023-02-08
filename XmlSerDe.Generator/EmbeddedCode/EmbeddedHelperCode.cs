@@ -367,11 +367,11 @@ namespace XmlSerDe.Generator.EmbeddedCode
                 );
             if (compareResult != 0)
             {
-                throw new InvalidOperationException("Mismatched closing tag found.");
+                throw new InvalidOperationException("Mismatched closing tag found for " + DeclaredNodeType.ToString());
             }
             if (FullNode[cindex + 2 + DeclaredNodeType.Length] != '>')
             {
-                throw new InvalidOperationException("Broken closing tag found.");
+                throw new InvalidOperationException("Broken closing tag found for " + DeclaredNodeType.ToString());
             }
 
             return FullNode.Slice(FullHead.Length, cindex - FullHead.Length);

@@ -23,6 +23,16 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
+        public void XmlObject1_Test0_WithHead()
+        {
+            XmlSerializerDeserializer1.Deserialize(
+                XmlSerDe.Generator.Producer.BuiltinCodeParser.CutXmlHead(
+                    @"<?xml version=""1.0"" encoding=""utf-8""?><XmlObject1></XmlObject1>".AsSpan()
+                    ), out XmlObject1 xo);
+            Xunit.Assert.NotNull(xo);
+        }
+
+        [Fact]
         public void XmlObject1_Test1()
         {
             XmlSerializerDeserializer1.Deserialize(@"<XmlObject1/>".AsSpan(), out XmlObject1 xo);
@@ -66,6 +76,20 @@ namespace XmlSerDe.Tests
         {
             XmlSerializerDeserializer2.Deserialize(
                 (@"<XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan(),
+                out XmlObject2 xo
+                );
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(123, xo.IntProperty);
+            Xunit.Assert.Equal(string.Empty, xo.StringProperty);
+        }
+
+        [Fact]
+        public void XmlObject2_Test1_WithHead()
+        {
+            XmlSerializerDeserializer2.Deserialize(
+                XmlSerDe.Generator.Producer.BuiltinCodeParser.CutXmlHead(
+                    (@"<?xml version=""1.0"" encoding=""utf-8""?>    <XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
+                    ),
                 out XmlObject2 xo
                 );
             Xunit.Assert.NotNull(xo);

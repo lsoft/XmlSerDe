@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Xml;
 using XmlSerDe.Generator.EmbeddedCode;
 using XmlSerDe.Generator.Helper;
 
@@ -11,6 +12,7 @@ namespace XmlSerDe.Generator.Producer
     internal readonly struct BuiltinSourceProducer
     {
         public const string BuiltinCodeParserClassName = "BuiltinCodeParser";
+        public const string CutXmlHeadMethodName = "CutXmlHead";
 
         private readonly Compilation _compilation;
         public readonly BuiltinCollection Builtins;
@@ -73,7 +75,7 @@ namespace XmlSerDe.Generator.Producer
                 );
         }
 
-        public string GenerateBuiltinMethods()
+        public string GenerateAllMethods()
         {
             var sb = new StringBuilder();
 
@@ -85,11 +87,46 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
     using System;
     using roschar = System.ReadOnlySpan<char>;
 
-    internal static class {{BuiltinCodeParserClassName}}
+    public static class {{BuiltinCodeParserClassName}}
     {
 
 """);
 
+            GenerateCutXmlHeadMethod(sb);
+            GenerateDeserializeMethods(sb);
+
+            sb.AppendLine($$"""
+    }
+}
+""");
+
+            return sb.ToString();
+        }
+
+        private void GenerateCutXmlHeadMethod(StringBuilder sb)
+        {
+            sb.AppendLine($$"""
+        public static roschar {{CutXmlHeadMethodName}}(roschar xml)
+        {
+            var startOfHead = "<?xml".AsSpan();
+
+            var trimmedXml = xml.Trim();
+            if (!trimmedXml.StartsWith(startOfHead))
+            {
+                return trimmedXml;
+            }
+
+            var endOfHead = "?>".AsSpan();
+            var index = trimmedXml.IndexOf(endOfHead);
+
+            return trimmedXml.Slice(index + endOfHead.Length).Trim();
+        }
+
+""");
+        }
+
+        private void GenerateDeserializeMethods(StringBuilder sb)
+        {
             foreach (var builtin in Builtins.Builtins)
             {
                 var finalClause = string.Format(
@@ -114,12 +151,6 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 """);
             }
 
-            sb.AppendLine($$"""
-    }
-}
-""");
-
-            return sb.ToString();
         }
     }
 }

@@ -55,7 +55,7 @@ namespace XmlSerDe.Generator
                 var bsg = new BuiltinSourceProducer(
                     compilation
                     );
-                var builtinCode = bsg.GenerateBuiltinMethods(
+                var builtinCode = bsg.GenerateAllMethods(
                     );
                 context.AddSource(
                     $"{BuiltinSourceProducer.BuiltinCodeParserClassName}.cs",
