@@ -16,10 +16,14 @@ namespace XmlSerDe.Generator.Producer
 {
     public struct ClassSourceProducer
     {
+
         public const string HeadDeserializeMethodName = "Deserialize";
         public const string HeadSerializeMethodName = "Serialize";
         public const string HeadlessDeserializeMethodName = "DeserializeBody";
         public const string HeadlessSerializeMethodName = "SerializeBody";
+
+        public static readonly string WriteStringToStreamFullMethodName = "global::" + typeof(BuiltinSourceProducer).Namespace + "." + BuiltinSourceProducer.BuiltinCodeParserClassName + "." + BuiltinSourceProducer.WriteStringToStreamMethodName;
+        public static readonly string WriteEncodedStringToStreamFullMethodName = "global::" + typeof(BuiltinSourceProducer).Namespace + "." + BuiltinSourceProducer.BuiltinCodeParserClassName + "." + BuiltinSourceProducer.WriteEncodedStringToStreamMethodName;
 
         private readonly Compilation _compilation;
         private readonly INamedTypeSymbol _deSubject;
@@ -54,9 +58,6 @@ namespace XmlSerDe.Generator.Producer
             _ssic = CreateSubjects(_deSubject);
         }
 
-        /// <summary>
-        /// Генерация десериализатора
-        /// </summary>
         public string GenerateClass(
             )
         {
@@ -162,6 +163,18 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
 """);
 
+
+            _sb.AppendLine($$"""
+
+            {{WriteStringToStreamFullMethodName}}(stream, "<");
+            {{WriteStringToStreamFullMethodName}}(stream, "{{subject.Name}}");
+            {{WriteStringToStreamFullMethodName}}(stream, ">");
+
+            {{WriteStringToStreamFullMethodName}}(stream, "</");
+            {{WriteStringToStreamFullMethodName}}(stream, "{{subject.Name}}");
+            {{WriteStringToStreamFullMethodName}}(stream, ">");
+
+""");
 
             _sb.AppendLine($$"""
         }

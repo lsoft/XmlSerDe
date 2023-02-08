@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
@@ -20,6 +21,19 @@ namespace XmlSerDe.Tests
         {
             XmlSerializerDeserializer1.Deserialize(@"<XmlObject1></XmlObject1>".AsSpan(), out XmlObject1 xo);
             Xunit.Assert.NotNull(xo);
+        }
+
+        [Fact]
+        public void XmlObject1_Serialize_Test0()
+        {
+            using var ms = new MemoryStream();
+            XmlSerializerDeserializer1.Serialize(
+                ms,
+                new XmlObject1(),
+                false
+                );
+            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            Xunit.Assert.Equal("<XmlObject1></XmlObject1>", xml);
         }
 
         [Fact]
@@ -396,7 +410,6 @@ namespace XmlSerDe.Tests
             Xunit.Assert.Equal(dt, xo.NullableDateTime);
             Xunit.Assert.Equal(new Guid("268450C0-C71B-4440-A04E-D83ABFBD9FAC"), xo.NullableGuid);
         }
-
 
 
 

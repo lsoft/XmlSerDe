@@ -14,6 +14,8 @@ namespace XmlSerDe.Generator.Producer
         public const string BuiltinCodeParserClassName = "BuiltinCodeParser";
         public const string CutXmlHeadMethodName = "CutXmlHead";
         public const string AppendXmlHeadMethodName = "AppendXmlHead";
+        public const string WriteStringToStreamMethodName = "WriteStringToStream";
+        public const string WriteEncodedStringToStreamMethodName = "WriteEncodedStringToStream";
 
         private readonly Compilation _compilation;
         public readonly BuiltinCollection Builtins;
@@ -94,8 +96,11 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 
 """);
 
+            GenerateWriteStringToStream(sb);
+            GenerateWriteEncodedStringToStream(sb);
             GenerateAppendXmlHeadMethod(sb);
             GenerateCutXmlHeadMethod(sb);
+
             GenerateDeserializeMethods(sb);
 
             sb.AppendLine($$"""
@@ -106,7 +111,34 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             return sb.ToString();
         }
 
-        
+        private void GenerateWriteStringToStream(StringBuilder sb)
+        {
+            sb.AppendLine($$"""
+        public static void {{WriteStringToStreamMethodName}}(global::System.IO.Stream stream, string inputString)
+        {
+            var byteCount = global::System.Text.Encoding.UTF8.GetByteCount(inputString);
+            var buffer = byteCount < 256 ? stackalloc byte[byteCount] : new byte[byteCount];
+            global::System.Text.Encoding.UTF8.GetBytes(inputString.AsSpan(), buffer);
+            stream.Write(buffer);
+        }
+
+""");
+        }
+
+        private void GenerateWriteEncodedStringToStream(StringBuilder sb)
+        {
+            sb.AppendLine($$"""
+        public static void {{WriteEncodedStringToStreamMethodName}}(global::System.IO.Stream stream, string inputString)
+        {
+            var encodedString = global::System.Net.WebUtility.HtmlEncode(inputString);
+            var byteCount = global::System.Text.Encoding.UTF8.GetByteCount(encodedString);
+            var buffer = byteCount < 256 ? stackalloc byte[byteCount] : new byte[byteCount];
+            global::System.Text.Encoding.UTF8.GetBytes(encodedString.AsSpan(), buffer);
+            stream.Write(buffer);
+        }
+
+""");
+        }
 
         private void GenerateAppendXmlHeadMethod(StringBuilder sb)
         {
