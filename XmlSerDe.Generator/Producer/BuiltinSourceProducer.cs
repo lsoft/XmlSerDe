@@ -13,6 +13,7 @@ namespace XmlSerDe.Generator.Producer
     {
         public const string BuiltinCodeParserClassName = "BuiltinCodeParser";
         public const string CutXmlHeadMethodName = "CutXmlHead";
+        public const string AppendXmlHeadMethodName = "AppendXmlHead";
 
         private readonly Compilation _compilation;
         public readonly BuiltinCollection Builtins;
@@ -89,9 +90,11 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 
     public static class {{BuiltinCodeParserClassName}}
     {
+        private static readonly byte[] XmlHeadBytes = global::System.Text.Encoding.UTF8.GetBytes("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
 
 """);
 
+            GenerateAppendXmlHeadMethod(sb);
             GenerateCutXmlHeadMethod(sb);
             GenerateDeserializeMethods(sb);
 
@@ -101,6 +104,19 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 """);
 
             return sb.ToString();
+        }
+
+        
+
+        private void GenerateAppendXmlHeadMethod(StringBuilder sb)
+        {
+            sb.AppendLine($$"""
+        public static void {{AppendXmlHeadMethodName}}(global::System.IO.Stream stream)
+        {
+            stream.Write(XmlHeadBytes, 0, XmlHeadBytes.Length);
+        }
+
+""");
         }
 
         private void GenerateCutXmlHeadMethod(StringBuilder sb)

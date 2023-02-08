@@ -17,7 +17,9 @@ namespace XmlSerDe.Generator.Producer
     public struct DeserializeSourceProducer
     {
         public const string HeadDeserializeMethodName = "Deserialize";
+        public const string HeadSerializeMethodName = "Serialize";
         public const string HeadlessDeserializeMethodName = "DeserializeBody";
+        public const string HeadlessSerializeMethodName = "SerializeBody";
 
         private readonly Compilation _compilation;
         private readonly INamedTypeSymbol _deSubject;
@@ -26,7 +28,6 @@ namespace XmlSerDe.Generator.Producer
         private readonly SerializationSubjectInfoCollection _ssic;
 
         private StringBuilder _sb;
-        private Random _rnd;
 
         public DeserializeSourceProducer(
             Compilation compilation,
@@ -48,9 +49,7 @@ namespace XmlSerDe.Generator.Producer
             _deSubjectGlobalType = _deSubject.ToGlobalDisplayString();
             _deSubjectReflectionFormat1 = _deSubject.ToReflectionFormat(false);
 
-            _sb = null!; //просто заткнуть проверку, 2 строками ниже оно инициализируется
-            _rnd = null!; //просто заткнуть проверку, строкой ниже оно инициализируется
-            Prepare();
+            _sb = new StringBuilder();
 
             _ssic = CreateSubjects(_deSubject);
         }
@@ -58,9 +57,11 @@ namespace XmlSerDe.Generator.Producer
         /// <summary>
         /// Генерация десериализатора
         /// </summary>
-        public string GenerateDeserializer(
+        public string GenerateClass(
             )
         {
+            _sb.Clear();
+
             GenerateUsings();
             _sb.AppendLine("using roschar = System.ReadOnlySpan<char>;");
 
@@ -78,12 +79,8 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
 """);
 
-            foreach (var ssi in _ssic.Infos)
-            {
-                GenerateMethod(
-                    ssi
-                    );
-            }
+            GenerateSerializeMethods();
+            GenerateDeserializeMethods();
 
             _sb.AppendLine($$"""
     }
@@ -91,6 +88,590 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
 
             return _sb.ToString();
+        }
+
+
+        #region serialize
+
+        private readonly void GenerateSerializeMethods()
+        {
+            _sb.AppendLine($$"""
+#region serialize
+
+""");
+            foreach (var ssi in _ssic.Infos)
+            {
+                GenerateSerializeMethod(
+                    ssi
+                    );
+            }
+
+            _sb.AppendLine($$"""
+
+#endregion
+""");
+        }
+
+        private readonly void GenerateSerializeMethod(
+            SerializationSubjectInfo ssi
+            )
+        {
+            var subject = ssi.Subject;
+
+            if (ssi.IsRoot)
+            {
+                GenerateRootSerializeMethod(subject);
+            }
+
+            GenerateSerializeMethod(subject, ssi.Derived, true);
+            //GenerateSerializeMethod(subject, ssi.Derived, false);
+        }
+
+        private readonly void GenerateRootSerializeMethod(
+            INamedTypeSymbol subject
+            )
+        {
+            var ssGlobalName = subject.ToGlobalDisplayString();
+
+            _sb.AppendLine($$"""
+        public static void {{HeadSerializeMethodName}}(global::System.IO.Stream stream, {{ssGlobalName}} obj, bool appendXmlHead)
+        {
+            if(appendXmlHead)
+            {
+                global::{{typeof(BuiltinSourceProducer).Namespace}}.{{BuiltinSourceProducer.BuiltinCodeParserClassName}}.{{BuiltinSourceProducer.AppendXmlHeadMethodName}}(stream);
+            }
+
+            {{HeadSerializeMethodName}}(stream, obj);
+        }
+
+""");
+        }
+
+        private readonly void GenerateSerializeMethod(
+            INamedTypeSymbol subject,
+            List<INamedTypeSymbol> derived,
+            bool withHeadMethod
+            )
+        {
+            var methodName = withHeadMethod ? HeadSerializeMethodName : HeadlessSerializeMethodName;
+
+            var ssGlobalName = subject.ToGlobalDisplayString();
+
+            _sb.AppendLine($$"""
+        private static void {{methodName}}(global::System.IO.Stream stream, {{ssGlobalName}} obj)
+        {
+""");
+
+
+            _sb.AppendLine($$"""
+        }
+
+""");
+        }
+
+
+        #endregion
+
+        #region deserialize
+
+        private readonly void GenerateDeserializeMethods()
+        {
+            _sb.AppendLine($$"""
+#region deserialize
+
+""");
+            foreach (var ssi in _ssic.Infos)
+            {
+                GenerateDeserializeMethod(
+                    ssi
+                    );
+            }
+
+            _sb.AppendLine($$"""
+
+#endregion
+""");
+        }
+
+        private readonly void GenerateDeserializeMethod(
+            SerializationSubjectInfo ssi
+            )
+        {
+            var subject = ssi.Subject;
+
+            GenerateDeserializeMethod(subject, ssi.Derived, ssi.FactoryInvocation, ssi.ParserInvocation, true);
+            GenerateDeserializeMethod(subject, ssi.Derived, ssi.FactoryInvocation, ssi.ParserInvocation, false);
+
+            if(ssi.IsRoot)
+            {
+                GenerateRootDeserializeMethod(subject);
+            }
+        }
+
+        private readonly void GenerateRootDeserializeMethod(
+            INamedTypeSymbol subject
+            )
+        {
+            var ssGlobalName = subject.ToGlobalDisplayString();
+
+            _sb.AppendLine($$"""
+        public static void {{HeadDeserializeMethodName}}(roschar xmlFullNode, out {{ssGlobalName}} result)
+        {
+            {{HeadDeserializeMethodName}}(xmlFullNode, roschar.Empty, out result);
+        }
+""");
+        }
+
+        private readonly void GenerateDeserializeMethod(
+            INamedTypeSymbol subject,
+            List<INamedTypeSymbol> derived,
+            string? factoryInvocation,
+            string? parserInvocation,
+            bool withHeadMethod
+            )
+        {
+            var roscharVarName = withHeadMethod ? "fullNode" : "internals";
+            var methodName = withHeadMethod ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
+
+            var ssGlobalName = subject.ToGlobalDisplayString();
+
+            _sb.AppendLine($$"""
+        private static void {{methodName}}(roschar {{roscharVarName}}, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
+        {
+""");
+
+            if (withHeadMethod)
+            {
+                _sb.AppendLine($$"""
+            var xmlNode = new {{typeof(XmlNode2).FullName}}({{roscharVarName}}, xmlnsAttributeName);
+            var xmlNodePreciseType = xmlNode.{{nameof(XmlNode2.GetPreciseNodeType)}}();
+            if(xmlNodePreciseType.IsEmpty)
+            {
+                xmlNodePreciseType = xmlNode.{{nameof(XmlNode2.DeclaredNodeType)}};
+            }
+
+            if(!xmlNodePreciseType.SequenceEqual(nameof({{ssGlobalName}}).AsSpan()))
+            {
+""");
+
+                GenerateDeserializeDispatch(derived);
+
+                _sb.AppendLine($$"""
+
+                throw new InvalidOperationException("(1) Unknown type " + xmlNodePreciseType.ToString());
+            }
+
+""");
+            }
+
+            if (subject.IsAbstract)
+            {
+                _sb.AppendLine($$"""
+            throw new InvalidOperationException("Cannot instanciate abstract class {{ssGlobalName}}");
+""");
+            }
+            else
+            {
+                if (withHeadMethod)
+                {
+                    _sb.AppendLine($$"""
+            var internals = xmlNode.{{nameof(XmlNode2.Internals)}};
+""");
+                }
+
+                if (!string.IsNullOrEmpty(factoryInvocation))
+                {
+                    _sb.AppendLine($$"""
+            result = {{factoryInvocation}};
+""");
+                }
+                else
+                {
+                    _sb.AppendLine($$"""
+            result = new {{ssGlobalName}}();
+""");
+                }
+
+                var members = GetMembersOrderByInheritance(subject);
+                if (members.Count > 0)
+                {
+                    GenerateDeserializeMembers(
+                        members,
+                        withHeadMethod,
+                        parserInvocation
+                        );
+                }
+            }
+
+            _sb.AppendLine($$"""
+        }
+""");
+        }
+
+
+        private readonly void GenerateDeserializeDispatch(
+            List<INamedTypeSymbol> derived
+            )
+        {
+            _sb.AppendLine($$"""
+                var xmlNodeInternals = xmlNode.{{nameof(XmlNode2.Internals)}};
+""");
+
+            foreach (var d in derived)
+            {
+                var classAndMethodName = DetermineClassName(d) + "." + HeadlessDeserializeMethodName;
+
+                _sb.AppendLine($$"""
+                //{{nameof(GenerateDeserializeDispatch)}}
+                if (xmlNodePreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
+                {
+                    {{classAndMethodName}}(xmlNodeInternals, xmlNode.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult);
+                    result = iresult;
+                    return;
+                }
+""");
+            }
+        }
+
+
+        private readonly void GenerateDeserializeDispatch2(
+            List<INamedTypeSymbol> derived,
+            string memberName
+            )
+        {
+            foreach (var d in derived)
+            {
+                var classAndMethodName = DetermineClassName(d) + "." + HeadlessDeserializeMethodName;
+
+                _sb.AppendLine($$"""
+                        //{{nameof(GenerateDeserializeDispatch2)}}
+                        if (childPreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
+                        {
+                            {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult);
+                            result.{{memberName}} = iresult;
+                        }
+""");
+            }
+        }
+
+
+        private readonly void GenerateDeserializeMembers(
+            List<ISymbol> members,
+            bool withHeadMethod,
+            string? parserInvocation
+            )
+        {
+            var xmlnsAttributeNameVarName = withHeadMethod
+                ? $"xmlNode.{nameof(XmlNode2.XmlnsAttributeName)}"
+                : $"xmlnsAttributeName";
+
+            _sb.AppendLine($$"""
+            if(!internals.IsEmpty)
+            {
+
+""");
+            foreach (var member in EnumerateMembers(members))
+            {
+                _sb.AppendLine($$"""
+                var {{member.Name}}Span = "{{member.Name}}".AsSpan();
+""");
+                
+            }
+
+            _sb.AppendLine($$"""
+                {{typeof(XmlNode2).FullName}} child = new();
+                while(true)
+                {
+                    {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(internals, {{xmlnsAttributeNameVarName}} /*1*/, ref child);
+                    if(child.IsEmpty)
+                    {
+                        break;
+                    }
+                    var childDeclaredNodeType = child.{{nameof(XmlNode2.DeclaredNodeType)}};
+
+""");
+
+            var memberIndex = 0;
+            foreach (var member in EnumerateMembers(members))
+            {
+                var memberType = ParseMember(member);
+
+                GenerateDeserializeMember(memberIndex, member, memberType, parserInvocation);
+                memberIndex++;
+            }
+
+            _sb.AppendLine($$"""
+
+                    internals = internals.Slice(child.FullNode.Length);
+                    if(internals.IsEmpty)
+                    {
+                        break;
+                    }
+                }
+            }
+""");
+        }
+
+        private readonly IEnumerable<ISymbol> EnumerateMembers(
+            List<ISymbol> members
+            )
+        {
+            foreach (var member in members)
+            {
+                if (member.DeclaredAccessibility.In(Accessibility.Private, Accessibility.Protected)) //TODO: what about other Accessibilities?
+                {
+                    continue;
+                }
+                if (member is IPropertySymbol property)
+                {
+                    if (property.SetMethod == null)
+                    {
+                        continue;
+                    }
+
+                    var propertyAttributes = property.GetAttributes();
+                    var ignoreAttribute = propertyAttributes.FirstOrDefault(a => a.AttributeClass != null && a.AttributeClass.ToFullDisplayString() == typeof(XmlIgnoreAttribute).FullName);
+                    if (ignoreAttribute != null)
+                    {
+                        continue;
+                    }
+                }
+
+                yield return member;
+            }
+        }
+
+        private readonly void GenerateDeserializeMember(
+            int index,
+            ISymbol member,
+            INamedTypeSymbol memberType,
+            string? parserInvocation
+            )
+        {
+            var elseif = index > 0 ? "else " : "";
+
+            if(string.IsNullOrEmpty(parserInvocation) && BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType, out var builtin))
+            {
+                var finalClause = string.Format(
+                    builtin.ConverterClause,
+                    $"child.{nameof(XmlNode2.Internals)}"
+                    );
+
+                _sb.AppendLine($$"""
+                    //{{memberType.ToFullDisplayString()}}
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
+                    {
+                        result.{{member.Name}} = {{finalClause}};
+                    }
+""");
+            }
+            else if (memberType.EnumUnderlyingType != null)
+            {
+                if (string.IsNullOrEmpty(parserInvocation))
+                {
+                    _sb.AppendLine($$"""
+                    //Enum
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
+                    {
+                        var child2 = child.{{nameof(XmlNode2.Internals)}};
+                        result.{{member.Name}} = ({{memberType.ToGlobalDisplayString()}})Enum.Parse(typeof({{memberType.ToGlobalDisplayString()}}), child2);
+                    }
+""");
+                }
+                else
+                {
+                    var fullParserInvocation = string.Format(
+                        parserInvocation,
+                        "child2"
+                        );
+
+                    _sb.AppendLine($$"""
+                    //Enum
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
+                    {
+                        var child2 = child.{{nameof(XmlNode2.Internals)}};
+                        result.{{member.Name}} = {{fullParserInvocation}};
+                    }
+""");
+                }
+            }
+            //TODO array and other collections
+            else if (
+                memberType.TypeArguments.Length > 0
+                && (SymbolEqualityComparer.Default.Equals(memberType, _compilation.List(memberType.TypeArguments[0])))
+                )
+            {
+                var listItemType = (INamedTypeSymbol)memberType.TypeArguments[0];
+                var classAndMethodName = DetermineClassName(listItemType) + "." + HeadDeserializeMethodName;
+
+                _sb.AppendLine($$"""
+                    //List<T>
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
+                    {
+                        if(result.{{member.Name}} == default)
+                        {
+                            result.{{member.Name}} = new {{memberType.ToGlobalDisplayString()}}();
+                        }
+
+                        var childInternals = child.{{nameof(XmlNode2.Internals)}};
+                        {{typeof(XmlNode2).FullName}} child2 = new();
+                        while(true)
+                        {
+                            {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(childInternals, child.XmlnsAttributeName, ref child2);
+                            if(child2.{{nameof(XmlNode2.IsEmpty)}})
+                            {
+                                break;
+                            }
+
+                            {{classAndMethodName}}(child2.{{nameof(XmlNode2.FullNode)}}, child2.XmlnsAttributeName, out {{listItemType.ToGlobalDisplayString()}} iresult);
+                            result.{{member.Name}}.Add(iresult);
+
+                            childInternals = childInternals.Slice(
+                                child2.{{nameof(XmlNode2.FullNode)}}.Length
+                                );
+                            if(childInternals.IsEmpty)
+                            {
+                                break;
+                            }
+                        }
+                    }
+""");
+            }
+            else
+            {
+                //здесь, вероятно, какой-то другой тип
+
+                if (!_ssic.TryGetSubject(memberType, out var subject))
+                {
+                    throw new InvalidOperationException($"(2) Unknown type {memberType.ToGlobalDisplayString()}");
+                }
+
+                if (memberType.IsAbstract || subject.Derived.Count > 0)
+                {
+                    //тут могут быть вариации
+                    //генерируем метод с проверками наследников
+
+                    var classAndMethodName = DetermineClassName(memberType) + "." + HeadlessDeserializeMethodName;
+
+                    _sb.AppendLine($$"""
+                    //custom type
+                    var childPreciseType = child.{{nameof(XmlNode2.GetPreciseNodeType)}}();
+                    {{elseif}}if(!childPreciseType.IsEmpty)
+                    {
+                        var childInternals = child.{{nameof(XmlNode2.Internals)}};
+
+""");
+
+
+                    GenerateDeserializeDispatch2(subject.Derived, member.Name);
+
+                    _sb.AppendLine($$"""
+                    }
+                    else
+                    {
+                        if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
+                        {
+                            var childInternals = child.{{nameof(XmlNode2.Internals)}};
+                            {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{memberType.ToGlobalDisplayString()}} iresult);
+                            result.{{member.Name}} = iresult;
+                        }
+                    }
+""");
+                }
+                else
+                {
+                    //здесь всё четко, нет никаких вариаций типов и соотв. не должно быть типа в дочерней ноде
+
+                    var withHeadBody = memberType.IsAbstract;
+                    var methodName = withHeadBody ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
+                    var classAndMethodName = DetermineClassName(memberType) + "." + methodName;
+
+                    _sb.AppendLine($$"""
+                    //custom type
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
+                    {
+                        var childInternals = child.{{nameof(XmlNode2.Internals)}};
+                        {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{memberType.ToGlobalDisplayString()}} iresult);
+                        result.{{member.Name}} = iresult;
+                    }
+""");
+
+                }
+
+            }
+        }
+
+        #endregion
+
+        private readonly string DetermineClassName(INamedTypeSymbol listItemType)
+        {
+            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out _))
+            {
+                return typeof(BuiltinSourceProducer).Namespace + "." + BuiltinSourceProducer.BuiltinCodeParserClassName;
+            }
+            else
+            {
+                return _deSubject.ToGlobalDisplayString();
+            }
+        }
+
+        private readonly void GenerateUsings()
+        {
+            var foundUsings = new List<UsingDirectiveSyntax>();
+
+            GrabUsings(_deSubject, ref foundUsings);
+
+            var set = new HashSet<string>(
+                foundUsings.ConvertAll(u => u.WithoutTrivia().ToFullString())
+                );
+
+            foreach(var unit in set)
+            {
+                _sb.AppendLine(unit);
+            }
+        }
+
+        private static void GrabUsings(
+            INamedTypeSymbol symbol,
+            ref List<UsingDirectiveSyntax> foundUsings
+            )
+        {
+            foreach (var dsr in symbol.DeclaringSyntaxReferences)
+            {
+                var syntax = dsr.GetSyntax();
+
+                var cus = syntax.Up<CompilationUnitSyntax>();
+                if (cus == null)
+                {
+                    continue;
+                }
+
+                var fu = cus
+                    .DescendantNodes()
+                    .OfType<UsingDirectiveSyntax>()
+                    .ToList();
+
+                foundUsings.AddRange(fu);
+            }
+        }
+
+        private static INamedTypeSymbol ParseMember(ISymbol member)
+        {
+            INamedTypeSymbol memberType;
+            if (member is IPropertySymbol property1)
+            {
+                memberType = (INamedTypeSymbol)property1.Type;
+            }
+            else if (member is IFieldSymbol field1)
+            {
+                memberType = (INamedTypeSymbol)field1.Type;
+            }
+            else
+            {
+                throw new NotImplementedException($"Unknown member type: {member.GetType().Name}");
+            }
+
+            return memberType;
         }
 
         private static SerializationSubjectInfoCollection CreateSubjects(
@@ -221,486 +802,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 );
         }
 
-        private void GenerateMethod(
-            SerializationSubjectInfo ssi
-            )
-        {
-            var subject = ssi.Subject;
-
-            GenerateMethod(subject, ssi.Derived, ssi.FactoryInvocation, ssi.ParserInvocation, true);
-            GenerateMethod(subject, ssi.Derived, ssi.FactoryInvocation, ssi.ParserInvocation, false);
-
-            if(ssi.IsRoot)
-            {
-                GenerateRootMethod(subject);
-            }
-        }
-
-
-        private void GenerateRootMethod(
-            INamedTypeSymbol subject
-            )
-        {
-            var ssGlobalName = subject.ToGlobalDisplayString();
-
-            _sb.AppendLine($$"""
-        public static void {{HeadDeserializeMethodName}}(roschar xmlFullNode, out {{ssGlobalName}} result)
-        {
-            {{HeadDeserializeMethodName}}(xmlFullNode, roschar.Empty, out result);
-        }
-""");
-        }
-
-        private void GenerateMethod(
-            INamedTypeSymbol subject,
-            List<INamedTypeSymbol> derived,
-            string? factoryInvocation,
-            string? parserInvocation,
-            bool withHeadMethod
-            )
-        {
-            var roscharVarName = withHeadMethod ? "fullNode" : "internals";
-            var methodName = withHeadMethod ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
-
-            var ssGlobalName = subject.ToGlobalDisplayString();
-
-            _sb.AppendLine($$"""
-        private static void {{methodName}}(roschar {{roscharVarName}}, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
-        {
-""");
-
-            if (withHeadMethod)
-            {
-                _sb.AppendLine($$"""
-            var xmlNode = new {{typeof(XmlNode2).FullName}}({{roscharVarName}}, xmlnsAttributeName);
-            var xmlNodePreciseType = xmlNode.{{nameof(XmlNode2.GetPreciseNodeType)}}();
-            if(xmlNodePreciseType.IsEmpty)
-            {
-                xmlNodePreciseType = xmlNode.{{nameof(XmlNode2.DeclaredNodeType)}};
-            }
-
-            if(!xmlNodePreciseType.SequenceEqual(nameof({{ssGlobalName}}).AsSpan()))
-            {
-""");
-
-                GenerateDispatch(derived);
-
-                _sb.AppendLine($$"""
-
-                throw new InvalidOperationException("(1) Unknown type " + xmlNodePreciseType.ToString());
-            }
-
-""");
-            }
-
-            if (subject.IsAbstract)
-            {
-                _sb.AppendLine($$"""
-            throw new InvalidOperationException("Cannot instanciate abstract class {{ssGlobalName}}");
-""");
-            }
-            else
-            {
-                if (withHeadMethod)
-                {
-                    _sb.AppendLine($$"""
-            var internals = xmlNode.{{nameof(XmlNode2.Internals)}};
-""");
-                }
-
-                if (!string.IsNullOrEmpty(factoryInvocation))
-                {
-                    _sb.AppendLine($$"""
-            result = {{factoryInvocation}};
-""");
-                }
-                else
-                {
-                    _sb.AppendLine($$"""
-            result = new {{ssGlobalName}}();
-""");
-                }
-
-                var members = GetMembersOrderByInheritance(subject);
-                if (members.Count > 0)
-                {
-                    GenerateMembers(
-                        members,
-                        withHeadMethod,
-                        parserInvocation
-                        );
-                }
-            }
-
-            _sb.AppendLine($$"""
-        }
-""");
-        }
-
-
-        private readonly void GenerateDispatch(
-            List<INamedTypeSymbol> derived
-            )
-        {
-            _sb.AppendLine($$"""
-                var xmlNodeInternals = xmlNode.{{nameof(XmlNode2.Internals)}};
-""");
-
-            foreach (var d in derived)
-            {
-                var classAndMethodName = DetermineClassName(d) + "." + HeadlessDeserializeMethodName;
-
-                _sb.AppendLine($$"""
-                //{{nameof(GenerateDispatch)}}
-                if (xmlNodePreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
-                {
-                    {{classAndMethodName}}(xmlNodeInternals, xmlNode.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult);
-                    result = iresult;
-                    return;
-                }
-""");
-            }
-        }
-
-
-        private readonly void GenerateDispatch2(
-            List<INamedTypeSymbol> derived,
-            string memberName
-            )
-        {
-            foreach (var d in derived)
-            {
-                var classAndMethodName = DetermineClassName(d) + "." + HeadlessDeserializeMethodName;
-
-                _sb.AppendLine($$"""
-                        //{{nameof(GenerateDispatch2)}}
-                        if (childPreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
-                        {
-                            {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult);
-                            result.{{memberName}} = iresult;
-                        }
-""");
-            }
-        }
-
-
-        private void GenerateMembers(
-            List<ISymbol> members,
-            bool withHeadMethod,
-            string? parserInvocation
-            )
-        {
-            var xmlnsAttributeNameVarName = withHeadMethod
-                ? $"xmlNode.{nameof(XmlNode2.XmlnsAttributeName)}"
-                : $"xmlnsAttributeName";
-
-            _sb.AppendLine($$"""
-            if(!internals.IsEmpty)
-            {
-
-""");
-            foreach (var member in EnumerateMembers(members))
-            {
-                _sb.AppendLine($$"""
-                var {{member.Name}}Span = "{{member.Name}}".AsSpan();
-""");
-                
-            }
-
-            _sb.AppendLine($$"""
-                {{typeof(XmlNode2).FullName}} child = new();
-                while(true)
-                {
-                    {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(internals, {{xmlnsAttributeNameVarName}} /*1*/, ref child);
-                    if(child.IsEmpty)
-                    {
-                        break;
-                    }
-                    var childDeclaredNodeType = child.{{nameof(XmlNode2.DeclaredNodeType)}};
-
-""");
-
-            var memberIndex = 0;
-            foreach (var member in EnumerateMembers(members))
-            {
-                var memberType = ParseMember(member);
-
-                GenerateMember(memberIndex, member, memberType, parserInvocation);
-                memberIndex++;
-            }
-
-            _sb.AppendLine($$"""
-
-                    internals = internals.Slice(child.FullNode.Length);
-                    if(internals.IsEmpty)
-                    {
-                        break;
-                    }
-                }
-            }
-""");
-        }
-
-        private readonly IEnumerable<ISymbol> EnumerateMembers(
-            List<ISymbol> members
-            )
-        {
-            foreach (var member in members)
-            {
-                if (member.DeclaredAccessibility.In(Accessibility.Private, Accessibility.Protected)) //TODO: what about other Accessibilities?
-                {
-                    continue;
-                }
-                if (member is IPropertySymbol property)
-                {
-                    if (property.SetMethod == null)
-                    {
-                        continue;
-                    }
-
-                    var propertyAttributes = property.GetAttributes();
-                    var ignoreAttribute = propertyAttributes.FirstOrDefault(a => a.AttributeClass != null && a.AttributeClass.ToFullDisplayString() == typeof(XmlIgnoreAttribute).FullName);
-                    if (ignoreAttribute != null)
-                    {
-                        continue;
-                    }
-                }
-
-                yield return member;
-            }
-        }
-
-        private static INamedTypeSymbol ParseMember(ISymbol member)
-        {
-            INamedTypeSymbol memberType;
-            if (member is IPropertySymbol property1)
-            {
-                memberType = (INamedTypeSymbol)property1.Type;
-            }
-            else if (member is IFieldSymbol field1)
-            {
-                memberType = (INamedTypeSymbol)field1.Type;
-            }
-            else
-            {
-                throw new NotImplementedException($"Unknown member type: {member.GetType().Name}");
-            }
-
-            return memberType;
-        }
-
-        private readonly void GenerateMember(
-            int index,
-            ISymbol member,
-            INamedTypeSymbol memberType,
-            string? parserInvocation
-            )
-        {
-            var elseif = index > 0 ? "else " : "";
-
-            if(string.IsNullOrEmpty(parserInvocation) && BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType, out var builtin))
-            {
-                var finalClause = string.Format(
-                    builtin.ConverterClause,
-                    $"child.{nameof(XmlNode2.Internals)}"
-                    );
-
-                _sb.AppendLine($$"""
-                    //{{memberType.ToFullDisplayString()}}
-                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
-                    {
-                        result.{{member.Name}} = {{finalClause}};
-                    }
-""");
-            }
-            else if (memberType.EnumUnderlyingType != null)
-            {
-                if (string.IsNullOrEmpty(parserInvocation))
-                {
-                    _sb.AppendLine($$"""
-                    //Enum
-                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
-                    {
-                        var child2 = child.{{nameof(XmlNode2.Internals)}};
-                        result.{{member.Name}} = ({{memberType.ToGlobalDisplayString()}})Enum.Parse(typeof({{memberType.ToGlobalDisplayString()}}), child2);
-                    }
-""");
-                }
-                else
-                {
-                    var fullParserInvocation = string.Format(
-                        parserInvocation,
-                        "child2"
-                        );
-
-                    _sb.AppendLine($$"""
-                    //Enum
-                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
-                    {
-                        var child2 = child.{{nameof(XmlNode2.Internals)}};
-                        result.{{member.Name}} = {{fullParserInvocation}};
-                    }
-""");
-                }
-            }
-            //TODO array and other collections
-            else if (
-                memberType.TypeArguments.Length > 0
-                && (SymbolEqualityComparer.Default.Equals(memberType, _compilation.List(memberType.TypeArguments[0])))
-                )
-            {
-                var listItemType = (INamedTypeSymbol)memberType.TypeArguments[0];
-                var classAndMethodName = DetermineClassName(listItemType) + "." + HeadDeserializeMethodName;
-
-                _sb.AppendLine($$"""
-                    //List<T>
-                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
-                    {
-                        if(result.{{member.Name}} == default)
-                        {
-                            result.{{member.Name}} = new {{memberType.ToGlobalDisplayString()}}();
-                        }
-
-                        var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                        {{typeof(XmlNode2).FullName}} child2 = new();
-                        while(true)
-                        {
-                            {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(childInternals, child.XmlnsAttributeName, ref child2);
-                            if(child2.{{nameof(XmlNode2.IsEmpty)}})
-                            {
-                                break;
-                            }
-
-                            {{classAndMethodName}}(child2.{{nameof(XmlNode2.FullNode)}}, child2.XmlnsAttributeName, out {{listItemType.ToGlobalDisplayString()}} iresult);
-                            result.{{member.Name}}.Add(iresult);
-
-                            childInternals = childInternals.Slice(
-                                child2.{{nameof(XmlNode2.FullNode)}}.Length
-                                );
-                            if(childInternals.IsEmpty)
-                            {
-                                break;
-                            }
-                        }
-                    }
-""");
-            }
-            else
-            {
-                //здесь, вероятно, какой-то другой тип
-
-                if (!_ssic.TryGetSubject(memberType, out var subject))
-                {
-                    throw new InvalidOperationException($"(2) Unknown type {memberType.ToGlobalDisplayString()}");
-                }
-
-                if (memberType.IsAbstract || subject.Derived.Count > 0)
-                {
-                    //тут могут быть вариации
-                    //генерируем метод с проверками наследников
-
-                    var classAndMethodName = DetermineClassName(memberType) + "." + HeadlessDeserializeMethodName;
-
-                    _sb.AppendLine($$"""
-                    //custom type
-                    var childPreciseType = child.{{nameof(XmlNode2.GetPreciseNodeType)}}();
-                    {{elseif}}if(!childPreciseType.IsEmpty)
-                    {
-                        var childInternals = child.{{nameof(XmlNode2.Internals)}};
-
-""");
-
-
-                    GenerateDispatch2(subject.Derived, member.Name);
-
-                    _sb.AppendLine($$"""
-                    }
-                    else
-                    {
-                        if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
-                        {
-                            var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                            {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{memberType.ToGlobalDisplayString()}} iresult);
-                            result.{{member.Name}} = iresult;
-                        }
-                    }
-""");
-                }
-                else
-                {
-                    //здесь всё четко, нет никаких вариаций типов и соотв. не должно быть типа в дочерней ноде
-
-                    var withHeadBody = memberType.IsAbstract;
-                    var methodName = withHeadBody ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
-                    var classAndMethodName = DetermineClassName(memberType) + "." + methodName;
-
-                    _sb.AppendLine($$"""
-                    //custom type
-                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
-                    {
-                        var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                        {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{memberType.ToGlobalDisplayString()}} iresult);
-                        result.{{member.Name}} = iresult;
-                    }
-""");
-
-                }
-
-            }
-        }
-
-        private readonly string DetermineClassName(INamedTypeSymbol listItemType)
-        {
-            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out _))
-            {
-                return typeof(BuiltinSourceProducer).Namespace + "." + BuiltinSourceProducer.BuiltinCodeParserClassName;
-            }
-            else
-            {
-                return _deSubject.ToGlobalDisplayString();
-            }
-        }
-
-        private readonly void GenerateUsings()
-        {
-            var foundUsings = new List<UsingDirectiveSyntax>();
-
-            GrabUsings(_deSubject, ref foundUsings);
-
-            var set = new HashSet<string>(
-                foundUsings.ConvertAll(u => u.WithoutTrivia().ToFullString())
-                );
-
-            foreach(var unit in set)
-            {
-                _sb.AppendLine(unit);
-            }
-        }
-
-        private static void GrabUsings(
-            INamedTypeSymbol symbol,
-            ref List<UsingDirectiveSyntax> foundUsings
-            )
-        {
-            foreach (var dsr in symbol.DeclaringSyntaxReferences)
-            {
-                var syntax = dsr.GetSyntax();
-
-                var cus = syntax.Up<CompilationUnitSyntax>();
-                if (cus == null)
-                {
-                    continue;
-                }
-
-                var fu = cus
-                    .DescendantNodes()
-                    .OfType<UsingDirectiveSyntax>()
-                    .ToList();
-
-                foundUsings.AddRange(fu);
-            }
-        }
-
         private static List<ISymbol> GetMembersOrderByInheritance(
             INamedTypeSymbol serializationSubject
             )
@@ -720,18 +821,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
 
             return result;
-        }
-
-
-        private void Prepare()
-        {
-            _sb = new();
-            _rnd = new(123);
-        }
-
-        private string RandomSuffix()
-        {
-            return _rnd.Next(int.MaxValue).ToString();
         }
     }
 }

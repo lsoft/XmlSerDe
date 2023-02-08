@@ -16,14 +16,14 @@ namespace XmlSerDe.Tests
         public const string XmlEncodedString = "my string !@#$%^&amp;*()_+|-=\\&#39;;[]{},./&lt;&gt;?";
 
         [Fact]
-        public void XmlObject1_Test0()
+        public void XmlObject1_Deserialize_Test0()
         {
             XmlSerializerDeserializer1.Deserialize(@"<XmlObject1></XmlObject1>".AsSpan(), out XmlObject1 xo);
             Xunit.Assert.NotNull(xo);
         }
 
         [Fact]
-        public void XmlObject1_Test0_WithHead()
+        public void XmlObject1_Deserialize_Test0_WithHead()
         {
             XmlSerializerDeserializer1.Deserialize(
                 XmlSerDe.Generator.Producer.BuiltinCodeParser.CutXmlHead(
@@ -33,21 +33,21 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject1_Test1()
+        public void XmlObject1_Deserialize_Test1()
         {
             XmlSerializerDeserializer1.Deserialize(@"<XmlObject1/>".AsSpan(), out XmlObject1 xo);
             Xunit.Assert.NotNull(xo);
         }
 
         [Fact]
-        public void XmlObject1_Test2()
+        public void XmlObject1_Deserialize_Test2()
         {
             XmlSerializerDeserializer1.Deserialize(@"<XmlObject1     />".AsSpan(), out XmlObject1 xo);
             Xunit.Assert.NotNull(xo);
         }
 
         [Fact]
-        public void XmlObject1_Test3()
+        public void XmlObject1_Deserialize_Test3()
         {
             XmlSerializerDeserializer1.Deserialize(
                 @"<object xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""XmlObject1""></object>".AsSpan(),
@@ -60,7 +60,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject2_Test0()
+        public void XmlObject2_Deserialize_Test0()
         {
             XmlSerializerDeserializer2.Deserialize(
                 @"<XmlObject2></XmlObject2>".AsSpan(),
@@ -72,7 +72,7 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject2_Test1()
+        public void XmlObject2_Deserialize_Test1()
         {
             XmlSerializerDeserializer2.Deserialize(
                 (@"<XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan(),
@@ -84,7 +84,7 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject2_Test1_WithHead()
+        public void XmlObject2_Deserialize_Test1_WithHead()
         {
             XmlSerializerDeserializer2.Deserialize(
                 XmlSerDe.Generator.Producer.BuiltinCodeParser.CutXmlHead(
@@ -98,7 +98,7 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject2_Test2()
+        public void XmlObject2_Deserialize_Test2()
         {
             XmlSerializerDeserializer2.Deserialize(
                 (@"<XmlObject2><IntProperty>123</IntProperty><StringProperty>" + XmlEncodedString + @"</StringProperty></XmlObject2>").AsSpan(),
@@ -110,7 +110,7 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject2_Test3()
+        public void XmlObject2_Deserialize_Test3()
         {
             XmlSerializerDeserializer2.Deserialize(
                 (@"<object xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""XmlObject2""><IntProperty>123</IntProperty><StringProperty>" + XmlEncodedString + @"</StringProperty></object>").AsSpan(),
@@ -122,7 +122,7 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject2_Test4()
+        public void XmlObject2_Deserialize_Test4()
         {
             XmlSerializerDeserializer2.Deserialize(
                 (@"<XmlObject2><IntProperty/><StringProperty/></XmlObject2>").AsSpan(),
@@ -138,7 +138,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject23_Test0()
+        public void XmlObject23_Deserialize_Test0()
         {
             XmlSerializerDeserializer23.Deserialize(
                 (@"<XmlObject3><XmlObjectProperty><IntProperty>123</IntProperty><StringProperty>" + XmlEncodedString + @"</StringProperty></XmlObjectProperty></XmlObject3>").AsSpan(),
@@ -155,7 +155,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject45_Test0()
+        public void XmlObject45_Deserialize_Test0()
         {
             //var ms = new MemoryStream();
             //new XmlSerializer(
@@ -185,7 +185,7 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject45_Test1()
+        public void XmlObject45_Deserialize_Test1()
         {
             //var ms = new MemoryStream();
             //new XmlSerializer(
@@ -218,7 +218,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject6_Test0()
+        public void XmlObject6_Deserialize_Test0()
         {
             //var ms = new MemoryStream();
             //new XmlSerializer(
@@ -249,7 +249,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject78_Test0()
+        public void XmlObject78_Deserialize_Test0()
         {
             XmlSerializerDeserializer78.Deserialize(
                 (@"<XmlObject8 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><XmlObject7Property><StringProperty>a</StringProperty></XmlObject7Property></XmlObject8>").AsSpan(),
@@ -264,7 +264,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject910_Test1()
+        public void XmlObject910_Deserialize_Test1()
         {
             //var ms = new MemoryStream();
             //new XmlSerializer(
@@ -297,7 +297,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject1112_Test0()
+        public void XmlObject1112_Deserialize_Test0()
         {
             //var ms = new MemoryStream();
             //new XmlSerializer(
@@ -345,7 +345,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject13_Test0()
+        public void XmlObject13_Deserialize_Test0()
         {
             XmlSerializerDeserializer13.Deserialize(@"<XmlObject13><IntProperty>123</IntProperty><StringProperty>a</StringProperty></XmlObject13>".AsSpan(), out XmlObject13 xo);
             Xunit.Assert.NotNull(xo);
@@ -356,7 +356,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject14_Test0()
+        public void XmlObject14_Deserialize_Test0()
         {
             //var ms = new MemoryStream();
             //new XmlSerializer(
@@ -377,7 +377,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject14_Test1()
+        public void XmlObject14_Deserialize_Test1()
         {
             var dt = new DateTime(638108474082389138);
             //var ms = new MemoryStream();

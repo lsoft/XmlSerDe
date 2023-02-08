@@ -133,7 +133,7 @@ namespace XmlSerDe.Generator
                         classToGenerate.Symbol
                         );
 
-                    var source = sp.GenerateDeserializer();
+                    var source = sp.GenerateClass();
 
                     result.Add(
                         new GeneratedSource(
