@@ -9,11 +9,15 @@ namespace XmlSerDe.Generator.Producer
         public readonly string ConverterClause;
         public readonly INamedTypeSymbol Symbol;
         public readonly string XmlTypeName;
+        public readonly string ToStringClause;
+        public readonly bool IsNeedToGuardWhenEncoded;
 
         public Builtin(
             string parseInvocation,
             INamedTypeSymbol symbol,
-            string xmlTypeName
+            string xmlTypeName,
+            string toStringClause,
+            bool isNeedToGuardWhenEncoded
             )
         {
             if (parseInvocation is null)
@@ -24,7 +28,10 @@ namespace XmlSerDe.Generator.Producer
             ConverterClause = parseInvocation;
             Symbol = symbol;
             XmlTypeName = xmlTypeName;
+            ToStringClause = toStringClause;
+            IsNeedToGuardWhenEncoded = isNeedToGuardWhenEncoded;
         }
+
     }
 }
 #endif

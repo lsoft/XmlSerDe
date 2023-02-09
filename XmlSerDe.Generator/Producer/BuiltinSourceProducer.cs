@@ -49,30 +49,30 @@ namespace XmlSerDe.Generator.Producer
                 new BuiltinCollection(
                     new List<Builtin>
                     {
-                        new Builtin("global::System.DateTime.Parse({0})", compilation.DateTime(), "dateTime"),
-                        new Builtin("global::System.DateTime.Parse({0})", compilation.NDateTime(), "dateTime"),
+                        new Builtin("global::System.DateTime.Parse({0})", compilation.DateTime(), "dateTime", "{0}.ToString()", false),
+                        new Builtin("global::System.DateTime.Parse({0})", compilation.NDateTime(), "dateTime", "{0}.ToString()", false),
 
-                        new Builtin("global::System.Guid.Parse({0})", compilation.Guid(), "guid"),
-                        new Builtin("global::System.Guid.Parse({0})", compilation.NGuid(), "guid"),
+                        new Builtin("global::System.Guid.Parse({0})", compilation.Guid(), "guid", "{0}.ToString()", false),
+                        new Builtin("global::System.Guid.Parse({0})", compilation.NGuid(), "guid", "{0}.ToString()", false),
 
-                        new Builtin("global::System.Boolean.Parse({0})", compilation.Bool(), "boolean"),
-                        new Builtin("global::System.Net.WebUtility.HtmlDecode({0}.ToString())", compilation.String(), "string"),
+                        new Builtin("global::System.Boolean.Parse({0})", compilation.Bool(), "boolean", @"({0} ? ""True"" : ""False"")", false),
+                        new Builtin("global::System.Net.WebUtility.HtmlDecode({0}.ToString())", compilation.String(), "string", "{0}", true),
 
-                        new Builtin("global::System.SByte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.SByte(), "byte"),
-                        new Builtin("global::System.Byte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Byte(), "unsignedByte"),
+                        new Builtin("global::System.SByte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.SByte(), "byte", "{0}.ToString()", false),
+                        new Builtin("global::System.Byte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Byte(), "unsignedByte", "{0}.ToString()", false),
 
-                        new Builtin("global::System.UInt16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt16(), "unsignedShort"),
-                        new Builtin("global::System.Int16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int16(), "short"),
+                        new Builtin("global::System.UInt16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt16(), "unsignedShort", "{0}.ToString()", false),
+                        new Builtin("global::System.Int16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int16(), "short", "{0}.ToString()", false),
 
-                        new Builtin("global::System.UInt32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt32(), "unsignedInt"),
-                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int32(), "int"),
-                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt32(), "int"),
+                        new Builtin("global::System.UInt32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt32(), "unsignedInt", "{0}.ToString()", false),
+                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int32(), "int", "{0}.ToString()", false),
+                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt32(), "int", "{0}.ToString()", false),
 
-                        new Builtin("global::System.UInt64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt64(), "unsignedLong"),
-                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int64(), "long"),
-                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt64(), "long"),
+                        new Builtin("global::System.UInt64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt64(), "unsignedLong", "{0}.ToString()", false),
+                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int64(), "long", "{0}.ToString()", false),
+                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt64(), "long", "{0}.ToString()", false),
 
-                        new Builtin("global::System.Decimal.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Decimal(), "decimal"),
+                        new Builtin("global::System.Decimal.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Decimal(), "decimal", "{0}.ToString()", false),
                         //TODO other builtin branches
                     }
                 );
@@ -101,6 +101,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             GenerateAppendXmlHeadMethod(sb);
             GenerateCutXmlHeadMethod(sb);
 
+            //GenerateSerializeMethods(sb);
             GenerateDeserializeMethods(sb);
 
             sb.AppendLine($$"""
@@ -114,6 +115,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
         private void GenerateWriteStringToStream(StringBuilder sb)
         {
             sb.AppendLine($$"""
+        //stackalloc here: do not inline this method!
         public static void {{WriteStringToStreamMethodName}}(global::System.IO.Stream stream, string inputString)
         {
             var byteCount = global::System.Text.Encoding.UTF8.GetByteCount(inputString);
@@ -128,6 +130,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
         private void GenerateWriteEncodedStringToStream(StringBuilder sb)
         {
             sb.AppendLine($$"""
+        //stackalloc here: do not inline this method!
         public static void {{WriteEncodedStringToStreamMethodName}}(global::System.IO.Stream stream, string inputString)
         {
             var encodedString = global::System.Net.WebUtility.HtmlEncode(inputString);
@@ -173,11 +176,36 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 """);
         }
 
+//        private void GenerateSerializeMethods(StringBuilder sb)
+//        {
+//            foreach (var builtin in Builtins.Builtins)
+//            {
+//                var toStringClause = string.Format(
+//                    builtin.ToStringClause,
+//                    "obj"
+//                    );
+
+//                var methodName = builtin.IsNeedToGuardWhenEncoded
+//                    ? WriteEncodedStringToStreamMethodName
+//                    : WriteStringToStreamMethodName
+//                    ;
+
+//                sb.AppendLine($$"""
+//        public static void {{ClassSourceProducer.HeadSerializeMethodName}}(global::System.IO.Stream stream, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
+//        {
+//            var writeValue = {{toStringClause}};
+//            {{methodName}}(stream, writeValue);
+//        }
+//""");
+//            }
+
+//        }
+
         private void GenerateDeserializeMethods(StringBuilder sb)
         {
             foreach (var builtin in Builtins.Builtins)
             {
-                var finalClause = string.Format(
+                var parseClause = string.Format(
                     builtin.ConverterClause,
                     $"xmlNode.{nameof(XmlNode2.Internals)}"
                     );
@@ -194,7 +222,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
                 throw new InvalidOperationException("(0) [C# node {{builtin.Symbol.Name}}] Unknown type " + xmlNodeDeclaredType.ToString());
             }
 
-            result = {{finalClause}};
+            result = {{parseClause}};
         }
 """);
             }

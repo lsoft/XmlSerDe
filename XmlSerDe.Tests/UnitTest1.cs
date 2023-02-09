@@ -98,6 +98,26 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
+        public void XmlObject2_Serialize_Test1()
+        {
+            using var ms = new MemoryStream();
+            XmlSerializerDeserializer2.Serialize(
+                ms,
+                new XmlObject2
+                {
+                    IntProperty = 123,
+                    StringProperty = "hello"
+                },
+                false
+                );
+            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            Xunit.Assert.Equal(
+                @"<XmlObject2><StringProperty>hello</StringProperty><IntProperty>123</IntProperty></XmlObject2>",
+                xml
+                );
+        }
+
+        [Fact]
         public void XmlObject2_Deserialize_Test1_WithHead()
         {
             XmlSerializerDeserializer2.Deserialize(
@@ -171,21 +191,6 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject45_Deserialize_Test0()
         {
-            //var ms = new MemoryStream();
-            //new XmlSerializer(
-            //    typeof(XmlObject5), new Type[] { typeof(XmlObject4Abstract), typeof(XmlObject4Specific2), typeof(XmlObject4Specific1) }).Serialize(
-            //        ms,
-            //        new XmlObject5()
-            //        {
-            //            XmlObjectProperty = new XmlObject4Specific1
-            //            {
-            //                StringProperty = "a",
-            //                IntProperty = 123
-            //            }
-            //        }
-            //    );
-            //var q = Encoding.UTF8.GetString(ms.ToArray());
-
             XmlSerializerDeserializer45.Deserialize(
                 (@"<XmlObject5><XmlObjectProperty xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""XmlObject4Specific1""> <StringProperty>MyString</StringProperty><IntProperty>123</IntProperty>   </XmlObjectProperty></XmlObject5>").AsSpan(),
                 out XmlObject5 xo
@@ -201,21 +206,6 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject45_Deserialize_Test1()
         {
-            //var ms = new MemoryStream();
-            //new XmlSerializer(
-            //    typeof(XmlObject5), new Type[] { typeof(XmlObject4Abstract), typeof(XmlObject4Specific2), typeof(XmlObject4Specific1) }).Serialize(
-            //        ms,
-            //        new XmlObject5()
-            //        {
-            //            XmlObjectProperty = new XmlObject4Specific1
-            //            {
-            //                StringProperty = "a",
-            //                IntProperty = 123
-            //            }
-            //        }
-            //    );
-            //var q = Encoding.UTF8.GetString(ms.ToArray());
-
             XmlSerializerDeserializer45.Deserialize(
                 (@"<XmlObject5 xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance""><XmlObjectProperty p3:type=""XmlObject4Specific1""> <StringProperty>MyString</StringProperty><IntProperty>123</IntProperty>   </XmlObjectProperty></XmlObject5>").AsSpan(),
                 out XmlObject5 xo
@@ -260,6 +250,28 @@ namespace XmlSerDe.Tests
             Xunit.Assert.Equal("b", xo.StringsProperty[1]);
         }
 
+        [Fact]
+        public void XmlObject6_Serialize_Test0()
+        {
+            using var ms = new MemoryStream();
+            XmlSerializerDeserializer6.Serialize(
+                ms,
+                new XmlObject6
+                {
+                    StringsProperty = new List<string>
+                    {
+                        "a",
+                        "b"
+                    }
+                },
+                false
+                );
+            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            Xunit.Assert.Equal(
+                @"<XmlObject6><StringsProperty><string>a</string><string>b</string></StringsProperty></XmlObject6>",
+                xml
+                );
+        }
 
 
         [Fact]

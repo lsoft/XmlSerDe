@@ -166,13 +166,19 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
             _sb.AppendLine($$"""
 
-            {{WriteStringToStreamFullMethodName}}(stream, "<");
-            {{WriteStringToStreamFullMethodName}}(stream, "{{subject.Name}}");
-            {{WriteStringToStreamFullMethodName}}(stream, ">");
+            {{WriteStringToStreamFullMethodName}}(stream, "<{{subject.Name}}>");
 
-            {{WriteStringToStreamFullMethodName}}(stream, "</");
-            {{WriteStringToStreamFullMethodName}}(stream, "{{subject.Name}}");
-            {{WriteStringToStreamFullMethodName}}(stream, ">");
+""");
+
+            var members = GetMembersOrderByInheritance(subject);
+            if (members.Count > 0)
+            {
+                GenerateSerializeMembers(methodName, members);
+            }
+
+            _sb.AppendLine($$"""
+
+            {{WriteStringToStreamFullMethodName}}(stream, "</{{subject.Name}}>");
 
 """);
 
@@ -180,6 +186,114 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         }
 
 """);
+        }
+
+        private readonly void GenerateSerializeMembers(
+            string methodName,
+            List<ISymbol> members
+            )
+        {
+            foreach (var member in FilterMembers(members))
+            {
+                GenerateSerializeMember(methodName, member);
+            }
+        }
+
+        private readonly void GenerateSerializeMember(
+            string methodName,
+            ISymbol member
+            )
+        {
+            var memberType = ParseMember(member);
+
+            _sb.AppendLine($$"""
+            //{{memberType.ToFullDisplayString()}} {{member.Name}}
+            {
+                {{WriteStringToStreamFullMethodName}}(stream, "<{{member.Name}}>");
+
+""");
+
+
+            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType, out var builtin))
+            {
+                var toStringClause = string.Format(
+                    builtin.ToStringClause,
+                    "obj." + member.Name
+                    );
+
+                var serializeMethodName = builtin.IsNeedToGuardWhenEncoded
+                    ? WriteEncodedStringToStreamFullMethodName
+                    : WriteStringToStreamFullMethodName
+                    ;
+
+                _sb.AppendLine($$"""
+                {{serializeMethodName}}(
+                    stream,
+                    {{toStringClause}}
+                    );
+""");
+
+
+            }
+            //TODO array and other collections
+            else if (
+                memberType.TypeArguments.Length > 0
+                && (SymbolEqualityComparer.Default.Equals(memberType, _compilation.List(memberType.TypeArguments[0])))
+                )
+            {
+                var listItemType = (INamedTypeSymbol)memberType.TypeArguments[0];
+                //var classAndMethodName = DetermineClassName(listItemType) + "." + HeadDeserializeMethodName;
+
+                if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out var listBuiltin))
+                {
+                    var toStringClause = string.Format(
+                        listBuiltin.ToStringClause,
+                        "obj." + member.Name + "[index]"
+                        );
+
+                    var serializeMethodName = listBuiltin.IsNeedToGuardWhenEncoded
+                        ? WriteEncodedStringToStreamFullMethodName
+                        : WriteStringToStreamFullMethodName
+                        ;
+
+                    _sb.AppendLine($$"""
+
+                for(var index = 0; index < obj.{{member.Name}}.Count; index++)
+                {
+                    {{serializeMethodName}}(
+                        stream,
+                        {{toStringClause}}
+                        );
+                }
+""");
+                }
+                else
+                {
+                    _sb.AppendLine($$"""
+
+                for(var index = 0; index < obj.{{member.Name}}.Count; index++)
+                {
+                    {{methodName}}(stream, obj.{{member.Name}}[index]);
+                }
+""");
+                }
+            }
+            else
+            {
+                _sb.AppendLine($$"""
+                //{{methodName}}(stream, obj.{{member.Name}});
+""");
+            }
+
+
+            _sb.AppendLine($$"""
+                {{WriteStringToStreamFullMethodName}}(stream, "</{{member.Name}}>");
+""");
+
+            _sb.AppendLine($$"""
+            }
+""");
+
         }
 
 
@@ -383,7 +497,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
 
 """);
-            foreach (var member in EnumerateMembers(members))
+            foreach (var member in FilterMembers(members))
             {
                 _sb.AppendLine($$"""
                 var {{member.Name}}Span = "{{member.Name}}".AsSpan();
@@ -405,7 +519,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
 
             var memberIndex = 0;
-            foreach (var member in EnumerateMembers(members))
+            foreach (var member in FilterMembers(members))
             {
                 var memberType = ParseMember(member);
 
@@ -425,35 +539,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
         }
 
-        private readonly IEnumerable<ISymbol> EnumerateMembers(
-            List<ISymbol> members
-            )
-        {
-            foreach (var member in members)
-            {
-                if (member.DeclaredAccessibility.In(Accessibility.Private, Accessibility.Protected)) //TODO: what about other Accessibilities?
-                {
-                    continue;
-                }
-                if (member is IPropertySymbol property)
-                {
-                    if (property.SetMethod == null)
-                    {
-                        continue;
-                    }
-
-                    var propertyAttributes = property.GetAttributes();
-                    var ignoreAttribute = propertyAttributes.FirstOrDefault(a => a.AttributeClass != null && a.AttributeClass.ToFullDisplayString() == typeof(XmlIgnoreAttribute).FullName);
-                    if (ignoreAttribute != null)
-                    {
-                        continue;
-                    }
-                }
-
-                yield return member;
-            }
-        }
-
         private readonly void GenerateDeserializeMember(
             int index,
             ISymbol member,
@@ -471,7 +556,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     );
 
                 _sb.AppendLine($$"""
-                    //{{memberType.ToFullDisplayString()}}
+                    //{{memberType.ToFullDisplayString()}}  {{member.Name}}
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         result.{{member.Name}} = {{finalClause}};
@@ -615,6 +700,43 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         }
 
         #endregion
+
+        private readonly IEnumerable<ISymbol> FilterMembers(
+            List<ISymbol> members
+            )
+        {
+            foreach (var member in members)
+            {
+                if (member.DeclaredAccessibility.In(Accessibility.Private, Accessibility.Protected)) //TODO: what about other Accessibilities?
+                {
+                    continue;
+                }
+                if (member is IPropertySymbol property)
+                {
+                    if (property.SetMethod == null)
+                    {
+                        continue;
+                    }
+
+                    var propertyAttributes = property.GetAttributes();
+                    var ignoreAttribute = propertyAttributes.FirstOrDefault(a => a.AttributeClass != null && a.AttributeClass.ToFullDisplayString() == typeof(XmlIgnoreAttribute).FullName);
+                    if (ignoreAttribute != null)
+                    {
+                        continue;
+                    }
+                }
+                else if (member is IFieldSymbol fieldSymbol)
+                {
+                    //nothing to do
+                }
+                else
+                {
+                    continue;
+                }
+
+                yield return member;
+            }
+        }
 
         private readonly string DetermineClassName(INamedTypeSymbol listItemType)
         {
