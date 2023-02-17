@@ -9,7 +9,7 @@ namespace XmlSerDe.Generator.Producer
     {
         public readonly INamedTypeSymbol Subject;
         public readonly bool IsRoot;
-        public readonly List<INamedTypeSymbol> Derived;
+        public readonly List<INamedTypeSymbol> Deriveds;
         public readonly string? FactoryInvocation;
         public readonly string? ParserInvocation;
 
@@ -26,7 +26,7 @@ namespace XmlSerDe.Generator.Producer
             Subject = subject;
             IsRoot = isRoot;
 
-            Derived = new List<INamedTypeSymbol>();
+            Deriveds = new List<INamedTypeSymbol>();
             FactoryInvocation = null;
             ParserInvocation = null;
         }
@@ -34,14 +34,14 @@ namespace XmlSerDe.Generator.Producer
         private SerializationSubjectInfo(
             INamedTypeSymbol subject,
             bool isRoot,
-            List<INamedTypeSymbol> derived,
+            List<INamedTypeSymbol> deriveds,
             string? factoryInvocation,
             string? parserInvocation
             )
         {
             Subject = subject;
             IsRoot = isRoot;
-            Derived = derived;
+            Deriveds = deriveds;
             FactoryInvocation = factoryInvocation;
             ParserInvocation = parserInvocation;
         }
@@ -53,7 +53,7 @@ namespace XmlSerDe.Generator.Producer
                 throw new ArgumentNullException(nameof(derived));
             }
 
-            Derived.Add(derived);
+            Deriveds.Add(derived);
         }
 
         public SerializationSubjectInfo WithFactoryInvocation(string factoryInvocation)
@@ -61,7 +61,7 @@ namespace XmlSerDe.Generator.Producer
             return new SerializationSubjectInfo(
                 Subject,
                 IsRoot,
-                Derived,
+                Deriveds,
                 factoryInvocation,
                 ParserInvocation
                 );
@@ -72,7 +72,7 @@ namespace XmlSerDe.Generator.Producer
             return new SerializationSubjectInfo(
                 Subject,
                 IsRoot,
-                Derived,
+                Deriveds,
                 FactoryInvocation,
                 parserInvocation
                 );

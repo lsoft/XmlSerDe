@@ -101,7 +101,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             GenerateAppendXmlHeadMethod(sb);
             GenerateCutXmlHeadMethod(sb);
 
-            //GenerateSerializeMethods(sb);
+            GenerateSerializeMethods(sb);
             GenerateDeserializeMethods(sb);
 
             sb.AppendLine($$"""
@@ -176,30 +176,42 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 """);
         }
 
-//        private void GenerateSerializeMethods(StringBuilder sb)
-//        {
-//            foreach (var builtin in Builtins.Builtins)
-//            {
-//                var toStringClause = string.Format(
-//                    builtin.ToStringClause,
-//                    "obj"
-//                    );
+        private void GenerateSerializeMethods(StringBuilder sb)
+        {
+            foreach (var builtin in Builtins.Builtins)
+            {
+                var toStringClause = string.Format(
+                    builtin.ToStringClause,
+                    "obj"
+                    );
 
-//                var methodName = builtin.IsNeedToGuardWhenEncoded
-//                    ? WriteEncodedStringToStreamMethodName
-//                    : WriteStringToStreamMethodName
-//                    ;
+                var methodName = builtin.IsNeedToGuardWhenEncoded
+                    ? WriteEncodedStringToStreamMethodName
+                    : WriteStringToStreamMethodName
+                    ;
 
-//                sb.AppendLine($$"""
-//        public static void {{ClassSourceProducer.HeadSerializeMethodName}}(global::System.IO.Stream stream, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
-//        {
-//            var writeValue = {{toStringClause}};
-//            {{methodName}}(stream, writeValue);
-//        }
-//""");
-//            }
+                sb.AppendLine($$"""
+        public static void {{ClassSourceProducer.HeadSerializeMethodName}}(global::System.IO.Stream stream, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
+        {
+            {{WriteStringToStreamMethodName}}(stream, "<{{builtin.XmlTypeName}}>");
 
-//        }
+            var writeValue = {{toStringClause}};
+            {{methodName}}(stream, writeValue);
+
+            {{WriteStringToStreamMethodName}}(stream, "</{{builtin.XmlTypeName}}>");
+        }
+""");
+
+                sb.AppendLine($$"""
+        public static void {{ClassSourceProducer.HeadlessSerializeMethodName}}(global::System.IO.Stream stream, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
+        {
+            var writeValue = {{toStringClause}};
+            {{methodName}}(stream, writeValue);
+        }
+""");
+            }
+
+        }
 
         private void GenerateDeserializeMethods(StringBuilder sb)
         {

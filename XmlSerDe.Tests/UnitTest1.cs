@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -320,6 +321,31 @@ namespace XmlSerDe.Tests
         }
 
 
+        [Fact]
+        public void XmlObject910_Serialize_Test1()
+        {
+            using var ms = new MemoryStream();
+            XmlSerializerDeserializer910.Serialize(
+                ms,
+                new XmlObject10()
+                {
+                    XmlObjectProperty = new XmlObject9Specific1
+                    {
+                        StringProperty = "a",
+                        IntProperty = 123
+                    }
+                },
+                false
+                );
+            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            Xunit.Assert.Equal(
+                @"<XmlObject10><XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1""><IntProperty>123</IntProperty><StringProperty>a</StringProperty></XmlObjectProperty></XmlObject10>",
+                xml
+                );
+        }
+
+
+
 
 
         [Fact]
@@ -365,6 +391,37 @@ namespace XmlSerDe.Tests
             Xunit.Assert.Equal(1, xoSpecific1At1.IntProperty);
         }
 
+
+        [Fact]
+        public void XmlObject1112_Serialize_Test0()
+        {
+            using var ms = new MemoryStream();
+            XmlSerializerDeserializer1112.Serialize(
+                ms,
+                new XmlObject12()
+                {
+                    XmlObjectProperty = new List<XmlObject11Abstract>
+                    {
+                        new XmlObject11Specific1
+                        {
+                            StringProperty = "At0",
+                            IntProperty = 0
+                        },
+                        new XmlObject11Specific1
+                        {
+                            StringProperty = "At1",
+                            IntProperty = 1
+                        },
+                    }
+                },
+                false
+                );
+            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            Xunit.Assert.Equal(
+                @"<XmlObject12><XmlObjectProperty><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><IntProperty>0</IntProperty><StringProperty>At0</StringProperty></XmlObject11Abstract><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><IntProperty>1</IntProperty><StringProperty>At1</StringProperty></XmlObject11Abstract></XmlObjectProperty></XmlObject12>",
+                xml
+                );
+        }
 
 
 
