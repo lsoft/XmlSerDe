@@ -20,7 +20,7 @@ namespace XmlSerDe.PerformanceTests
         static void Main(string[] args)
         {
 #if DEBUG
-            new DeserializeFixture();
+            new SerializeDeserializeFixture();
 #else
 
             BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(SerializeDeserializeFixture));

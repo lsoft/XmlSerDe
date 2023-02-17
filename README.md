@@ -67,10 +67,10 @@ the performance is:
 ```
 |                    Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
 |-------------------------- |----------:|----------:|----------:|-------:|----------:|
-|   'Serialize: System.Xml' |  9.172 us | 0.1578 us | 0.3040 us | 3.6774 |   15448 B |
-|     'Serialize: XmlSerDe' |  5.152 us | 0.0983 us | 0.0965 us | 1.8234 |    7641 B |
-| 'Deserialize: System.Xml' | 15.678 us | 0.2961 us | 0.2625 us | 3.9063 |   16392 B |
-|   'Deserialize: XmlSerDe' | 11.906 us | 0.1170 us | 0.0977 us | 0.1678 |     736 B |
+|   'Serialize: System.Xml' |  8.320 us | 0.1332 us | 0.1246 us | 3.3569 |   14064 B |
+|     'Serialize: XmlSerDe' |  5.041 us | 0.1006 us | 0.1235 us | 1.5640 |    6569 B |
+| 'Deserialize: System.Xml' | 15.838 us | 0.2321 us | 0.3099 us | 3.9063 |   16392 B |
+|   'Deserialize: XmlSerDe' | 12.033 us | 0.2402 us | 0.2571 us | 0.1678 |     736 B |
 
 ```
 

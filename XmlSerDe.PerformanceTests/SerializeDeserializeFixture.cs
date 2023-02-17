@@ -1,6 +1,8 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
+using Microsoft.Diagnostics.Tracing.Parsers.MicrosoftAntimalwareEngine;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -89,6 +91,29 @@ Job=.NET 6.0  Runtime=.NET 6.0
 |     'Serialize: XmlSerDe' |  5.152 us | 0.0983 us | 0.0965 us | 1.8234 |    7641 B |
 | 'Deserialize: System.Xml' | 15.678 us | 0.2961 us | 0.2625 us | 3.9063 |   16392 B |
 |   'Deserialize: XmlSerDe' | 11.906 us | 0.1170 us | 0.0977 us | 0.1678 |     736 B |
+
+|                    Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
+|-------------------------- |----------:|----------:|----------:|-------:|----------:|
+|   'Serialize: System.Xml' |  8.320 us | 0.1332 us | 0.1246 us | 3.3569 |   14064 B |
+|     'Serialize: XmlSerDe' |  5.041 us | 0.1006 us | 0.1235 us | 1.5640 |    6569 B |
+| 'Deserialize: System.Xml' | 15.838 us | 0.2321 us | 0.3099 us | 3.9063 |   16392 B |
+|   'Deserialize: XmlSerDe' | 12.033 us | 0.2402 us | 0.2571 us | 0.1678 |     736 B |
+
+
+estimation of result string length:
+|                  Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
+|------------------------ |----------:|----------:|----------:|-------:|----------:|
+| 'Serialize: System.Xml' |  8.429 us | 0.0942 us | 0.0881 us | 3.3569 |   14064 B |
+|   'Serialize: XmlSerDe' |  4.735 us | 0.0574 us | 0.0509 us | 1.1292 |    4753 B |
+
+
+|                      Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
+|---------------------------- |----------:|----------:|----------:|-------:|----------:|
+|     'Serialize: System.Xml' |  8.582 us | 0.1637 us | 0.1608 us | 3.3569 |   14064 B |
+|       'Serialize: XmlSerDe' |  4.984 us | 0.0823 us | 0.0687 us | 1.5640 |    6569 B |
+| 'Serialize: XmlSerDe (est)' |  4.722 us | 0.0865 us | 0.0767 us | 1.1292 |    4753 B |
+|   'Deserialize: System.Xml' | 15.273 us | 0.1385 us | 0.1081 us | 3.9063 |   16392 B |
+|     'Deserialize: XmlSerDe' | 11.598 us | 0.1934 us | 0.2302 us | 0.1678 |     736 B |
 
 
 */
@@ -236,8 +261,8 @@ public class SerializeDeserializeFixture
     public SerializeDeserializeFixture()
     {
         //heat up
-        _ = Deserialize_SystemXml_Test();
-        _ = Deserialize_XmlSerDe_Test();
+        _ = Deserialize_SystemXml(AuxXml);
+        _ = Deserialize_XmlSerDe(AuxXml.AsSpan());
 
         Deserialize_CheckForEquality();
         Serialize_CheckForEquality();
@@ -345,7 +370,7 @@ public class SerializeDeserializeFixture
     {
         using var ms = new MemoryStream();
         _xmlSerializerContainer.Serialize(ms, DefaultObject);
-        var xml = Encoding.UTF8.GetString(ms.ToArray());
+        var xml = Encoding.UTF8.GetString(ms.GetBuffer().AsSpan(0, (int)ms.Length));
         return xml;
     }
 
@@ -354,7 +379,19 @@ public class SerializeDeserializeFixture
     {
         using var ms = new MemoryStream();
         XmlSerializerDeserializer.Serialize(ms, DefaultObject, false);
-        var xml = Encoding.UTF8.GetString(ms.ToArray());
+        var xml = Encoding.UTF8.GetString(ms.GetBuffer().AsSpan(0, (int)ms.Length));
+        return xml;
+    }
+
+    [Benchmark(Description = "Serialize: XmlSerDe (est)")]
+    public string Serialize_XmlSerDe_Estimated_Test()
+    {
+        var esimatedSize = 2100; //TODO: estimate it via XmlSerializerDeserializer.EstimateSerializedSize(ref esimatedCharCount);
+        var buffer = ArrayPool<byte>.Shared.Rent(esimatedSize);
+        using var ms = new MemoryStream(buffer, 0, esimatedSize, true, false);
+        XmlSerializerDeserializer.Serialize(ms, DefaultObject, false);
+        var xml = Encoding.UTF8.GetString(buffer.AsSpan(0, (int)ms.Length));
+        ArrayPool<byte>.Shared.Return(buffer);
         return xml;
     }
 
@@ -397,4 +434,5 @@ public class SerializeDeserializeFixture
         XmlSerializerDeserializer.Deserialize(xml, out InfoContainer r);
         return r;
     }
+
 }
