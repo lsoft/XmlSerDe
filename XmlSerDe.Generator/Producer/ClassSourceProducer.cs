@@ -271,13 +271,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 _sb.AppendLine($$"""
                 {{WriteStringToStreamFullMethodName}}(stream, "<{{member.Name}}>");
-
-""");
-
-                _sb.AppendLine($$"""
-
-                throw new NotImplementedException("Enum serialization is not supported yet");
-
+                {{WriteStringToStreamFullMethodName}}(stream, obj.{{member.Name}}.ToString());
                 {{WriteStringToStreamFullMethodName}}(stream, "</{{member.Name}}>");
 """);
             }

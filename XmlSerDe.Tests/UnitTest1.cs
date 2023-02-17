@@ -484,6 +484,50 @@ namespace XmlSerDe.Tests
 
 
 
+
+        [Fact]
+        public void XmlObject15_Deserialize_Test0()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject15), new Type[] { }).Serialize(
+            //        ms,
+            //        new XmlObject15()
+            //        {
+            //            XmlEnum15 = XmlEnum15.EnumValue1
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer15.Deserialize(@"<XmlObject15><XmlEnum15>EnumValue1</XmlEnum15></XmlObject15>".AsSpan(), out XmlObject15 xo);
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(XmlEnum15.EnumValue1, xo.XmlEnum15);
+        }
+
+        [Fact]
+        public void XmlObject15_Serialize_Test0()
+        {
+            using var ms = new MemoryStream();
+            XmlSerializerDeserializer15.Serialize(
+                ms,
+                new XmlObject15()
+                {
+                    XmlEnum15 = XmlEnum15.EnumValue1
+                    },
+                false
+                );
+            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            Xunit.Assert.Equal(
+                @"<XmlObject15><XmlEnum15>EnumValue1</XmlEnum15></XmlObject15>",
+                xml
+                );
+        }
+
+
+
+
+
+
         //        [Fact]
         //        public void TestGenerator()
         //        {
