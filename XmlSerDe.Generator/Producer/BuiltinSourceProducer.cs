@@ -50,13 +50,13 @@ namespace XmlSerDe.Generator.Producer
                 new BuiltinCollection(
                     new List<Builtin>
                     {
-                        new Builtin("global::System.DateTime.Parse({0})", compilation.DateTime(), "dateTime", "{0}.ToString()", false),
-                        new Builtin("global::System.DateTime.Parse({0})", compilation.NDateTime(), "dateTime", "{0}.ToString()", false),
+                        new Builtin("global::System.DateTime.Parse({0})", compilation.DateTime(), "dateTime", "{0}.ToString(\"yyyy-MM-ddTHH:mm:ss.fffffffK\")", false),
+                        new Builtin("global::System.DateTime.Parse({0})", compilation.NDateTime(), "dateTime", "{0}.HasValue ? {0}.Value.ToString(\"yyyy-MM-ddTHH:mm:ss.fffffffK\") : {0}.ToString()", false),
 
                         new Builtin("global::System.Guid.Parse({0})", compilation.Guid(), "guid", "{0}.ToString()", false),
                         new Builtin("global::System.Guid.Parse({0})", compilation.NGuid(), "guid", "{0}.ToString()", false),
 
-                        new Builtin("global::System.Boolean.Parse({0})", compilation.Bool(), "boolean", @"({0} ? ""True"" : ""False"")", false),
+                        new Builtin("global::System.Boolean.Parse({0})", compilation.Bool(), "boolean", @"({0} ? ""true"" : ""false"")", false),
                         new Builtin("global::System.Net.WebUtility.HtmlDecode({0}.ToString())", compilation.String(), "string", "{0}", true),
 
                         new Builtin("global::System.SByte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.SByte(), "byte", "{0}.ToString()", false),
@@ -98,6 +98,11 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         private static void DecodeAndWrite(global::System.IO.Stream stream, string inputString, System.Span<byte> span)
         {
+            if(inputString is null)
+            {
+                return;
+            }
+
             global::System.Text.Encoding.UTF8.GetBytes(inputString.AsSpan(), span);
             stream.Write(span);
         }
@@ -128,6 +133,11 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
         public static void {{WriteStringToStreamMethodName}}(global::System.IO.Stream stream, string inputString)
         {
             const int MaxStackallocBufferSize = 256;
+
+            if(inputString is null)
+            {
+                return;
+            }
 
             var byteCount = global::System.Text.Encoding.UTF8.GetByteCount(inputString);
             if(byteCount < MaxStackallocBufferSize)
@@ -160,6 +170,11 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
         public static void {{WriteEncodedStringToStreamMethodName}}(global::System.IO.Stream stream, string inputString)
          {
             const int MaxStackallocBufferSize = 256;
+
+            if(inputString is null)
+            {
+                return;
+            }
 
             var encodedString = global::System.Net.WebUtility.HtmlEncode(inputString);
             var byteCount = global::System.Text.Encoding.UTF8.GetByteCount(encodedString);

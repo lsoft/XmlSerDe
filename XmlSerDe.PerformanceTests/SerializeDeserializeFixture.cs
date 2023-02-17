@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics.X86;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
@@ -81,11 +83,19 @@ Job=.NET 6.0  Runtime=.NET 6.0
 | System.Xml | 15.92 us | 0.234 us | 0.219 us |  1.00 | 3.9063 |   16392 B |        1.00 |
 |   XmlSerDe | 11.80 us | 0.112 us | 0.137 us |  0.74 | 0.1678 |     736 B |        0.04 |
 
+|                    Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
+|-------------------------- |----------:|----------:|----------:|-------:|----------:|
+|   'Serialize: System.Xml' |  9.172 us | 0.1578 us | 0.3040 us | 3.6774 |   15448 B |
+|     'Serialize: XmlSerDe' |  5.152 us | 0.0983 us | 0.0965 us | 1.8234 |    7641 B |
+| 'Deserialize: System.Xml' | 15.678 us | 0.2961 us | 0.2625 us | 3.9063 |   16392 B |
+|   'Deserialize: XmlSerDe' | 11.906 us | 0.1170 us | 0.0977 us | 0.1678 |     736 B |
+
+
 */
 
 [SimpleJob(RuntimeMoniker.Net60)]
 [MemoryDiagnoser]
-public class DeserializeFixture
+public class SerializeDeserializeFixture
 {
     private readonly XmlSerializer _xmlSerializerContainer = new XmlSerializer(
         typeof(InfoContainer),
@@ -93,9 +103,53 @@ public class DeserializeFixture
         {
             typeof(Derived3Info),
             typeof(Derived1Info),
-            typeof(Derived2Info)
+            typeof(Derived2Info),
+            typeof(SerializeKeyValue),
+            typeof(PerformanceTime)
         }
         );
+
+    public static readonly InfoContainer DefaultObject = new InfoContainer
+    {
+        InfoCollection = new List<BaseInfo>
+        {
+            new Derived3Info
+            {
+                Email = "example@example.com"
+            },
+            new Derived1Info
+            {
+                BasePersonificationInfo = RawString
+            },
+            new Derived2Info
+            {
+                HotKeyUsed = false,
+                StepsCounter = 1,
+                EventsTime = new List<SerializeKeyValue>
+                {
+                    new SerializeKeyValue
+                    {
+                        Key = KeyValueKindEnum.Three,
+                        Value = new PerformanceTime { SecondsSpan = 3, StartTime = DateTime.Parse("2022-09-28T14:51:39.2438815+03:00") }
+                    },
+                    new SerializeKeyValue
+                    {
+                        Key = KeyValueKindEnum.One,
+                        Value = new PerformanceTime { SecondsSpan = 0, StartTime = DateTime.Parse("2022-09-28T14:28:00.5009069+03:00") }
+                    },
+                    new SerializeKeyValue
+                    {
+                        Key = KeyValueKindEnum.Two,
+                        Value = new PerformanceTime { SecondsSpan = 1, StartTime = DateTime.Parse("2022-09-28T14:28:02.3089553+03:00") }
+                    },
+                }
+            }
+        }
+    };
+
+    public const string RawString = "my string !@#$%^&*()_+|-=\\';[]{},./<>?";
+    //https://coderstoolbox.net/string/#!encoding=xml&action=encode&charset=us_ascii
+    public const string XmlEncodedString = "my string !@#$%^&amp;*()_+|-=\\&#39;;[]{},./&lt;&gt;?";
 
     public const string AuxXml = @"
 <InfoContainer>
@@ -179,84 +233,104 @@ public class DeserializeFixture
     </InfoCollection>
 ";
 
-    public DeserializeFixture()
+    public SerializeDeserializeFixture()
     {
         //heat up
-        _ = SystemXml();
-        _ = XmlSerDe();
+        _ = Deserialize_SystemXml_Test();
+        _ = Deserialize_XmlSerDe_Test();
 
-        CheckForEquality();
+        Deserialize_CheckForEquality();
+        Serialize_CheckForEquality();
     }
 
-    private void CheckForEquality()
+    private void Serialize_CheckForEquality()
     {
-        var systemr = SystemXml();
-        var xmlserder = XmlSerDe();
+        //serialize
+        var ser_system = Serialize_SystemXml_Test();
+        var ser_xmlserde = Serialize_XmlSerDe_Test();
 
-        if (systemr.InfoCollection.Count != xmlserder.InfoCollection.Count)
+        //deserialize with different deserializer
+        var first = Deserialize_SystemXml(ser_xmlserde);
+        var second = Deserialize_XmlSerDe(XmlSerDe.Generator.Producer.BuiltinCodeParser.CutXmlHead(ser_system.AsSpan()));
+
+        CheckForEquality(first, second);
+    }
+
+    private void Deserialize_CheckForEquality()
+    {
+        var deser_systemxml = Deserialize_SystemXml(AuxXml);
+        var deser_xmlserde = Deserialize_XmlSerDe(AuxXml.AsSpan());
+
+        CheckForEquality(deser_systemxml, deser_xmlserde);
+    }
+
+    private void CheckForEquality(InfoContainer first, InfoContainer second)
+    {
+        if (first.InfoCollection.Count != second.InfoCollection.Count)
         {
             throw new Exception("InfoCollection.Count");
         }
+
         {
-            var oldau = (Derived3Info)systemr.InfoCollection[0];
-            var newau = (Derived3Info)xmlserder.InfoCollection[0];
-            if (oldau.InfoType != newau.InfoType)
+            var firstau = (Derived3Info)first.InfoCollection[0];
+            var secondau = (Derived3Info)second.InfoCollection[0];
+            if (firstau.InfoType != secondau.InfoType)
             {
                 throw new Exception("InfoType");
             }
-            if (oldau.PhoneNumber != newau.PhoneNumber)
+            if (firstau.PhoneNumber != secondau.PhoneNumber)
             {
                 throw new Exception("PhoneNumber");
             }
-            if (oldau.Email != newau.Email)
+            if (firstau.Email != secondau.Email)
             {
                 throw new Exception("Email");
             }
         }
         {
-            var oldau = (Derived1Info)systemr.InfoCollection[1];
-            var newau = (Derived1Info)xmlserder.InfoCollection[1];
-            if (oldau.InfoType != newau.InfoType)
+            var firstic = (Derived1Info)first.InfoCollection[1];
+            var secondic = (Derived1Info)second.InfoCollection[1];
+            if (firstic.InfoType != secondic.InfoType)
             {
                 throw new Exception("InfoType");
             }
-            if (oldau.BasePersonificationInfo != newau.BasePersonificationInfo)
+            if (firstic.BasePersonificationInfo != secondic.BasePersonificationInfo)
             {
                 throw new Exception("BasePersonificationInfo");
             }
         }
         {
-            var oldau = (Derived2Info)systemr.InfoCollection[2];
-            var newau = (Derived2Info)xmlserder.InfoCollection[2];
-            if (oldau.InfoType != newau.InfoType)
+            var firstic = (Derived2Info)first.InfoCollection[2];
+            var secondic = (Derived2Info)second.InfoCollection[2];
+            if (firstic.InfoType != secondic.InfoType)
             {
                 throw new Exception("InfoType");
             }
-            if (oldau.StepsCounter != newau.StepsCounter)
+            if (firstic.StepsCounter != secondic.StepsCounter)
             {
                 throw new Exception("StepsCounter");
             }
-            if (oldau.HotKeyUsed != newau.HotKeyUsed)
+            if (firstic.HotKeyUsed != secondic.HotKeyUsed)
             {
                 throw new Exception("HotKeyUsed");
             }
-            if (oldau.EventsTime.Count != newau.EventsTime.Count)
+            if (firstic.EventsTime.Count != secondic.EventsTime.Count)
             {
                 throw new Exception("EventsTime.Count");
             }
-            for (var eti = 0; eti < oldau.EventsTime.Count; eti++)
+            for (var eti = 0; eti < firstic.EventsTime.Count; eti++)
             {
-                var oldet = oldau.EventsTime[eti];
-                var newet = newau.EventsTime[eti];
-                if (oldet.Key != newet.Key)
+                var firstet = firstic.EventsTime[eti];
+                var secondet = secondic.EventsTime[eti];
+                if (firstet.Key != secondet.Key)
                 {
                     throw new Exception("Key");
                 }
-                if (oldet.Value.StartTime != newet.Value.StartTime)
+                if (firstet.Value.StartTime != secondet.Value.StartTime)
                 {
                     throw new Exception("Value.StartTime");
                 }
-                if (oldet.Value.SecondsSpan != newet.Value.SecondsSpan)
+                if (firstet.Value.SecondsSpan != secondet.Value.SecondsSpan)
                 {
                     throw new Exception("Value.SecondsSpan");
                 }
@@ -264,21 +338,63 @@ public class DeserializeFixture
         }
     }
 
-    [Benchmark(Baseline = true, Description = "System.Xml")]
-    public InfoContainer SystemXml()
+
+
+    [Benchmark(Description = "Serialize: System.Xml")]
+    public string Serialize_SystemXml_Test()
     {
-        using (var reader = new StringReader(AuxXml))
+        using var ms = new MemoryStream();
+        _xmlSerializerContainer.Serialize(ms, DefaultObject);
+        var xml = Encoding.UTF8.GetString(ms.ToArray());
+        return xml;
+    }
+
+    [Benchmark(Description = "Serialize: XmlSerDe")]
+    public string Serialize_XmlSerDe_Test()
+    {
+        using var ms = new MemoryStream();
+        XmlSerializerDeserializer.Serialize(ms, DefaultObject, false);
+        var xml = Encoding.UTF8.GetString(ms.ToArray());
+        return xml;
+    }
+
+
+
+
+    [Benchmark(Description = "Deserialize: System.Xml")]
+    public InfoContainer Deserialize_SystemXml_Test()
+    {
+        return Deserialize_SystemXml(AuxXml);
+    }
+
+    [Benchmark(Description = "Deserialize: XmlSerDe")]
+    public InfoContainer Deserialize_XmlSerDe_Test()
+    {
+        InfoContainer r = Deserialize_XmlSerDe(AuxXml.AsSpan());
+        return r;
+    }
+
+
+
+
+
+
+
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private InfoContainer Deserialize_SystemXml(string xml)
+    {
+        using (var reader = new StringReader(xml))
         {
             var r = (InfoContainer)_xmlSerializerContainer.Deserialize(reader);
             return r;
         }
-
     }
 
-    [Benchmark(Description = "XmlSerDe")]
-    public InfoContainer XmlSerDe()
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static InfoContainer Deserialize_XmlSerDe(ReadOnlySpan<char> xml)
     {
-        XmlSerializerDeserializer.Deserialize(AuxXml.AsSpan(), out InfoContainer r);
+        XmlSerializerDeserializer.Deserialize(xml, out InfoContainer r);
         return r;
     }
 }

@@ -20,10 +20,11 @@ namespace XmlSerDe.PerformanceTests
         static void Main(string[] args)
         {
 #if DEBUG
-
+            new DeserializeFixture();
 #else
 
-            BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(OtherFixture));
+            BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(SerializeDeserializeFixture));
+            //BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(OtherFixture));
             //BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(XmlDecodeStringFixture));
 
             //var span = DeserializeFixture.AuxXml.AsSpan();

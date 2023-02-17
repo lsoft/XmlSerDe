@@ -158,11 +158,22 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
             var methodName = withHeadMethod ? HeadSerializeMethodName : HeadlessSerializeMethodName;
             var ssGlobalName = subject.ToGlobalDisplayString();
-
+            
             _sb.AppendLine($$"""
         private static void {{methodName}}(global::System.IO.Stream stream, {{ssGlobalName}} obj)
         {
 """);
+
+            if(!subject.IsValueType)
+            {
+                _sb.AppendLine($$"""
+            if(obj is null)
+            {
+                return;
+            }
+
+""");
+            }
 
             var isTypeUnknown = subject.IsAbstract;
             if (isTypeUnknown)
@@ -250,12 +261,25 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             )
         {
             var memberType = ParseMember(member);
-
             _sb.AppendLine($$"""
             //{{memberType.ToFullDisplayString()}} {{member.Name}}
-            {
-
 """);
+
+            var canBeNull = !memberType.IsValueType;
+            if (canBeNull)
+            {
+                _sb.AppendLine($$"""
+            if(obj.{{member.Name}} is not null)
+            {
+""");
+            }
+            else
+            {
+                _sb.AppendLine($$"""
+            {
+""");
+            }
+
 
             if (BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType, out var memberBuiltin))
             {
@@ -304,7 +328,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                 for(var index = 0; index < obj.{{member.Name}}.Count; index++)
                 {
-                    {{methodName}}(stream, obj.{{member.Name}}[index]);
+                    {{HeadSerializeMethodName}}(stream, obj.{{member.Name}}[index]);
                 }
 """);
                 }
@@ -317,9 +341,10 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
             else
             {
-                if (_ssic.TryGetSubject(memberType, out var ssi))
+                var subjectFound = _ssic.TryGetSubject(memberType, out var ssi);
+                if (subjectFound && ssi.Deriveds.Count > 0)
                 {
-                    foreach(var derived in ssi.Deriveds)
+                    foreach (var derived in ssi.Deriveds)
                     {
                         _sb.AppendLine($$"""
 
@@ -338,7 +363,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 else
                 {
                     _sb.AppendLine($$"""
-                {{methodName}}(stream, obj.{{member.Name}});
+                {{WriteStringToStreamFullMethodName}}(stream, @"<{{member.Name}}>");
+                {{HeadlessSerializeMethodName}}(stream, obj.{{member.Name}});
+                {{WriteStringToStreamFullMethodName}}(stream, "</{{member.Name}}>");
 """);
                 }
             }

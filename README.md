@@ -1,6 +1,6 @@
 # XmlSerDe
 
-Allocation free XML deserializer based on C# incremental source generators (ISG). Because of ISG no performance issues occurs when working with big codebases.
+Allocation free XML serializer/deserializer based on C# incremental source generators (ISG). Because of ISG no performance issues occurs when working with big codebases.
 
 ## Status
 
@@ -65,21 +65,33 @@ For the following XML document:
 the performance is:
 
 ```
-|     Method |     Mean |    Error |   StdDev | Ratio |   Gen0 | Allocated | Alloc Ratio |
-|----------- |---------:|---------:|---------:|------:|-------:|----------:|------------:|
-| System.Xml | 15.92 us | 0.234 us | 0.219 us |  1.00 | 3.9063 |   16392 B |        1.00 |
-|   XmlSerDe | 11.80 us | 0.112 us | 0.137 us |  0.74 | 0.1678 |     736 B |        0.04 |
+|                    Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
+|-------------------------- |----------:|----------:|----------:|-------:|----------:|
+|   'Serialize: System.Xml' |  9.172 us | 0.1578 us | 0.3040 us | 3.6774 |   15448 B |
+|     'Serialize: XmlSerDe' |  5.152 us | 0.0983 us | 0.0965 us | 1.8234 |    7641 B |
+| 'Deserialize: System.Xml' | 15.678 us | 0.2961 us | 0.2625 us | 3.9063 |   16392 B |
+|   'Deserialize: XmlSerDe' | 11.906 us | 0.1170 us | 0.0977 us | 0.1678 |     736 B |
+
 ```
 
 the code:
 
 ```C#
 
-    public InfoContainer XmlSerDe()
+    public InfoContainer Deserialize(ReadOnlySpan<char> xml)
     {
-        XmlSerializerDeserializer.Deserialize(XmlText.AsSpan(), out InfoContainer r);
+        XmlSerializerDeserializer.Deserialize(xml, out InfoContainer r);
         return r;
     }
+
+    public string Serialize(InfoContainer subject)
+    {
+        using var ms = new MemoryStream();
+        XmlSerializerDeserializer.Serialize(ms, subject, false);
+        var xml = Encoding.UTF8.GetString(ms.ToArray());
+        return xml;
+    }
+
 
 //...
 

@@ -525,6 +525,56 @@ namespace XmlSerDe.Tests
 
 
 
+        [Fact]
+        public void XmlObject1617_Deserialize_Test0()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject17), new Type[] { }).Serialize(
+            //        ms,
+            //        new XmlObject17()
+            //        {
+            //            MyList = new List<XmlObject16>
+            //            {
+            //                new XmlObject16 { MyField = 1 },
+            //                new XmlObject16 { MyField = 2 },
+            //            }
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer1617.Deserialize(@"<XmlObject17><MyList><XmlObject16><MyField>1</MyField></XmlObject16><XmlObject16><MyField>2</MyField></XmlObject16></MyList></XmlObject17>".AsSpan(), out XmlObject17 xo);
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(2, xo.MyList.Count);
+            Xunit.Assert.Equal(1, xo.MyList[0].MyField);
+            Xunit.Assert.Equal(2, xo.MyList[1].MyField);
+        }
+
+        [Fact]
+        public void XmlObject1617_Serialize_Test0()
+        {
+            using var ms = new MemoryStream();
+            XmlSerializerDeserializer1617.Serialize(
+                ms,
+                new XmlObject17()
+                {
+                    MyList = new List<XmlObject16>
+                    {
+                        new XmlObject16 { MyField = 1 },
+                        new XmlObject16 { MyField = 2 },
+                    }
+                },
+                false
+                );
+            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            Xunit.Assert.Equal(
+                @"<XmlObject17><MyList><XmlObject16><MyField>1</MyField></XmlObject16><XmlObject16><MyField>2</MyField></XmlObject16></MyList></XmlObject17>",
+                xml
+                );
+        }
+
+
+
 
 
 
