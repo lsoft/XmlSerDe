@@ -3,6 +3,7 @@ using Microsoft.Diagnostics.Runtime.Utilities;
 using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Parsers.MicrosoftAntimalwareEngine;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -21,7 +22,8 @@ namespace XmlSerDe.PerformanceTests
 #if DEBUG
 
 #else
-            BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(DeserializeFixture));
+
+            BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(OtherFixture));
             //BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(XmlDecodeStringFixture));
 
             //var span = DeserializeFixture.AuxXml.AsSpan();

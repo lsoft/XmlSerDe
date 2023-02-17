@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Xml;
 using XmlSerDe.Generator.EmbeddedCode;
@@ -94,6 +95,14 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
     {
         private static readonly byte[] XmlHeadBytes = global::System.Text.Encoding.UTF8.GetBytes("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
 
+        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static void DecodeAndWrite(global::System.IO.Stream stream, string inputString, System.Span<byte> span)
+        {
+            global::System.Text.Encoding.UTF8.GetBytes(inputString.AsSpan(), span);
+            stream.Write(span);
+        }
+
+
 """);
 
             GenerateWriteStringToStream(sb);
@@ -118,10 +127,27 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
         //stackalloc here: do not inline this method!
         public static void {{WriteStringToStreamMethodName}}(global::System.IO.Stream stream, string inputString)
         {
+            const int MaxStackallocBufferSize = 256;
+
             var byteCount = global::System.Text.Encoding.UTF8.GetByteCount(inputString);
-            var buffer = byteCount < 256 ? stackalloc byte[byteCount] : new byte[byteCount];
-            global::System.Text.Encoding.UTF8.GetBytes(inputString.AsSpan(), buffer);
-            stream.Write(buffer);
+            if(byteCount < MaxStackallocBufferSize)
+            {
+                Span<byte> span = stackalloc byte[byteCount];
+                DecodeAndWrite(stream, inputString, span);
+            }
+            else
+            {
+                var buffer = global::System.Buffers.ArrayPool<byte>.Shared.Rent(byteCount);
+
+                Span<byte> span = buffer.AsSpan(0, byteCount);
+                DecodeAndWrite(stream, inputString, span);
+
+                //we're expecting there will be no or very small amount of exceptions; so we are allowed not to use try-finally
+                //please see the documentation of the following Rent method:
+                //Failure to return a rented buffer is not a fatal error. However, it may lead to decreased application performance, as the pool may need to create a new buffer to replace the lost one.
+                //https://learn.microsoft.com/en-us/dotnet/api/system.buffers.arraypool-1.rent?view=net-7.0#remarks
+                global::System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
 
 """);
@@ -132,12 +158,29 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             sb.AppendLine($$"""
         //stackalloc here: do not inline this method!
         public static void {{WriteEncodedStringToStreamMethodName}}(global::System.IO.Stream stream, string inputString)
-        {
+         {
+            const int MaxStackallocBufferSize = 256;
+
             var encodedString = global::System.Net.WebUtility.HtmlEncode(inputString);
             var byteCount = global::System.Text.Encoding.UTF8.GetByteCount(encodedString);
-            var buffer = byteCount < 256 ? stackalloc byte[byteCount] : new byte[byteCount];
-            global::System.Text.Encoding.UTF8.GetBytes(encodedString.AsSpan(), buffer);
-            stream.Write(buffer);
+            if (byteCount < MaxStackallocBufferSize)
+            {
+                Span<byte> span = stackalloc byte[byteCount];
+                DecodeAndWrite(stream, encodedString, span);
+            }
+            else
+            {
+                var buffer = global::System.Buffers.ArrayPool<byte>.Shared.Rent(byteCount);
+
+                Span<byte> span = buffer.AsSpan(0, byteCount);
+                DecodeAndWrite(stream, encodedString, span);
+
+                //we're expecting there will be no or very small amount of exceptions; so we are allowed not to use try-finally
+                //please see the documentation of the following Rent method:
+                //Failure to return a rented buffer is not a fatal error. However, it may lead to decreased application performance, as the pool may need to create a new buffer to replace the lost one.
+                //https://learn.microsoft.com/en-us/dotnet/api/system.buffers.arraypool-1.rent?view=net-7.0#remarks
+                global::System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
 
 """);
