@@ -11,12 +11,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.13.4" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.13.5" />
     <PackageReference Include="Enums.NET" Version="4.0.1" />
   </ItemGroup>
 
-  <ItemGroup>
+<!--
     <ProjectReference Include="..\XmlSerDe.Generator\XmlSerDe.Generator.csproj" SetTargetFramework="TargetFramework=netstandard2.0" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+-->
+
+  <ItemGroup>
+    <ProjectReference Include="..\XmlSerDe.Tests\XmlSerDe.Tests.csproj" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.4.0" />
   </ItemGroup>
 
 </Project>

@@ -1,17 +1,15 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
-using Microsoft.Diagnostics.Tracing.Parsers.MicrosoftAntimalwareEngine;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Runtime.Intrinsics.X86;
 using System.Text;
-using System.Threading.Tasks;
 using System.Xml.Serialization;
-using XmlSerDe.PerformanceTests.Subject;
+using XmlSerDe.Tests.Complex;
+using XmlSerDe.Tests.Complex.Subject;
 using roschar = System.ReadOnlySpan<char>;
 
 namespace XmlSerDe.PerformanceTests;
@@ -116,287 +114,52 @@ estimation of result string length:
 |     'Deserialize: XmlSerDe' | 11.598 us | 0.1934 us | 0.2302 us | 0.1678 |     736 B |
 
 
+------------------------------  BASELINE ON MY LAPTOP  ---------------------------------
+|                      Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
+|---------------------------- |----------:|----------:|----------:|-------:|----------:|
+|     'Serialize: System.Xml' |  7.604 us | 0.0608 us | 0.0508 us | 6.7062 |   14064 B |
+|       'Serialize: XmlSerDe' |  4.310 us | 0.0240 us | 0.0225 us | 3.1357 |    6569 B |
+| 'Serialize: XmlSerDe (est)' |  4.340 us | 0.0202 us | 0.0189 us | 2.2659 |    4753 B |
+|   'Deserialize: System.Xml' | 13.892 us | 0.0953 us | 0.0845 us | 7.8125 |   16392 B |
+|     'Deserialize: XmlSerDe' | 10.754 us | 0.0444 us | 0.0393 us | 0.3510 |     736 B |
+
+
 */
 
 [SimpleJob(RuntimeMoniker.Net60)]
 [MemoryDiagnoser]
-public class SerializeDeserializeFixture
+public class SerializeDeserializeFixture : ComplexFixture
 {
-    private readonly XmlSerializer _xmlSerializerContainer = new XmlSerializer(
-        typeof(InfoContainer),
-        new[]
-        {
-            typeof(Derived3Info),
-            typeof(Derived1Info),
-            typeof(Derived2Info),
-            typeof(SerializeKeyValue),
-            typeof(PerformanceTime)
-        }
-        );
-
-    public static readonly InfoContainer DefaultObject = new InfoContainer
-    {
-        InfoCollection = new List<BaseInfo>
-        {
-            new Derived3Info
-            {
-                Email = "example@example.com"
-            },
-            new Derived1Info
-            {
-                BasePersonificationInfo = RawString
-            },
-            new Derived2Info
-            {
-                HotKeyUsed = false,
-                StepsCounter = 1,
-                EventsTime = new List<SerializeKeyValue>
-                {
-                    new SerializeKeyValue
-                    {
-                        Key = KeyValueKindEnum.Three,
-                        Value = new PerformanceTime { SecondsSpan = 3, StartTime = DateTime.Parse("2022-09-28T14:51:39.2438815+03:00") }
-                    },
-                    new SerializeKeyValue
-                    {
-                        Key = KeyValueKindEnum.One,
-                        Value = new PerformanceTime { SecondsSpan = 0, StartTime = DateTime.Parse("2022-09-28T14:28:00.5009069+03:00") }
-                    },
-                    new SerializeKeyValue
-                    {
-                        Key = KeyValueKindEnum.Two,
-                        Value = new PerformanceTime { SecondsSpan = 1, StartTime = DateTime.Parse("2022-09-28T14:28:02.3089553+03:00") }
-                    },
-                }
-            }
-        }
-    };
-
-    public const string RawString = "my string !@#$%^&*()_+|-=\\';[]{},./<>?";
-    //https://coderstoolbox.net/string/#!encoding=xml&action=encode&charset=us_ascii
-    public const string XmlEncodedString = "my string !@#$%^&amp;*()_+|-=\\&#39;;[]{},./&lt;&gt;?";
-
-    public const string AuxXml = @"
-<InfoContainer>
-    <InfoCollection>
-        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived3Info"">
-            <Email>example@example.com</Email>
-        </BaseInfo>
-        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived1Info"">
-            <BasePersonificationInfo>my string !@#$%^&amp;*()_+|-=\&#39;;[]{},./&lt;&gt;?</BasePersonificationInfo>
-        </BaseInfo>
-        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived2Info"">
-            <HotKeyUsed>false</HotKeyUsed>
-            <StepsCounter>1</StepsCounter>
-            <EventsTime>
-                <SerializeKeyValue>
-                    <Key>Three</Key>
-                    <Value>
-                        <StartTime>2022-09-28T14:51:39.2438815+03:00</StartTime>
-                        <SecondsSpan>3</SecondsSpan>
-                    </Value>
-                </SerializeKeyValue>
-                <SerializeKeyValue>
-                    <Key>One</Key>
-                    <Value>
-                        <StartTime>2022-09-28T14:28:00.5009069+03:00</StartTime>
-                        <SecondsSpan>0</SecondsSpan>
-                    </Value>
-                </SerializeKeyValue>
-                <SerializeKeyValue>
-                    <Key>Two</Key>
-                    <Value>
-                        <StartTime>2022-09-28T14:28:02.3089553+03:00</StartTime>
-                        <SecondsSpan>1</SecondsSpan>
-                    </Value>
-                </SerializeKeyValue>
-            </EventsTime>
-        </BaseInfo>
-    </InfoCollection>
-</InfoContainer>
-";
-
-    public const string PartXml = @"          <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived3Info"">
-<Email>example@example.com</Email>
-</BaseInfo>";
-
-    public const string InternalsXml = @"
-    <InfoCollection>
-        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived3Info"">
-            <Email>example@example.com</Email>
-        </BaseInfo>
-        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived1Info"">
-            <BasePersonificationInfo>my string !@#$%^&amp;*()_+|-=\&#39;;[]{},./&lt;&gt;?</BasePersonificationInfo>
-        </BaseInfo>
-        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived2Info"">
-            <HotKeyUsed>false</HotKeyUsed>
-            <StepsCounter>1</StepsCounter>
-            <EventsTime>
-                <SerializeKeyValue>
-                    <Key>Three</Key>
-                    <Value>
-                        <StartTime>2022-09-28T14:51:39.2438815+03:00</StartTime>
-                        <SecondsSpan>3</SecondsSpan>
-                    </Value>
-                </SerializeKeyValue>
-                <SerializeKeyValue>
-                    <Key>One</Key>
-                    <Value>
-                        <StartTime>2022-09-28T14:28:00.5009069+03:00</StartTime>
-                        <SecondsSpan>0</SecondsSpan>
-                    </Value>
-                </SerializeKeyValue>
-                <SerializeKeyValue>
-                    <Key>Two</Key>
-                    <Value>
-                        <StartTime>2022-09-28T14:28:02.3089553+03:00</StartTime>
-                        <SecondsSpan>1</SecondsSpan>
-                    </Value>
-                </SerializeKeyValue>
-            </EventsTime>
-        </BaseInfo>
-    </InfoCollection>
-";
-
-    public SerializeDeserializeFixture()
-    {
-        //heat up
-        _ = Deserialize_SystemXml(AuxXml);
-        _ = Deserialize_XmlSerDe(AuxXml.AsSpan());
-
-        Deserialize_CheckForEquality();
-        Serialize_CheckForEquality();
-    }
-
-    private void Serialize_CheckForEquality()
-    {
-        //serialize
-        var ser_system = Serialize_SystemXml_Test();
-        var ser_xmlserde = Serialize_XmlSerDe_Test();
-
-        //deserialize with different deserializer
-        var first = Deserialize_SystemXml(ser_xmlserde);
-        var second = Deserialize_XmlSerDe(XmlSerDe.Generator.Producer.BuiltinCodeParser.CutXmlHead(ser_system.AsSpan()));
-
-        CheckForEquality(first, second);
-    }
-
-    private void Deserialize_CheckForEquality()
-    {
-        var deser_systemxml = Deserialize_SystemXml(AuxXml);
-        var deser_xmlserde = Deserialize_XmlSerDe(AuxXml.AsSpan());
-
-        CheckForEquality(deser_systemxml, deser_xmlserde);
-    }
-
-    private void CheckForEquality(InfoContainer first, InfoContainer second)
-    {
-        if (first.InfoCollection.Count != second.InfoCollection.Count)
-        {
-            throw new Exception("InfoCollection.Count");
-        }
-
-        {
-            var firstau = (Derived3Info)first.InfoCollection[0];
-            var secondau = (Derived3Info)second.InfoCollection[0];
-            if (firstau.InfoType != secondau.InfoType)
-            {
-                throw new Exception("InfoType");
-            }
-            if (firstau.PhoneNumber != secondau.PhoneNumber)
-            {
-                throw new Exception("PhoneNumber");
-            }
-            if (firstau.Email != secondau.Email)
-            {
-                throw new Exception("Email");
-            }
-        }
-        {
-            var firstic = (Derived1Info)first.InfoCollection[1];
-            var secondic = (Derived1Info)second.InfoCollection[1];
-            if (firstic.InfoType != secondic.InfoType)
-            {
-                throw new Exception("InfoType");
-            }
-            if (firstic.BasePersonificationInfo != secondic.BasePersonificationInfo)
-            {
-                throw new Exception("BasePersonificationInfo");
-            }
-        }
-        {
-            var firstic = (Derived2Info)first.InfoCollection[2];
-            var secondic = (Derived2Info)second.InfoCollection[2];
-            if (firstic.InfoType != secondic.InfoType)
-            {
-                throw new Exception("InfoType");
-            }
-            if (firstic.StepsCounter != secondic.StepsCounter)
-            {
-                throw new Exception("StepsCounter");
-            }
-            if (firstic.HotKeyUsed != secondic.HotKeyUsed)
-            {
-                throw new Exception("HotKeyUsed");
-            }
-            if (firstic.EventsTime.Count != secondic.EventsTime.Count)
-            {
-                throw new Exception("EventsTime.Count");
-            }
-            for (var eti = 0; eti < firstic.EventsTime.Count; eti++)
-            {
-                var firstet = firstic.EventsTime[eti];
-                var secondet = secondic.EventsTime[eti];
-                if (firstet.Key != secondet.Key)
-                {
-                    throw new Exception("Key");
-                }
-                if (firstet.Value.StartTime != secondet.Value.StartTime)
-                {
-                    throw new Exception("Value.StartTime");
-                }
-                if (firstet.Value.SecondsSpan != secondet.Value.SecondsSpan)
-                {
-                    throw new Exception("Value.SecondsSpan");
-                }
-            }
-        }
-    }
-
-
+    #region serialize
 
     [Benchmark(Description = "Serialize: System.Xml")]
     public string Serialize_SystemXml_Test()
     {
-        using var ms = new MemoryStream();
-        _xmlSerializerContainer.Serialize(ms, DefaultObject);
-        var xml = Encoding.UTF8.GetString(ms.GetBuffer().AsSpan(0, (int)ms.Length));
-        return xml;
+        return Serialize_SystemXml(DefaultObject);
     }
 
     [Benchmark(Description = "Serialize: XmlSerDe")]
     public string Serialize_XmlSerDe_Test()
     {
-        using var ms = new MemoryStream();
-        XmlSerializerDeserializer.Serialize(ms, DefaultObject, false);
-        var xml = Encoding.UTF8.GetString(ms.GetBuffer().AsSpan(0, (int)ms.Length));
-        return xml;
+        return Serialize_XmlSerDe(DefaultObject);
     }
+
 
     [Benchmark(Description = "Serialize: XmlSerDe (est)")]
     public string Serialize_XmlSerDe_Estimated_Test()
     {
-        var esimatedSize = 2100; //TODO: estimate it via XmlSerializerDeserializer.EstimateSerializedSize(ref esimatedCharCount);
-        var buffer = ArrayPool<byte>.Shared.Rent(esimatedSize);
-        using var ms = new MemoryStream(buffer, 0, esimatedSize, true, false);
+        var estimatedSize = 2100; //TODO: estimate it via XmlSerializerDeserializer.EstimateSerializedSize(ref esimatedCharCount);
+        var buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
+        using var ms = new MemoryStream(buffer, 0, estimatedSize, true, false);
         XmlSerializerDeserializer.Serialize(ms, DefaultObject, false);
         var xml = Encoding.UTF8.GetString(buffer.AsSpan(0, (int)ms.Length));
         ArrayPool<byte>.Shared.Return(buffer);
         return xml;
     }
 
+    #endregion
 
-
+    #region deserialize
 
     [Benchmark(Description = "Deserialize: System.Xml")]
     public InfoContainer Deserialize_SystemXml_Test()
@@ -407,32 +170,9 @@ public class SerializeDeserializeFixture
     [Benchmark(Description = "Deserialize: XmlSerDe")]
     public InfoContainer Deserialize_XmlSerDe_Test()
     {
-        InfoContainer r = Deserialize_XmlSerDe(AuxXml.AsSpan());
-        return r;
+        return Deserialize_XmlSerDe(AuxXml.AsSpan());
     }
 
-
-
-
-
-
-
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private InfoContainer Deserialize_SystemXml(string xml)
-    {
-        using (var reader = new StringReader(xml))
-        {
-            var r = (InfoContainer)_xmlSerializerContainer.Deserialize(reader);
-            return r;
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static InfoContainer Deserialize_XmlSerDe(ReadOnlySpan<char> xml)
-    {
-        XmlSerializerDeserializer.Deserialize(xml, out InfoContainer r);
-        return r;
-    }
+    #endregion
 
 }
