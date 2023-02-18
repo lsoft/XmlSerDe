@@ -24,8 +24,8 @@ namespace XmlSerDe.Generator.Producer
         public static readonly string BuiltinSerializeHeadFullMethodName = BuiltinFullClassName + "." + HeadSerializeMethodName;
         public static readonly string BuiltinSerializeHeadlessFullMethodName = BuiltinFullClassName + "." + HeadlessSerializeMethodName;
 
-        public static readonly string WriteStringToStreamFullMethodName = BuiltinFullClassName + "." + BuiltinSourceProducer.WriteStringToStreamMethodName;
-        public static readonly string WriteEncodedStringToStreamFullMethodName = BuiltinFullClassName + "." + BuiltinSourceProducer.WriteEncodedStringToStreamMethodName;
+        public static readonly string WriteStringFullMethodName = BuiltinFullClassName + "." + BuiltinSourceProducer.WriteStringMethodName;
+        //public static readonly string WriteEncodedStringFullMethodName = BuiltinFullClassName + "." + BuiltinSourceProducer.WriteEncodedStringMethodName;
 
         private readonly Compilation _compilation;
         private readonly INamedTypeSymbol _deSubject;
@@ -137,14 +137,14 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             var ssGlobalName = subject.ToGlobalDisplayString();
 
             _sb.AppendLine($$"""
-        public static void {{HeadSerializeMethodName}}(global::System.IO.Stream stream, {{ssGlobalName}} obj, bool appendXmlHead)
+        public static void {{HeadSerializeMethodName}}(global::System.Text.StringBuilder sb, {{ssGlobalName}} obj, bool appendXmlHead)
         {
             if(appendXmlHead)
             {
-                global::{{typeof(BuiltinSourceProducer).Namespace}}.{{BuiltinSourceProducer.BuiltinCodeParserClassName}}.{{BuiltinSourceProducer.AppendXmlHeadMethodName}}(stream);
+                global::{{typeof(BuiltinSourceProducer).Namespace}}.{{BuiltinSourceProducer.BuiltinCodeParserClassName}}.{{BuiltinSourceProducer.AppendXmlHeadMethodName}}(sb);
             }
 
-            {{HeadSerializeMethodName}}(stream, obj);
+            {{HeadSerializeMethodName}}(sb, obj);
         }
 
 """);
@@ -160,7 +160,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             var ssGlobalName = subject.ToGlobalDisplayString();
             
             _sb.AppendLine($$"""
-        private static void {{methodName}}(global::System.IO.Stream stream, {{ssGlobalName}} obj)
+        private static void {{methodName}}(global::System.Text.StringBuilder sb, {{ssGlobalName}} obj)
         {
 """);
 
@@ -187,9 +187,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 if(obj is {{derived.ToGlobalDisplayString()}} dobj)
                 {
-                    {{WriteStringToStreamFullMethodName}}(stream, @"<{{subject.Name}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.Name}}"">");
-                    {{HeadlessSerializeMethodName}}(stream, dobj);
-                    {{WriteStringToStreamFullMethodName}}(stream, "</{{subject.Name}}>");
+                    {{WriteStringFullMethodName}}(sb, @"<{{subject.Name}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.Name}}"">");
+                    {{HeadlessSerializeMethodName}}(sb, dobj);
+                    {{WriteStringFullMethodName}}(sb, "</{{subject.Name}}>");
                     return;
                 }
             }
@@ -202,7 +202,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 if(obj is {{derived.ToGlobalDisplayString()}} dobj)
                 {
-                    {{HeadlessSerializeMethodName}}(stream, dobj);
+                    {{HeadlessSerializeMethodName}}(sb, dobj);
                     return;
                 }
             }
@@ -217,7 +217,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                     _sb.AppendLine($$"""
 
-            {{WriteStringToStreamFullMethodName}}(stream, "<{{subject.Name}}>");
+            {{WriteStringFullMethodName}}(sb, "<{{subject.Name}}>");
 
 """);
                 }
@@ -232,7 +232,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 {
                     _sb.AppendLine($$"""
 
-            {{WriteStringToStreamFullMethodName}}(stream, "</{{subject.Name}}>");
+            {{WriteStringFullMethodName}}(sb, "</{{subject.Name}}>");
 
 """);
                 }
@@ -284,9 +284,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             if (BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType, out var memberBuiltin))
             {
                 _sb.AppendLine($$"""
-                {{WriteStringToStreamFullMethodName}}(stream, "<{{member.Name}}>");
-                {{BuiltinSerializeHeadlessFullMethodName}}(stream, obj.{{member.Name}});
-                {{WriteStringToStreamFullMethodName}}(stream, "</{{member.Name}}>");
+                {{WriteStringFullMethodName}}(sb, "<{{member.Name}}>");
+                {{BuiltinSerializeHeadlessFullMethodName}}(sb, obj.{{member.Name}});
+                {{WriteStringFullMethodName}}(sb, "</{{member.Name}}>");
 
 """);
 
@@ -294,9 +294,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             else if (memberType.EnumUnderlyingType != null)
             {
                 _sb.AppendLine($$"""
-                {{WriteStringToStreamFullMethodName}}(stream, "<{{member.Name}}>");
-                {{WriteStringToStreamFullMethodName}}(stream, obj.{{member.Name}}.ToString());
-                {{WriteStringToStreamFullMethodName}}(stream, "</{{member.Name}}>");
+                {{WriteStringFullMethodName}}(sb, "<{{member.Name}}>");
+                {{WriteStringFullMethodName}}(sb, obj.{{member.Name}}.ToString());
+                {{WriteStringFullMethodName}}(sb, "</{{member.Name}}>");
 """);
             }
             //TODO array and other collections
@@ -306,7 +306,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 )
             {
                 _sb.AppendLine($$"""
-                {{WriteStringToStreamFullMethodName}}(stream, "<{{member.Name}}>");
+                {{WriteStringFullMethodName}}(sb, "<{{member.Name}}>");
 
 """);
 
@@ -318,7 +318,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                 for(var index = 0; index < obj.{{member.Name}}.Count; index++)
                 {
-                    {{BuiltinSerializeHeadFullMethodName}}(stream, obj.{{member.Name}}[index]);
+                    {{BuiltinSerializeHeadFullMethodName}}(sb, obj.{{member.Name}}[index]);
                 }
 """);
                 }
@@ -328,13 +328,13 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                 for(var index = 0; index < obj.{{member.Name}}.Count; index++)
                 {
-                    {{HeadSerializeMethodName}}(stream, obj.{{member.Name}}[index]);
+                    {{HeadSerializeMethodName}}(sb, obj.{{member.Name}}[index]);
                 }
 """);
                 }
 
                 _sb.AppendLine($$"""
-                {{WriteStringToStreamFullMethodName}}(stream, "</{{member.Name}}>");
+                {{WriteStringFullMethodName}}(sb, "</{{member.Name}}>");
 
 """);
 
@@ -351,9 +351,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 {
                     if(obj.{{member.Name}} is {{derived.ToGlobalDisplayString()}} dobj)
                     {
-                        {{WriteStringToStreamFullMethodName}}(stream, @"<{{member.Name}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.Name}}"">");
-                        {{HeadlessSerializeMethodName}}(stream, dobj);
-                        {{WriteStringToStreamFullMethodName}}(stream, "</{{member.Name}}>");
+                        {{WriteStringFullMethodName}}(sb, @"<{{member.Name}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.Name}}"">");
+                        {{HeadlessSerializeMethodName}}(sb, dobj);
+                        {{WriteStringFullMethodName}}(sb, "</{{member.Name}}>");
                     }
                 }
 
@@ -363,9 +363,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 else
                 {
                     _sb.AppendLine($$"""
-                {{WriteStringToStreamFullMethodName}}(stream, @"<{{member.Name}}>");
-                {{HeadlessSerializeMethodName}}(stream, obj.{{member.Name}});
-                {{WriteStringToStreamFullMethodName}}(stream, "</{{member.Name}}>");
+                {{WriteStringFullMethodName}}(sb, @"<{{member.Name}}>");
+                {{HeadlessSerializeMethodName}}(sb, obj.{{member.Name}});
+                {{WriteStringFullMethodName}}(sb, "</{{member.Name}}>");
 """);
                 }
             }

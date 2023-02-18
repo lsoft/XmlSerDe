@@ -65,12 +65,20 @@ For the following XML document:
 the performance is:
 
 ```
-|                    Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
-|-------------------------- |----------:|----------:|----------:|-------:|----------:|
-|   'Serialize: System.Xml' |  8.320 us | 0.1332 us | 0.1246 us | 3.3569 |   14064 B |
-|     'Serialize: XmlSerDe' |  5.041 us | 0.1006 us | 0.1235 us | 1.5640 |    6569 B |
-| 'Deserialize: System.Xml' | 15.838 us | 0.2321 us | 0.3099 us | 3.9063 |   16392 B |
-|   'Deserialize: XmlSerDe' | 12.033 us | 0.2402 us | 0.2571 us | 0.1678 |     736 B |
+BenchmarkDotNet=v0.13.5, OS=Windows 10 (10.0.19045.2604/22H2/2022Update)
+AMD Ryzen 7 4700U with Radeon Graphics, 1 CPU, 8 logical and 8 physical cores
+.NET SDK=7.0.200-preview.22628.1
+  [Host]   : .NET 6.0.14 (6.0.1423.7309), X64 RyuJIT AVX2
+  .NET 6.0 : .NET 6.0.14 (6.0.1423.7309), X64 RyuJIT AVX2
+
+Job=.NET 6.0  Runtime=.NET 6.0
+
+|                      Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
+|---------------------------- |----------:|----------:|----------:|-------:|----------:|
+|     'Serialize: System.Xml' |  7.734 us | 0.0516 us | 0.0483 us | 6.6986 |   14064 B |
+|       'Serialize: XmlSerDe' |  2.581 us | 0.0190 us | 0.0177 us | 3.2921 |    6889 B |
+|   'Deserialize: System.Xml' | 13.814 us | 0.0391 us | 0.0327 us | 7.8125 |   16392 B |
+|     'Deserialize: XmlSerDe' | 10.664 us | 0.0194 us | 0.0172 us | 0.3510 |     736 B | <-- allocations!
 
 ```
 
@@ -86,9 +94,9 @@ the code:
 
     public string Serialize(InfoContainer subject)
     {
-        using var ms = new MemoryStream();
-        XmlSerializerDeserializer.Serialize(ms, subject, false);
-        var xml = Encoding.UTF8.GetString(ms.ToArray());
+        var sb = new StringBuilder();
+        XmlSerializerDeserializer.Serialize(sb, subject, false);
+        var xml = sb.ToString();
         return xml;
     }
 
@@ -105,7 +113,7 @@ the code:
     [XmlSubject(typeof(Derived2Info), false)]
     [XmlDerivedSubject(typeof(BaseInfo), typeof(Derived3Info))]
     [XmlSubject(typeof(Derived3Info), false)]
-    [XmlFactory(typeof(InfoContainer), "global::" + "XmlSerDe.PerformanceTests.Subject" + "." + nameof(CachedInfoContainer) + "." + nameof(CachedInfoContainer.Reuse) + "()")]
+    [XmlFactory(typeof(InfoContainer), "global::" + "XmlSerDe.Tests.Complex.Subject" + "." + nameof(CachedInfoContainer) + "." + nameof(CachedInfoContainer.Reuse) + "()")]
     public partial class XmlSerializerDeserializer
     {
     }

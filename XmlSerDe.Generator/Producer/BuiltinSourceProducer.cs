@@ -15,8 +15,8 @@ namespace XmlSerDe.Generator.Producer
         public const string BuiltinCodeParserClassName = "BuiltinCodeParser";
         public const string CutXmlHeadMethodName = "CutXmlHead";
         public const string AppendXmlHeadMethodName = "AppendXmlHead";
-        public const string WriteStringToStreamMethodName = "WriteStringToStream";
-        public const string WriteEncodedStringToStreamMethodName = "WriteEncodedStringToStream";
+        public const string WriteStringMethodName = "WriteString";
+        public const string WriteEncodedStringMethodName = "WriteEncodedString";
 
         private readonly Compilation _compilation;
         public readonly BuiltinCollection Builtins;
@@ -53,27 +53,27 @@ namespace XmlSerDe.Generator.Producer
                         new Builtin("global::System.DateTime.Parse({0})", compilation.DateTime(), "dateTime", "{0}.ToString(\"yyyy-MM-ddTHH:mm:ss.fffffffK\")", false),
                         new Builtin("global::System.DateTime.Parse({0})", compilation.NDateTime(), "dateTime", "{0}.HasValue ? {0}.Value.ToString(\"yyyy-MM-ddTHH:mm:ss.fffffffK\") : {0}.ToString()", false),
 
-                        new Builtin("global::System.Guid.Parse({0})", compilation.Guid(), "guid", "{0}.ToString()", false),
-                        new Builtin("global::System.Guid.Parse({0})", compilation.NGuid(), "guid", "{0}.ToString()", false),
+                        new Builtin("global::System.Guid.Parse({0})", compilation.Guid(), "guid", "{0}", false),
+                        new Builtin("global::System.Guid.Parse({0})", compilation.NGuid(), "guid", "{0}", false),
 
                         new Builtin("global::System.Boolean.Parse({0})", compilation.Bool(), "boolean", @"({0} ? ""true"" : ""false"")", false),
                         new Builtin("global::System.Net.WebUtility.HtmlDecode({0}.ToString())", compilation.String(), "string", "{0}", true),
 
-                        new Builtin("global::System.SByte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.SByte(), "byte", "{0}.ToString()", false),
-                        new Builtin("global::System.Byte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Byte(), "unsignedByte", "{0}.ToString()", false),
+                        new Builtin("global::System.SByte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.SByte(), "byte", "{0}", false),
+                        new Builtin("global::System.Byte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Byte(), "unsignedByte", "{0}", false),
 
-                        new Builtin("global::System.UInt16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt16(), "unsignedShort", "{0}.ToString()", false),
-                        new Builtin("global::System.Int16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int16(), "short", "{0}.ToString()", false),
+                        new Builtin("global::System.UInt16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt16(), "unsignedShort", "{0}", false),
+                        new Builtin("global::System.Int16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int16(), "short", "{0}", false),
 
-                        new Builtin("global::System.UInt32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt32(), "unsignedInt", "{0}.ToString()", false),
-                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int32(), "int", "{0}.ToString()", false),
-                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt32(), "int", "{0}.ToString()", false),
+                        new Builtin("global::System.UInt32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt32(), "unsignedInt", "{0}", false),
+                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int32(), "int", "{0}", false),
+                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt32(), "int", "{0}", false),
 
-                        new Builtin("global::System.UInt64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt64(), "unsignedLong", "{0}.ToString()", false),
-                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int64(), "long", "{0}.ToString()", false),
-                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt64(), "long", "{0}.ToString()", false),
+                        new Builtin("global::System.UInt64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt64(), "unsignedLong", "{0}", false),
+                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int64(), "long", "{0}", false),
+                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt64(), "long", "{0}", false),
 
-                        new Builtin("global::System.Decimal.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Decimal(), "decimal", "{0}.ToString()", false),
+                        new Builtin("global::System.Decimal.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Decimal(), "decimal", "{0}", false),
                         //TODO other builtin branches
                     }
                 );
@@ -93,25 +93,13 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 
     public static class {{BuiltinCodeParserClassName}}
     {
-        private static readonly byte[] XmlHeadBytes = global::System.Text.Encoding.UTF8.GetBytes("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
-
-        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        private static void DecodeAndWrite(global::System.IO.Stream stream, string inputString, System.Span<byte> span)
-        {
-            if(inputString is null)
-            {
-                return;
-            }
-
-            global::System.Text.Encoding.UTF8.GetBytes(inputString.AsSpan(), span);
-            stream.Write(span);
-        }
+        private static readonly string XmlHead = "<?xml version=\"1.0\" encoding=\"utf-8\"?>";
 
 
 """);
 
-            GenerateWriteStringToStream(sb);
-            GenerateWriteEncodedStringToStream(sb);
+            GenerateWriteString(sb);
+            GenerateWriteEncodedString(sb);
             GenerateAppendXmlHeadMethod(sb);
             GenerateCutXmlHeadMethod(sb);
 
@@ -126,76 +114,26 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             return sb.ToString();
         }
 
-        private void GenerateWriteStringToStream(StringBuilder sb)
+        private void GenerateWriteString(StringBuilder sb)
         {
             sb.AppendLine($$"""
-        //stackalloc here: do not inline this method!
-        public static void {{WriteStringToStreamMethodName}}(global::System.IO.Stream stream, string inputString)
+        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public static void {{WriteStringMethodName}}(global::System.Text.StringBuilder sb, string inputString)
         {
-            const int MaxStackallocBufferSize = 256;
-
-            if(inputString is null)
-            {
-                return;
-            }
-
-            var byteCount = global::System.Text.Encoding.UTF8.GetByteCount(inputString);
-            if(byteCount < MaxStackallocBufferSize)
-            {
-                Span<byte> span = stackalloc byte[byteCount];
-                DecodeAndWrite(stream, inputString, span);
-            }
-            else
-            {
-                var buffer = global::System.Buffers.ArrayPool<byte>.Shared.Rent(byteCount);
-
-                Span<byte> span = buffer.AsSpan(0, byteCount);
-                DecodeAndWrite(stream, inputString, span);
-
-                //we're expecting there will be no or very small amount of exceptions; so we are allowed not to use try-finally
-                //please see the documentation of the following Rent method:
-                //Failure to return a rented buffer is not a fatal error. However, it may lead to decreased application performance, as the pool may need to create a new buffer to replace the lost one.
-                //https://learn.microsoft.com/en-us/dotnet/api/system.buffers.arraypool-1.rent?view=net-7.0#remarks
-                global::System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
-            }
+            sb.Append(inputString);
         }
 
 """);
         }
 
-        private void GenerateWriteEncodedStringToStream(StringBuilder sb)
+        private void GenerateWriteEncodedString(StringBuilder sb)
         {
             sb.AppendLine($$"""
-        //stackalloc here: do not inline this method!
-        public static void {{WriteEncodedStringToStreamMethodName}}(global::System.IO.Stream stream, string inputString)
+        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public static void {{WriteEncodedStringMethodName}}(global::System.Text.StringBuilder sb, string inputString)
          {
-            const int MaxStackallocBufferSize = 256;
-
-            if(inputString is null)
-            {
-                return;
-            }
-
             var encodedString = global::System.Net.WebUtility.HtmlEncode(inputString);
-            var byteCount = global::System.Text.Encoding.UTF8.GetByteCount(encodedString);
-            if (byteCount < MaxStackallocBufferSize)
-            {
-                Span<byte> span = stackalloc byte[byteCount];
-                DecodeAndWrite(stream, encodedString, span);
-            }
-            else
-            {
-                var buffer = global::System.Buffers.ArrayPool<byte>.Shared.Rent(byteCount);
-
-                Span<byte> span = buffer.AsSpan(0, byteCount);
-                DecodeAndWrite(stream, encodedString, span);
-
-                //we're expecting there will be no or very small amount of exceptions; so we are allowed not to use try-finally
-                //please see the documentation of the following Rent method:
-                //Failure to return a rented buffer is not a fatal error. However, it may lead to decreased application performance, as the pool may need to create a new buffer to replace the lost one.
-                //https://learn.microsoft.com/en-us/dotnet/api/system.buffers.arraypool-1.rent?view=net-7.0#remarks
-                global::System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
-            }
+            sb.Append(encodedString);
         }
 
 """);
@@ -204,9 +142,10 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
         private void GenerateAppendXmlHeadMethod(StringBuilder sb)
         {
             sb.AppendLine($$"""
-        public static void {{AppendXmlHeadMethodName}}(global::System.IO.Stream stream)
+        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public static void {{AppendXmlHeadMethodName}}(global::System.Text.StringBuilder sb)
         {
-            stream.Write(XmlHeadBytes, 0, XmlHeadBytes.Length);
+            sb.Append(XmlHead);
         }
 
 """);
@@ -236,35 +175,46 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 
         private void GenerateSerializeMethods(StringBuilder sb)
         {
-            foreach (var builtin in Builtins.Builtins)
+            for (var bi = 0; bi < Builtins.Builtins.Count; bi++)
             {
-                var toStringClause = string.Format(
-                    builtin.ToStringClause,
+                var builtin = Builtins.Builtins[bi];
+
+                var prepareBeforeWriteClause = string.Format(
+                    builtin.PrepareBeforeWriteClause,
                     "obj"
                     );
 
-                var methodName = builtin.IsNeedToGuardWhenEncoded
-                    ? WriteEncodedStringToStreamMethodName
-                    : WriteStringToStreamMethodName
-                    ;
+                var buildWriteValue = builtin.IsNeedToGuardWhenEncoded
+                    ? $"global::System.Net.WebUtility.HtmlEncode({prepareBeforeWriteClause})"
+                    : prepareBeforeWriteClause;
+
+                var xmlTypeNameOpenVar = $"XmlTypeName{bi}";
+                var xmlTypeNameCloseVar = $"XmlTypeNameClose{bi}";
 
                 sb.AppendLine($$"""
-        public static void {{ClassSourceProducer.HeadSerializeMethodName}}(global::System.IO.Stream stream, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
+        private const string {{xmlTypeNameOpenVar}} = "<{{builtin.XmlTypeName}}>";
+        private const string {{xmlTypeNameCloseVar}} = "</{{builtin.XmlTypeName}}>";
+""");
+
+                sb.AppendLine($$"""
+        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public static void {{ClassSourceProducer.HeadSerializeMethodName}}(global::System.Text.StringBuilder sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
         {
-            {{WriteStringToStreamMethodName}}(stream, "<{{builtin.XmlTypeName}}>");
+            sb.Append({{xmlTypeNameOpenVar}});
 
-            var writeValue = {{toStringClause}};
-            {{methodName}}(stream, writeValue);
+            var writeValue = {{buildWriteValue}};
+            sb.Append(writeValue);
 
-            {{WriteStringToStreamMethodName}}(stream, "</{{builtin.XmlTypeName}}>");
+            sb.Append({{xmlTypeNameCloseVar}});
         }
 """);
 
                 sb.AppendLine($$"""
-        public static void {{ClassSourceProducer.HeadlessSerializeMethodName}}(global::System.IO.Stream stream, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
+        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public static void {{ClassSourceProducer.HeadlessSerializeMethodName}}(global::System.Text.StringBuilder sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
         {
-            var writeValue = {{toStringClause}};
-            {{methodName}}(stream, writeValue);
+            var writeValue = {{buildWriteValue}};
+            sb.Append(writeValue);
         }
 """);
             }

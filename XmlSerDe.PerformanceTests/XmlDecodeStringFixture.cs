@@ -69,49 +69,49 @@ public class XmlDecodeStringFixture
     //| SerializeToStringBuilder |  65.15 ns | 1.129 ns | 0.943 ns |  0.45 | 0.0669 |     280 B |        0.67 |
 
 
-    [Benchmark(Baseline = true)]
-    public string SerializeToStream()
-    {
-        using var ms = new MemoryStream();
-        SerializeToStream(ms, new XmlObject1());
-        var xml = Encoding.UTF8.GetString(ms.GetBuffer().AsSpan(0, (int)ms.Length));
-        return xml;
-    }
+    //[Benchmark(Baseline = true)]
+    //public string SerializeToStream()
+    //{
+    //    using var ms = new MemoryStream();
+    //    SerializeToStream(ms, new XmlObject1());
+    //    var xml = Encoding.UTF8.GetString(ms.GetBuffer().AsSpan(0, (int)ms.Length));
+    //    return xml;
+    //}
 
-    [Benchmark]
-    public string SerializeToStringBuilder()
-    {
-        var sb = new StringBuilder();
-        SerializeToStringBuilder(sb, new XmlObject1());
-        return sb.ToString();
-    }
+    //[Benchmark]
+    //public string SerializeToStringBuilder()
+    //{
+    //    var sb = new StringBuilder();
+    //    SerializeToStringBuilder(sb, new XmlObject1());
+    //    return sb.ToString();
+    //}
 
-    private void SerializeToStream(global::System.IO.Stream stream, XmlObject1 obj)
-    {
-        if (obj is null)
-        {
-            return;
-        }
+    //private void SerializeToStream(global::System.IO.Stream stream, XmlObject1 obj)
+    //{
+    //    if (obj is null)
+    //    {
+    //        return;
+    //    }
 
-        global::XmlSerDe.Generator.Producer.BuiltinCodeParser.WriteStringToStream(stream, "<XmlObject1>");
-        global::XmlSerDe.Generator.Producer.BuiltinCodeParser.WriteStringToStream(stream, "</XmlObject1>");
-    }
+    //    global::XmlSerDe.Generator.Producer.BuiltinCodeParser.WriteStringToStream(stream, "<XmlObject1>");
+    //    global::XmlSerDe.Generator.Producer.BuiltinCodeParser.WriteStringToStream(stream, "</XmlObject1>");
+    //}
 
-    private void SerializeToStringBuilder(StringBuilder sb, XmlObject1 obj)
-    {
-        if (obj is null)
-        {
-            return;
-        }
+    //private void SerializeToStringBuilder(StringBuilder sb, XmlObject1 obj)
+    //{
+    //    if (obj is null)
+    //    {
+    //        return;
+    //    }
 
-        WriteStringToStream(sb, "<XmlObject1>");
-        WriteStringToStream(sb, "</XmlObject1>");
-    }
+    //    WriteStringToStream(sb, "<XmlObject1>");
+    //    WriteStringToStream(sb, "</XmlObject1>");
+    //}
 
-    public static void WriteStringToStream(StringBuilder sb, string inputString)
-    {
-        sb.Append(inputString);
-    }
+    //public static void WriteStringToStream(StringBuilder sb, string inputString)
+    //{
+    //    sb.Append(inputString);
+    //}
 
 
     public class XmlObject1

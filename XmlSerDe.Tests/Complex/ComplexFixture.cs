@@ -13,7 +13,7 @@ namespace XmlSerDe.Tests.Complex
 {
     public class ComplexFixture
     {
-        public static readonly XmlSerializer XmlSerializerContainer = new XmlSerializer(
+        public static readonly XmlSerializer SystemXmlSerializer = new XmlSerializer(
             typeof(InfoContainer),
             new[]
             {
@@ -169,7 +169,7 @@ namespace XmlSerDe.Tests.Complex
             //deserialize with different deserializer
             var first = Deserialize_SystemXml(ser_xmlserde);
             var second = Deserialize_XmlSerDe(
-                XmlSerDe.Generator.Producer.BuiltinCodeParser.CutXmlHead(
+                Generator.Producer.BuiltinCodeParser.CutXmlHead(
                     ser_system.AsSpan()
                     )
                 );
@@ -268,9 +268,9 @@ namespace XmlSerDe.Tests.Complex
             InfoContainer infoContainer
             )
         {
-            using var ms = new MemoryStream();
-            XmlSerializerDeserializer.Serialize(ms, infoContainer, false);
-            var xml = Encoding.UTF8.GetString(ms.GetBuffer().AsSpan(0, (int)ms.Length));
+            var sb = new StringBuilder();
+            XmlSerializerDeserializer.Serialize(sb, infoContainer, false);
+            var xml = sb.ToString();
             return xml;
         }
 
@@ -280,7 +280,7 @@ namespace XmlSerDe.Tests.Complex
             )
         {
             using var ms = new MemoryStream();
-            ComplexFixture.XmlSerializerContainer.Serialize(ms, infoContainer);
+            SystemXmlSerializer.Serialize(ms, infoContainer);
             var xml = Encoding.UTF8.GetString(ms.GetBuffer().AsSpan(0, (int)ms.Length));
             return xml;
         }
@@ -291,7 +291,7 @@ namespace XmlSerDe.Tests.Complex
         {
             using (var reader = new StringReader(xml))
             {
-                var r = (InfoContainer)XmlSerializerContainer.Deserialize(reader);
+                var r = (InfoContainer)SystemXmlSerializer.Deserialize(reader);
                 return r;
             }
         }

@@ -123,6 +123,14 @@ estimation of result string length:
 |   'Deserialize: System.Xml' | 13.892 us | 0.0953 us | 0.0845 us | 7.8125 |   16392 B |
 |     'Deserialize: XmlSerDe' | 10.754 us | 0.0444 us | 0.0393 us | 0.3510 |     736 B |
 
+----------------------------  Serialize to StringBuilder  ------------------------------
+|                      Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
+|---------------------------- |----------:|----------:|----------:|-------:|----------:|
+|     'Serialize: System.Xml' |  7.734 us | 0.0516 us | 0.0483 us | 6.6986 |   14064 B |
+|       'Serialize: XmlSerDe' |  2.581 us | 0.0190 us | 0.0177 us | 3.2921 |    6889 B |
+| 'Serialize: XmlSerDe (est)' |  2.325 us | 0.0092 us | 0.0082 us | 2.3117 |    4841 B | <---
+|   'Deserialize: System.Xml' | 13.814 us | 0.0391 us | 0.0327 us | 7.8125 |   16392 B |
+|     'Deserialize: XmlSerDe' | 10.664 us | 0.0194 us | 0.0172 us | 0.3510 |     736 B |
 
 */
 
@@ -148,12 +156,10 @@ public class SerializeDeserializeFixture : ComplexFixture
     [Benchmark(Description = "Serialize: XmlSerDe (est)")]
     public string Serialize_XmlSerDe_Estimated_Test()
     {
-        var estimatedSize = 2100; //TODO: estimate it via XmlSerializerDeserializer.EstimateSerializedSize(ref esimatedCharCount);
-        var buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-        using var ms = new MemoryStream(buffer, 0, estimatedSize, true, false);
-        XmlSerializerDeserializer.Serialize(ms, DefaultObject, false);
-        var xml = Encoding.UTF8.GetString(buffer.AsSpan(0, (int)ms.Length));
-        ArrayPool<byte>.Shared.Return(buffer);
+        var estimatedSize = 1100; //TODO: estimate it via XmlSerializerDeserializer.EstimateSerializedSize(ref esimatedCharCount);
+        var sb = new StringBuilder(estimatedSize);
+        XmlSerializerDeserializer.Serialize(sb, DefaultObject, false);
+        var xml = sb.ToString();
         return xml;
     }
 

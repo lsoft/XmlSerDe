@@ -27,13 +27,13 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1_Serialize_Test0()
         {
-            using var ms = new MemoryStream();
+            var sb = new StringBuilder();
             XmlSerializerDeserializer1.Serialize(
-                ms,
+                sb,
                 new XmlObject1(),
                 false
                 );
-            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            var xml = sb.ToString();
             Xunit.Assert.Equal("<XmlObject1></XmlObject1>", xml);
         }
 
@@ -101,9 +101,9 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject2_Serialize_Test1()
         {
-            using var ms = new MemoryStream();
+            var sb = new StringBuilder();
             XmlSerializerDeserializer2.Serialize(
-                ms,
+                sb,
                 new XmlObject2
                 {
                     IntProperty = 123,
@@ -111,7 +111,7 @@ namespace XmlSerDe.Tests
                 },
                 false
                 );
-            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            var xml = sb.ToString();
             Xunit.Assert.Equal(
                 @"<XmlObject2><StringProperty>hello</StringProperty><IntProperty>123</IntProperty></XmlObject2>",
                 xml
@@ -254,9 +254,9 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject6_Serialize_Test0()
         {
-            using var ms = new MemoryStream();
+            var sb = new StringBuilder();
             XmlSerializerDeserializer6.Serialize(
-                ms,
+                sb,
                 new XmlObject6
                 {
                     StringsProperty = new List<string>
@@ -267,7 +267,7 @@ namespace XmlSerDe.Tests
                 },
                 false
                 );
-            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            var xml = sb.ToString();
             Xunit.Assert.Equal(
                 @"<XmlObject6><StringsProperty><string>a</string><string>b</string></StringsProperty></XmlObject6>",
                 xml
@@ -324,9 +324,9 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject910_Serialize_Test1()
         {
-            using var ms = new MemoryStream();
+            var sb = new StringBuilder();
             XmlSerializerDeserializer910.Serialize(
-                ms,
+                sb,
                 new XmlObject10()
                 {
                     XmlObjectProperty = new XmlObject9Specific1
@@ -337,7 +337,7 @@ namespace XmlSerDe.Tests
                 },
                 false
                 );
-            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            var xml = sb.ToString();
             Xunit.Assert.Equal(
                 @"<XmlObject10><XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1""><IntProperty>123</IntProperty><StringProperty>a</StringProperty></XmlObjectProperty></XmlObject10>",
                 xml
@@ -395,9 +395,9 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1112_Serialize_Test0()
         {
-            using var ms = new MemoryStream();
+            var sb = new StringBuilder();
             XmlSerializerDeserializer1112.Serialize(
-                ms,
+                sb,
                 new XmlObject12()
                 {
                     XmlObjectProperty = new List<XmlObject11Abstract>
@@ -416,7 +416,7 @@ namespace XmlSerDe.Tests
                 },
                 false
                 );
-            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            var xml = sb.ToString();
             Xunit.Assert.Equal(
                 @"<XmlObject12><XmlObjectProperty><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><IntProperty>0</IntProperty><StringProperty>At0</StringProperty></XmlObject11Abstract><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><IntProperty>1</IntProperty><StringProperty>At1</StringProperty></XmlObject11Abstract></XmlObjectProperty></XmlObject12>",
                 xml
@@ -507,16 +507,16 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject15_Serialize_Test0()
         {
-            using var ms = new MemoryStream();
+            var sb = new StringBuilder();
             XmlSerializerDeserializer15.Serialize(
-                ms,
+                sb,
                 new XmlObject15()
                 {
                     XmlEnum15 = XmlEnum15.EnumValue1
-                    },
+                },
                 false
                 );
-            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            var xml = sb.ToString();
             Xunit.Assert.Equal(
                 @"<XmlObject15><XmlEnum15>EnumValue1</XmlEnum15></XmlObject15>",
                 xml
@@ -553,9 +553,9 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1617_Serialize_Test0()
         {
-            using var ms = new MemoryStream();
+            var sb = new StringBuilder();
             XmlSerializerDeserializer1617.Serialize(
-                ms,
+                sb,
                 new XmlObject17()
                 {
                     MyList = new List<XmlObject16>
@@ -566,7 +566,7 @@ namespace XmlSerDe.Tests
                 },
                 false
                 );
-            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            var xml = sb.ToString();
             Xunit.Assert.Equal(
                 @"<XmlObject17><MyList><XmlObject16><MyField>1</MyField></XmlObject16><XmlObject16><MyField>2</MyField></XmlObject16></MyList></XmlObject17>",
                 xml
@@ -596,23 +596,6 @@ namespace XmlSerDe.Tests
         //        }
         //    }
         //}
-
-        //namespace XmlSerDe.Tests
-        //{
-        //    [XmlSerDeSubject(typeof(XmlObject1))]
-        //    public partial class XmlSerializerDeserializer
-        //    {
-        //    }
-
-        //    public class XmlObject1
-        //    {
-        //    }
-        //}
-        //        ";
-
-        //            var result = TestHelper.Verify(incoming);
-        //        }
-
 
     }
 
