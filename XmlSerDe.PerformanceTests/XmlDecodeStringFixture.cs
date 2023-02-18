@@ -1,6 +1,7 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 using System;
+using System.Buffers;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
@@ -32,6 +33,53 @@ public class XmlDecodeStringFixture
     {
     }
 
+    [Benchmark]
+    public void ViaStringBuilder()
+    {
+        var sb = new StringBuilder();
+
+        for (var i = 0; i < 100; i++)
+        {
+            var s = "q123123dfghrdjtyk";
+            sb.Append(s);
+        }
+
+        var rs = sb.ToString();
+        var byteCount = System.Text.Encoding.UTF8.GetByteCount(rs);
+        var buffer = ArrayPool<byte>.Shared.Rent(byteCount);
+        System.Text.Encoding.UTF8.GetBytes(rs, buffer.AsSpan(0, byteCount));
+        //fake write to some stream
+        ArrayPool<byte>.Shared.Return(buffer);
+    }
+
+
+    [Benchmark]
+    public void ViaFakeStringBuilder()
+    {
+        var sb = new FakeStringBuilder();
+
+        for (var i = 0; i < 100; i++)
+        {
+            var s = "q123123dfghrdjtyk";
+            sb.Append(s);
+        }
+    }
+
+    public class FakeStringBuilder
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void Append(string s)
+        {
+            var byteCount = System.Text.Encoding.UTF8.GetByteCount(s);
+            var buffer = ArrayPool<byte>.Shared.Rent(byteCount);
+            System.Text.Encoding.UTF8.GetBytes(s, buffer.AsSpan(0, byteCount));
+            //fake write to some stream
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+    }
+
+
     //[Benchmark]
     //public string Standard()
     //{
@@ -54,7 +102,7 @@ public class XmlDecodeStringFixture
     //}
 
 
-    #region what the targer of serialization?
+    #region what the target of serialization?
 
     //return byte[]:
     //|                   Method |      Mean |    Error |   StdDev | Ratio |   Gen0 | Allocated | Alloc Ratio |

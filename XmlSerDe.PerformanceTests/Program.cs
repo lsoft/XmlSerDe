@@ -22,9 +22,9 @@ namespace XmlSerDe.PerformanceTests
             new SerializeDeserializeFixture();
 #else
 
-            BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(SerializeDeserializeFixture));
+            //BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(SerializeDeserializeFixture));
             //BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(OtherFixture));
-            //BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(XmlDecodeStringFixture));
+            BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(XmlDecodeStringFixture));
 
             //var span = DeserializeFixture.AuxXml.AsSpan();
             //for (var cc = 0; cc < 250000; cc++)
