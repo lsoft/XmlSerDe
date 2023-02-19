@@ -169,7 +169,7 @@ namespace XmlSerDe.Tests.Complex
             //deserialize with different deserializer
             var first = Deserialize_SystemXml(ser_xmlserde);
             var second = Deserialize_XmlSerDe(
-                Generator.Producer.BuiltinCodeParser.CutXmlHead(
+                Generator.Producer.BuiltinCodeHelper.CutXmlHead(
                     ser_system.AsSpan()
                     )
                 );
@@ -268,7 +268,7 @@ namespace XmlSerDe.Tests.Complex
             InfoContainer infoContainer
             )
         {
-            var sb = new StringBuilder();
+            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
             XmlSerializerDeserializer.Serialize(sb, infoContainer, false);
             var xml = sb.ToString();
             return xml;

@@ -123,14 +123,21 @@ estimation of result string length:
 |   'Deserialize: System.Xml' | 13.892 us | 0.0953 us | 0.0845 us | 7.8125 |   16392 B |
 |     'Deserialize: XmlSerDe' | 10.754 us | 0.0444 us | 0.0393 us | 0.3510 |     736 B |
 
-----------------------------  Serialize to StringBuilder  ------------------------------
+---------------------  Serialize to DefaultStringBuilderExhauster  ---------------------
+x|                      Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
+x|---------------------------- |----------:|----------:|----------:|-------:|----------:|
+x|     'Serialize: System.Xml' |  7.733 us | 0.0278 us | 0.0260 us | 6.6986 |   14064 B |
+x|       'Serialize: XmlSerDe' |  2.646 us | 0.0061 us | 0.0057 us | 3.3073 |    6921 B |
+x| 'Serialize: XmlSerDe (est)' |  2.308 us | 0.0168 us | 0.0157 us | 2.3270 |    4873 B |
+x|   'Deserialize: System.Xml' | 13.954 us | 0.0587 us | 0.0521 us | 7.8125 |   16392 B |
+x|     'Deserialize: XmlSerDe' | 10.632 us | 0.0371 us | 0.0329 us | 0.3510 |     736 B |
 |                      Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
 |---------------------------- |----------:|----------:|----------:|-------:|----------:|
-|     'Serialize: System.Xml' |  7.734 us | 0.0516 us | 0.0483 us | 6.6986 |   14064 B |
-|       'Serialize: XmlSerDe' |  2.581 us | 0.0190 us | 0.0177 us | 3.2921 |    6889 B |
-| 'Serialize: XmlSerDe (est)' |  2.325 us | 0.0092 us | 0.0082 us | 2.3117 |    4841 B | <---
-|   'Deserialize: System.Xml' | 13.814 us | 0.0391 us | 0.0327 us | 7.8125 |   16392 B |
-|     'Deserialize: XmlSerDe' | 10.664 us | 0.0194 us | 0.0172 us | 0.3510 |     736 B |
+|     'Serialize: System.Xml' |  7.697 us | 0.0406 us | 0.0360 us | 6.6986 |   14064 B |
+|       'Serialize: XmlSerDe' |  2.568 us | 0.0028 us | 0.0024 us | 3.3073 |    6921 B |
+| 'Serialize: XmlSerDe (est)' |  2.664 us | 0.0307 us | 0.0287 us | 2.4185 |    5065 B |
+|   'Deserialize: System.Xml' | 13.895 us | 0.0449 us | 0.0375 us | 7.8125 |   16392 B |
+|     'Deserialize: XmlSerDe' | 10.468 us | 0.0129 us | 0.0108 us | 0.3510 |     736 B |
 
 */
 
@@ -152,14 +159,18 @@ public class SerializeDeserializeFixture : ComplexFixture
         return Serialize_XmlSerDe(DefaultObject);
     }
 
-
     [Benchmark(Description = "Serialize: XmlSerDe (est)")]
     public string Serialize_XmlSerDe_Estimated_Test()
     {
-        var estimatedSize = 1100; //TODO: estimate it via XmlSerializerDeserializer.EstimateSerializedSize(ref esimatedCharCount);
-        var sb = new StringBuilder(estimatedSize);
-        XmlSerializerDeserializer.Serialize(sb, DefaultObject, false);
-        var xml = sb.ToString();
+        var dlee = new global::XmlSerDe.Generator.EmbeddedCode.DefaultLengthEstimatorExhauster();
+        XmlSerializerDeserializer.Serialize(dlee, DefaultObject, false);
+        var estimateXmlLength = dlee.EstimatedTotalLength;
+
+        var dsbe = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster(
+            new StringBuilder(estimateXmlLength)
+            );
+        XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
+        var xml = dsbe.ToString();
         return xml;
     }
 

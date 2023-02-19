@@ -27,7 +27,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1_Serialize_Test0()
         {
-            var sb = new StringBuilder();
+            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
             XmlSerializerDeserializer1.Serialize(
                 sb,
                 new XmlObject1(),
@@ -41,7 +41,7 @@ namespace XmlSerDe.Tests
         public void XmlObject1_Deserialize_Test0_WithHead()
         {
             XmlSerializerDeserializer1.Deserialize(
-                XmlSerDe.Generator.Producer.BuiltinCodeParser.CutXmlHead(
+                XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
                     @"<?xml version=""1.0"" encoding=""utf-8""?><XmlObject1></XmlObject1>".AsSpan()
                     ), out XmlObject1 xo);
             Xunit.Assert.NotNull(xo);
@@ -101,7 +101,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject2_Serialize_Test1()
         {
-            var sb = new StringBuilder();
+            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
             XmlSerializerDeserializer2.Serialize(
                 sb,
                 new XmlObject2
@@ -122,7 +122,7 @@ namespace XmlSerDe.Tests
         public void XmlObject2_Deserialize_Test1_WithHead()
         {
             XmlSerializerDeserializer2.Deserialize(
-                XmlSerDe.Generator.Producer.BuiltinCodeParser.CutXmlHead(
+                XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
                     (@"<?xml version=""1.0"" encoding=""utf-8""?>    <XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
                     ),
                 out XmlObject2 xo
@@ -254,7 +254,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject6_Serialize_Test0()
         {
-            var sb = new StringBuilder();
+            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
             XmlSerializerDeserializer6.Serialize(
                 sb,
                 new XmlObject6
@@ -324,7 +324,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject910_Serialize_Test1()
         {
-            var sb = new StringBuilder();
+            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
             XmlSerializerDeserializer910.Serialize(
                 sb,
                 new XmlObject10()
@@ -395,7 +395,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1112_Serialize_Test0()
         {
-            var sb = new StringBuilder();
+            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
             XmlSerializerDeserializer1112.Serialize(
                 sb,
                 new XmlObject12()
@@ -507,7 +507,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject15_Serialize_Test0()
         {
-            var sb = new StringBuilder();
+            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
             XmlSerializerDeserializer15.Serialize(
                 sb,
                 new XmlObject15()
@@ -553,7 +553,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1617_Serialize_Test0()
         {
-            var sb = new StringBuilder();
+            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
             XmlSerializerDeserializer1617.Serialize(
                 sb,
                 new XmlObject17()

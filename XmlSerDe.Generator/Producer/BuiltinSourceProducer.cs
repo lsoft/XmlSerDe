@@ -12,11 +12,9 @@ namespace XmlSerDe.Generator.Producer
 {
     internal readonly struct BuiltinSourceProducer
     {
-        public const string BuiltinCodeParserClassName = "BuiltinCodeParser";
+        public const string BuiltinCodeHelperClassName = "BuiltinCodeHelper";
         public const string CutXmlHeadMethodName = "CutXmlHead";
         public const string AppendXmlHeadMethodName = "AppendXmlHead";
-        public const string WriteStringMethodName = "WriteString";
-        public const string WriteEncodedStringMethodName = "WriteEncodedString";
 
         private readonly Compilation _compilation;
         public readonly BuiltinCollection Builtins;
@@ -50,36 +48,49 @@ namespace XmlSerDe.Generator.Producer
                 new BuiltinCollection(
                     new List<Builtin>
                     {
-                        new Builtin("global::System.DateTime.Parse({0})", compilation.DateTime(), "dateTime", "{0}.ToString(\"yyyy-MM-ddTHH:mm:ss.fffffffK\")", false),
-                        new Builtin("global::System.DateTime.Parse({0})", compilation.NDateTime(), "dateTime", "{0}.HasValue ? {0}.Value.ToString(\"yyyy-MM-ddTHH:mm:ss.fffffffK\") : {0}.ToString()", false),
+                        new Builtin("global::System.DateTime.Parse({0})", compilation.DateTime(), "dateTime", "{0}", false),
+                        new Builtin("global::System.DateTime.Parse({0})", compilation.NDateTime(), "dateTime", "{0}", false),
 
                         new Builtin("global::System.Guid.Parse({0})", compilation.Guid(), "guid", "{0}", false),
                         new Builtin("global::System.Guid.Parse({0})", compilation.NGuid(), "guid", "{0}", false),
 
-                        new Builtin("global::System.Boolean.Parse({0})", compilation.Bool(), "boolean", @"({0} ? ""true"" : ""false"")", false),
+                        new Builtin("global::System.Boolean.Parse({0})", compilation.Bool(), "boolean", @"{0}", false),
+                        new Builtin("global::System.Boolean.Parse({0})", compilation.NBool(), "boolean", @"{0}", false),
+
                         new Builtin("global::System.Net.WebUtility.HtmlDecode({0}.ToString())", compilation.String(), "string", "{0}", true),
 
                         new Builtin("global::System.SByte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.SByte(), "byte", "{0}", false),
+                        new Builtin("global::System.SByte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NSByte(), "byte", "{0}", false),
+
                         new Builtin("global::System.Byte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Byte(), "unsignedByte", "{0}", false),
+                        new Builtin("global::System.Byte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NByte(), "unsignedByte", "{0}", false),
 
                         new Builtin("global::System.UInt16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt16(), "unsignedShort", "{0}", false),
+                        new Builtin("global::System.UInt16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NUInt16(), "unsignedShort", "{0}", false),
+
                         new Builtin("global::System.Int16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int16(), "short", "{0}", false),
+                        new Builtin("global::System.Int16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt16(), "short", "{0}", false),
 
                         new Builtin("global::System.UInt32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt32(), "unsignedInt", "{0}", false),
+                        new Builtin("global::System.UInt32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NUInt32(), "unsignedInt", "{0}", false),
+
                         new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int32(), "int", "{0}", false),
                         new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt32(), "int", "{0}", false),
 
                         new Builtin("global::System.UInt64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt64(), "unsignedLong", "{0}", false),
+                        new Builtin("global::System.UInt64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NUInt64(), "unsignedLong", "{0}", false),
+
                         new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int64(), "long", "{0}", false),
                         new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt64(), "long", "{0}", false),
 
                         new Builtin("global::System.Decimal.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Decimal(), "decimal", "{0}", false),
+                        new Builtin("global::System.Decimal.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NDecimal(), "decimal", "{0}", false),
                         //TODO other builtin branches
                     }
                 );
         }
 
-        public string GenerateAllMethods()
+        public string GenerateMainPart()
         {
             var sb = new StringBuilder();
 
@@ -91,19 +102,41 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
     using System;
     using roschar = System.ReadOnlySpan<char>;
 
-    public static class {{BuiltinCodeParserClassName}}
+    public static partial class {{BuiltinCodeHelperClassName}}
     {
         private static readonly string XmlHead = "<?xml version=\"1.0\" encoding=\"utf-8\"?>";
 
 
 """);
 
-            GenerateWriteString(sb);
-            GenerateWriteEncodedString(sb);
-            GenerateAppendXmlHeadMethod(sb);
             GenerateCutXmlHeadMethod(sb);
 
-            GenerateSerializeMethods(sb);
+            sb.AppendLine($$"""
+    }
+}
+""");
+
+            return sb.ToString();
+        }
+
+        public string GenerateDeserializationBody(
+            )
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine($@"
+namespace {typeof(BuiltinSourceProducer).Namespace}");
+
+            sb.AppendLine($$"""
+{
+    using System;
+    using roschar = System.ReadOnlySpan<char>;
+
+    public static partial class {{BuiltinCodeHelperClassName}}
+    {
+
+""");
+
             GenerateDeserializeMethods(sb);
 
             sb.AppendLine($$"""
@@ -114,38 +147,81 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             return sb.ToString();
         }
 
-        private void GenerateWriteString(StringBuilder sb)
+        public string GenerateSerializationSharedBody(
+            )
         {
+            var sb = new StringBuilder();
+
+            sb.AppendLine($@"
+namespace {typeof(BuiltinSourceProducer).Namespace}");
+
             sb.AppendLine($$"""
-        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        public static void {{WriteStringMethodName}}(global::System.Text.StringBuilder sb, string inputString)
-        {
-            sb.Append(inputString);
-        }
+{
+    using System;
+    using roschar = System.ReadOnlySpan<char>;
+
+    public static partial class {{BuiltinCodeHelperClassName}}
+    {
 
 """);
+
+            GenerateSerializeConstants(sb);
+
+            sb.AppendLine($$"""
+    }
+}
+""");
+
+            return sb.ToString();
         }
 
-        private void GenerateWriteEncodedString(StringBuilder sb)
+        public string GenerateSerializationBody(
+            INamedTypeSymbol exhaustType
+            )
         {
+            if (exhaustType is null)
+            {
+                throw new ArgumentNullException(nameof(exhaustType));
+            }
+
+            var sb = new StringBuilder();
+
+            sb.AppendLine($@"
+namespace {typeof(BuiltinSourceProducer).Namespace}");
+
             sb.AppendLine($$"""
-        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        public static void {{WriteEncodedStringMethodName}}(global::System.Text.StringBuilder sb, string inputString)
-         {
-            var encodedString = global::System.Net.WebUtility.HtmlEncode(inputString);
-            sb.Append(encodedString);
-        }
+{
+    using System;
+    using roschar = System.ReadOnlySpan<char>;
+
+    public static partial class {{BuiltinCodeHelperClassName}}
+    {
 
 """);
+
+            GenerateAppendXmlHeadMethod(sb, exhaustType);
+            GenerateSerializeMethods(sb, exhaustType);
+
+            sb.AppendLine($$"""
+    }
+}
+""");
+
+            return sb.ToString();
         }
 
-        private void GenerateAppendXmlHeadMethod(StringBuilder sb)
+        private void GenerateAppendXmlHeadMethod(
+            StringBuilder sb,
+            INamedTypeSymbol exhaustType
+            )
         {
+            var exhaustTypeGlobalName = exhaustType.ToGlobalDisplayString();
+
             sb.AppendLine($$"""
         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        public static void {{AppendXmlHeadMethodName}}(global::System.Text.StringBuilder sb)
+        public static void {{AppendXmlHeadMethodName}}({{exhaustTypeGlobalName}} sb)
         {
-            sb.Append(XmlHead);
+            sb.{{nameof(IExhauster.Append)}}(XmlHead);
         }
 
 """);
@@ -173,8 +249,46 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 """);
         }
 
-        private void GenerateSerializeMethods(StringBuilder sb)
+        private void GenerateSerializeConstants(
+            StringBuilder sb
+            )
         {
+            if (sb is null)
+            {
+                throw new ArgumentNullException(nameof(sb));
+            }
+
+            for (var bi = 0; bi < Builtins.Builtins.Count; bi++)
+            {
+                var builtin = Builtins.Builtins[bi];
+
+                var xmlTypeNameOpenVar = $"XmlTypeName{bi}";
+                var xmlTypeNameCloseVar = $"XmlTypeNameClose{bi}";
+
+                sb.AppendLine($$"""
+        private const string {{xmlTypeNameOpenVar}} = "<{{builtin.XmlTypeName}}>";
+        private const string {{xmlTypeNameCloseVar}} = "</{{builtin.XmlTypeName}}>";
+""");
+            }
+        }
+
+        private void GenerateSerializeMethods(
+            StringBuilder sb,
+            INamedTypeSymbol exhaustType
+            )
+        {
+            if (sb is null)
+            {
+                throw new ArgumentNullException(nameof(sb));
+            }
+
+            if (exhaustType is null)
+            {
+                throw new ArgumentNullException(nameof(exhaustType));
+            }
+
+            var exhaustTypeGlobalName = exhaustType.ToGlobalDisplayString();
+
             for (var bi = 0; bi < Builtins.Builtins.Count; bi++)
             {
                 var builtin = Builtins.Builtins[bi];
@@ -192,37 +306,35 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
                 var xmlTypeNameCloseVar = $"XmlTypeNameClose{bi}";
 
                 sb.AppendLine($$"""
-        private const string {{xmlTypeNameOpenVar}} = "<{{builtin.XmlTypeName}}>";
-        private const string {{xmlTypeNameCloseVar}} = "</{{builtin.XmlTypeName}}>";
-""");
-
-                sb.AppendLine($$"""
         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        public static void {{ClassSourceProducer.HeadSerializeMethodName}}(global::System.Text.StringBuilder sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
+        public static void {{ClassSourceProducer.HeadSerializeMethodName}}({{exhaustTypeGlobalName}} sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
         {
             sb.Append({{xmlTypeNameOpenVar}});
-
-            var writeValue = {{buildWriteValue}};
-            sb.Append(writeValue);
-
+            sb.Append({{buildWriteValue}});
             sb.Append({{xmlTypeNameCloseVar}});
         }
 """);
 
                 sb.AppendLine($$"""
         [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        public static void {{ClassSourceProducer.HeadlessSerializeMethodName}}(global::System.Text.StringBuilder sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
+        public static void {{ClassSourceProducer.HeadlessSerializeMethodName}}({{exhaustTypeGlobalName}} sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
         {
-            var writeValue = {{buildWriteValue}};
-            sb.Append(writeValue);
+            sb.Append({{buildWriteValue}});
         }
 """);
             }
 
         }
 
-        private void GenerateDeserializeMethods(StringBuilder sb)
+        private void GenerateDeserializeMethods(
+            StringBuilder sb
+            )
         {
+            if (sb is null)
+            {
+                throw new ArgumentNullException(nameof(sb));
+            }
+
             foreach (var builtin in Builtins.Builtins)
             {
                 var parseClause = string.Format(

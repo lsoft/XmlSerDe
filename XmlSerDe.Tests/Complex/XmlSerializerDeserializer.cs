@@ -11,7 +11,8 @@ using XmlSerDe.Tests.Complex.Subject;
 namespace XmlSerDe.Tests.Complex
 {
 
-
+    [XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
+    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
     [XmlSubject(typeof(SerializeKeyValue), false)]
     [XmlSubject(typeof(PerformanceTime), false)]
     [XmlSubject(typeof(InfoContainer), true)]

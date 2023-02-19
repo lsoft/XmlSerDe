@@ -21,6 +21,7 @@ namespace XmlSerDe.Generator
         public static readonly string SubjectAttributeFullName = typeof(XmlSubjectAttribute).FullName;
         public static readonly string DerivedSubjectAttributeFullName = typeof(XmlDerivedSubjectAttribute).FullName;
         public static readonly string FactoryAttributeFullName = typeof(XmlFactoryAttribute).FullName;
+        public static readonly string ExhausterAttributeFullName = typeof(XmlExhausterAttribute).FullName;
         public static readonly string ParserAttributeFullName = typeof(XmlParserAttribute).FullName;
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -48,26 +49,35 @@ namespace XmlSerDe.Generator
             try
             {
                 context.AddSource(
-                    "XmlSerDeHelper.cs",
+                    "XmlSerDe.EmbeddedCode.g.cs",
                     GeneratorResources.EmbeddedHelperCode.Replace("//{REMOVE THIS COMMENT}", "")
                     );
+
+                var adder = new DocumentAdder(context);
 
                 var bsg = new BuiltinSourceProducer(
                     compilation
                     );
-                var builtinCode = bsg.GenerateAllMethods(
+                var bsgMainPart = bsg.GenerateMainPart(
                     );
-                context.AddSource(
-                    $"{BuiltinSourceProducer.BuiltinCodeParserClassName}.cs",
-                    builtinCode
+                adder.AddDocumentToCompilation(
+                    $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.MainPart.g.cs",
+                    SourceText.From(bsgMainPart, Encoding.UTF8)
+                    );
+                var bsgDeserializationBody = bsg.GenerateDeserializationBody(
+                    );
+                adder.AddDocumentToCompilation(
+                    $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.Deserialization.g.cs",
+                    SourceText.From(bsgDeserializationBody, Encoding.UTF8)
+                    );
+                var bsgSerializationSharedBody = bsg.GenerateSerializationSharedBody(
+                    );
+                adder.AddDocumentToCompilation(
+                    $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.Serialization.Shared.g.cs",
+                    SourceText.From(bsgSerializationSharedBody, Encoding.UTF8)
                     );
 
-
-                var generated = InternalExecute(context, compilation, classesSyntax);
-                foreach (var gen in generated)
-                {
-                    context.AddSource(gen.FileName, gen.Source);
-                }
+                GenerateSources(adder, compilation, classesSyntax);
             }
             catch (Exception excp)
             {
@@ -91,14 +101,16 @@ namespace XmlSerDe.Generator
             }
         }
 
-        private static List<GeneratedSource> InternalExecute(SourceProductionContext context, Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classesSyntax)
+        private static void GenerateSources(
+            DocumentAdder adder,
+            Compilation compilation,
+            ImmutableArray<ClassDeclarationSyntax> classesSyntax
+            )
         {
-            var result = new List<GeneratedSource>();
-
             if (classesSyntax.IsDefaultOrEmpty)
             {
                 // nothing to do yet
-                return result;
+                return;
             }
 
             INamedTypeSymbol? markerAttribute = compilation.GetTypeByMetadataName(SubjectAttributeFullName);
@@ -106,14 +118,14 @@ namespace XmlSerDe.Generator
             {
                 // If this is null, the compilation couldn't find the marker attribute type
                 // which suggests there's something very wrong! Bail out..
-                return result;
+                return;
             }
 
             // I'm not sure if this is actually necessary, but `[LoggerMessage]` does it, so seems like a good idea!
             IEnumerable<ClassDeclarationSyntax> distinctClasses = classesSyntax.Distinct();
 
             // Convert each ClassDeclarationSyntax to an ClassesToGenerate
-            var classesToGenerate = GetClassesToGenerate(compilation, distinctClasses, context.CancellationToken);
+            var classesToGenerate = GetClassesToGenerate(compilation, distinctClasses, adder.Context.CancellationToken);
 
             // If there were errors in the ClassDeclarationSyntax, we won't create an
             // ClassesToGenerate for it, so make sure we have something to generate
@@ -133,18 +145,30 @@ namespace XmlSerDe.Generator
                         classToGenerate.Symbol
                         );
 
+                    //generate builtin source
+                    var bsg = new BuiltinSourceProducer(
+                        compilation
+                        );
+                    foreach (var exhaustType in sp.SerializationInfoCollection.ExhaustList)
+                    {
+                        var bsgBody = bsg.GenerateSerializationBody(
+                            exhaustType
+                            );
+                        adder.AddDocumentToCompilation(
+                            $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{exhaustType.Name}.g.cs",
+                            SourceText.From(bsgBody, Encoding.UTF8)
+                            );
+                    }
+
                     var source = sp.GenerateClass();
 
-                    result.Add(
-                        new GeneratedSource(
-                            $"{classToGenerate.Symbol.Name}.g.cs",
-                            SourceText.From(source, Encoding.UTF8)
-                            )
+                    adder.AddDocumentToCompilation(
+                        $"{classToGenerate.Symbol.Name}.g.cs",
+                        SourceText.From(source, Encoding.UTF8)
                         );
+
                 }
             }
-
-            return result;
         }
 
         private static List<ClassToGenerate> GetClassesToGenerate(
@@ -204,6 +228,46 @@ namespace XmlSerDe.Generator
             return null;
         }
 
+        private readonly struct DocumentAdder
+        {
+            public readonly SourceProductionContext Context;
+
+            private readonly HashSet<string> _filePaths = new HashSet<string>();
+
+            public DocumentAdder(
+                SourceProductionContext context
+                )
+            {
+                Context = context;
+            }
+
+            public void AddDocumentToCompilation(
+                string documentName,
+                SourceText document
+                )
+            {
+                if (string.IsNullOrEmpty(documentName))
+                {
+                    throw new ArgumentException($"'{nameof(documentName)}' cannot be null or empty.", nameof(documentName));
+                }
+
+                if (document is null)
+                {
+                    throw new ArgumentNullException(nameof(document));
+                }
+
+                if (!_filePaths.Add(documentName))
+                {
+                    return;
+                }
+
+                Context.AddSource(
+                    documentName,
+                    document
+                    );
+            }
+        }
+
         private readonly struct ClassToGenerate
         {
             public readonly SemanticModel SemanticModel;
@@ -213,18 +277,6 @@ namespace XmlSerDe.Generator
             {
                 SemanticModel = semanticModel;
                 Symbol = symbol;
-            }
-        }
-
-        private readonly struct GeneratedSource
-        {
-            public readonly string FileName;
-            public readonly SourceText Source;
-
-            public GeneratedSource(string fileName, SourceText source)
-            {
-                FileName = fileName;
-                Source = source;
             }
         }
     }

@@ -75,12 +75,17 @@ Job=.NET 6.0  Runtime=.NET 6.0
 
 |                      Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
 |---------------------------- |----------:|----------:|----------:|-------:|----------:|
-|     'Serialize: System.Xml' |  7.734 us | 0.0516 us | 0.0483 us | 6.6986 |   14064 B |
-|       'Serialize: XmlSerDe' |  2.581 us | 0.0190 us | 0.0177 us | 3.2921 |    6889 B |
-|   'Deserialize: System.Xml' | 13.814 us | 0.0391 us | 0.0327 us | 7.8125 |   16392 B |
-|     'Deserialize: XmlSerDe' | 10.664 us | 0.0194 us | 0.0172 us | 0.3510 |     736 B | <-- allocations!
-
+|     'Serialize: System.Xml' |  7.702 us | 0.0802 us | 0.0750 us | 6.6986 |   14064 B |
+|       'Serialize: XmlSerDe' |  2.591 us | 0.0051 us | 0.0045 us | 3.3073 |    6921 B |
+| 'Serialize: XmlSerDe (est)' |  2.585 us | 0.0107 us | 0.0095 us | 2.4185 |    5065 B |
+|   'Deserialize: System.Xml' | 13.790 us | 0.0557 us | 0.0465 us | 7.8125 |   16392 B |
+|     'Deserialize: XmlSerDe' | 10.848 us | 0.0396 us | 0.0351 us | 0.3510 |     736 B |
 ```
+
+PTAL on few points:
+
+1. `(est)` test do premature estimation of result XML document length, and allocate the buffer of appropriate size. Serialization with estimation on may be a bit slower than a regular one, but it allocate less.
+2. Deserialization process allocate only 5% memory in comparison to the standard serializer.
 
 the code:
 
@@ -94,15 +99,32 @@ the code:
 
     public string Serialize(InfoContainer subject)
     {
-        var sb = new StringBuilder();
-        XmlSerializerDeserializer.Serialize(sb, subject, false);
-        var xml = sb.ToString();
+        var dsbe = new DefaultStringBuilderExhauster();
+        XmlSerializerDeserializer.Serialize(dsbe, subject, false);
+        var xml = dsbe.ToString();
         return xml;
     }
 
+    public string Serialize_Est(InfoContainer subject)
+    {
+        //estimation phase:
+        var dlee = new DefaultLengthEstimatorExhauster();
+        XmlSerializerDeserializer.Serialize(dlee, DefaultObject, false);
+        var estimateXmlLength = dlee.EstimatedTotalLength;
+
+        //serialization phase:
+        var dsbe = new DefaultStringBuilderExhauster(
+            new StringBuilder(estimateXmlLength)
+            );
+        XmlSerializerDeserializer.Serialize(dsbe, subject, false);
+        var xml = dsbe.ToString();
+        return xml;
+    }
 
 //...
 
+    [XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
+    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
     [XmlSubject(typeof(SerializeKeyValue), false)]
     [XmlSubject(typeof(PerformanceTime), false)]
     [XmlSubject(typeof(InfoContainer), true)]
@@ -118,6 +140,23 @@ the code:
     {
     }
 ```
+
+## Serialization/deserialization class
+
+TODO in general
+
+TODO: what attributes means
+
+## Deserialization
+
+TODO in general
+
+## Serialization
+
+TODO in general
+
+TODO: what is exhauster; embedded exhauster; custom exhauster; using custom exhauster to change serialization format (for DateTime for example).
+
 
 ## Alternatives
 

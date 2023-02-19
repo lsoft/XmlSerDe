@@ -11,6 +11,22 @@ using roschar = System.ReadOnlySpan<char>;
 namespace XmlSerDe.Generator.EmbeddedCode
 {
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
+    public class XmlExhausterAttribute : Attribute
+    {
+        public readonly Type ExhausterType;
+
+        public XmlExhausterAttribute(Type exhausterType)
+        {
+            if (exhausterType is null)
+            {
+                throw new ArgumentNullException(nameof(exhausterType));
+            }
+
+            ExhausterType = exhausterType;
+        }
+    }
+
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
     public class XmlFactoryAttribute : Attribute
     {
         public readonly Type SubjectType;

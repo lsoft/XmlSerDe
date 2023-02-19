@@ -7,6 +7,18 @@ namespace XmlSerDe.Generator.Helper
 {
     public static class CompilationHelper
     {
+        public static INamedTypeSymbol DefaultStringBuilderExhauster(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return compilation.GetTypeByMetadataName("XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster")!;
+        }
+
         public static INamedTypeSymbol Func(
             this Compilation compilation,
             params ITypeSymbol[] genericParameters
@@ -168,6 +180,21 @@ namespace XmlSerDe.Generator.Helper
             return compilation.GetTypeByMetadataName("System.Boolean")!;
         }
 
+        public static INamedTypeSymbol NBool(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(Bool(compilation))
+                    ;
+        }
+
         public static INamedTypeSymbol Void(
             this Compilation compilation
             )
@@ -204,6 +231,21 @@ namespace XmlSerDe.Generator.Helper
             return compilation.GetTypeByMetadataName("System.UInt16")!;
         }
 
+        public static INamedTypeSymbol NUInt16(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(UInt16(compilation))
+                    ;
+        }
+
         public static INamedTypeSymbol Int16(
             this Compilation compilation
             )
@@ -214,6 +256,21 @@ namespace XmlSerDe.Generator.Helper
             }
 
             return compilation.GetTypeByMetadataName("System.Int16")!;
+        }
+
+        public static INamedTypeSymbol NInt16(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(Int16(compilation))
+                    ;
         }
 
         public static INamedTypeSymbol UInt32(
@@ -227,6 +284,22 @@ namespace XmlSerDe.Generator.Helper
 
             return compilation.GetTypeByMetadataName("System.UInt32")!;
         }
+
+        public static INamedTypeSymbol NUInt32(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(UInt32(compilation))
+                    ;
+        }
+
 
         public static INamedTypeSymbol Int32(
             this Compilation compilation
@@ -266,6 +339,22 @@ namespace XmlSerDe.Generator.Helper
 
             return compilation.GetTypeByMetadataName("System.UInt64")!;
         }
+
+        public static INamedTypeSymbol NUInt64(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(UInt64(compilation))
+                    ;
+        }
+
 
         public static INamedTypeSymbol Int64(
             this Compilation compilation
@@ -307,6 +396,21 @@ namespace XmlSerDe.Generator.Helper
             return compilation.GetTypeByMetadataName("System.Byte")!;
         }
 
+        public static INamedTypeSymbol NByte(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(Byte(compilation))
+                    ;
+        }
+
         public static INamedTypeSymbol SByte(
             this Compilation compilation
             )
@@ -319,6 +423,22 @@ namespace XmlSerDe.Generator.Helper
             return compilation.GetTypeByMetadataName("System.SByte")!;
         }
 
+        public static INamedTypeSymbol NSByte(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(SByte(compilation))
+                    ;
+        }
+
+
         public static INamedTypeSymbol Decimal(
             this Compilation compilation
             )
@@ -330,6 +450,22 @@ namespace XmlSerDe.Generator.Helper
 
             return compilation.GetTypeByMetadataName("System.Decimal")!;
         }
+
+        public static INamedTypeSymbol NDecimal(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(Decimal(compilation))
+                    ;
+        }
+
     }
 }
 #endif
