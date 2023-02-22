@@ -10,8 +10,8 @@ using System.Text;
 using System.Threading;
 using XmlSerDe.Generator.Producer;
 using XmlSerDe.Generator.Helper;
-using XmlSerDe.Generator;
-using XmlSerDe.Generator.EmbeddedCode;
+using XmlSerDe.Common;
+using System.IO;
 
 namespace XmlSerDe.Generator
 {
@@ -48,11 +48,6 @@ namespace XmlSerDe.Generator
         {
             try
             {
-                context.AddSource(
-                    "XmlSerDe.EmbeddedCode.g.cs",
-                    GeneratorResources.EmbeddedHelperCode.Replace("//{REMOVE THIS COMMENT}", "")
-                    );
-
                 var adder = new DocumentAdder(context);
 
                 var bsg = new BuiltinSourceProducer(

@@ -73,19 +73,21 @@ AMD Ryzen 7 4700U with Radeon Graphics, 1 CPU, 8 logical and 8 physical cores
 
 Job=.NET 6.0  Runtime=.NET 6.0
 
-|                      Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
-|---------------------------- |----------:|----------:|----------:|-------:|----------:|
-|     'Serialize: System.Xml' |  7.702 us | 0.0802 us | 0.0750 us | 6.6986 |   14064 B |
-|       'Serialize: XmlSerDe' |  2.591 us | 0.0051 us | 0.0045 us | 3.3073 |    6921 B |
-| 'Serialize: XmlSerDe (est)' |  2.585 us | 0.0107 us | 0.0095 us | 2.4185 |    5065 B |
-|   'Deserialize: System.Xml' | 13.790 us | 0.0557 us | 0.0465 us | 7.8125 |   16392 B |
-|     'Deserialize: XmlSerDe' | 10.848 us | 0.0396 us | 0.0351 us | 0.3510 |     736 B |
+|                         Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
+|------------------------------- |----------:|----------:|----------:|-------:|----------:|
+|        'Serialize: System.Xml' |  7.799 us | 0.1046 us | 0.0979 us | 6.6986 |   14064 B |
+|          'Serialize: XmlSerDe' |  2.636 us | 0.0172 us | 0.0160 us | 3.3073 |    6921 B |
+|    'Serialize: XmlSerDe (est)' |  2.715 us | 0.0326 us | 0.0289 us | 2.4185 |    5065 B |
+| 'Serialize: XmlSerDe (stream)' |  2.844 us | 0.0232 us | 0.0217 us | 0.2823 |     592 B |
+|      'Deserialize: System.Xml' | 14.010 us | 0.0682 us | 0.0638 us | 7.8125 |   16392 B |
+|        'Deserialize: XmlSerDe' | 11.089 us | 0.1024 us | 0.0958 us | 0.3510 |     736 B |
 ```
 
 PTAL on few points:
 
 1. `(est)` test do premature estimation of result XML document length, and allocate the buffer of appropriate size. Serialization with estimation on may be a bit slower than a regular one, but it allocate less.
-2. Deserialization process allocate only 5% memory in comparison to the standard serializer.
+2. `(stream)` test serializes data into binary for sending into stream and\or network. For test purposes we do not send the data anywhere. Low allocations are because of `ArrayPool<>.Rent` use.
+3. Deserialization process allocate only 5% memory in comparison to the standard serializer.
 
 the code:
 
@@ -121,10 +123,26 @@ the code:
         return xml;
     }
 
+    public void Serialize_ToStream_Test()
+    {
+        var be = new Utf8BinaryExhausterEmpty(
+            );
+        XmlSerializerDeserializer.Serialize(be, DefaultObject, false);
+    }
+
 //...
+
+    public class Utf8BinaryExhausterEmpty : Utf8BinaryExhauster
+    {
+        protected override void Write(byte[] data, int length)
+        {
+            //nothing to do in tests
+        }
+    }
 
     [XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
     [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
+    [XmlExhauster(typeof(Utf8BinaryExhausterEmpty))]
     [XmlSubject(typeof(SerializeKeyValue), false)]
     [XmlSubject(typeof(PerformanceTime), false)]
     [XmlSubject(typeof(InfoContainer), true)]

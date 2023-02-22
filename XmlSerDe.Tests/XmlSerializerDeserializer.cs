@@ -4,11 +4,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
-using XmlSerDe.Generator.EmbeddedCode;
+using XmlSerDe.Common;
 //using roschar = System.ReadOnlySpan<char>;
 
 namespace XmlSerDe.Tests
 {
+    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
+    [XmlExhauster(typeof(Utf8BinaryExhausterChild))]
     [XmlSubject(typeof(XmlObject1), true)]
     public partial class XmlSerializerDeserializer1
     {
@@ -81,6 +83,8 @@ namespace XmlSerDe.Tests
     {
     }
 
+    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
+    [XmlExhauster(typeof(Utf8BinaryExhausterChild))]
     [XmlSubject(typeof(XmlObject16), true)]
     [XmlSubject(typeof(XmlObject17), true)]
     public partial class XmlSerializerDeserializer1617

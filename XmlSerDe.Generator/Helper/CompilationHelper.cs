@@ -16,7 +16,7 @@ namespace XmlSerDe.Generator.Helper
                 throw new ArgumentNullException(nameof(compilation));
             }
 
-            return compilation.GetTypeByMetadataName("XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster")!;
+            return compilation.GetTypeByMetadataName("XmlSerDe.Common.DefaultStringBuilderExhauster")!;
         }
 
         public static INamedTypeSymbol Func(

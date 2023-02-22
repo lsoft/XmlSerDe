@@ -59,35 +59,5 @@ namespace XmlSerDe.Generator {
                 resourceCulture = value;
             }
         }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to using System;
-        ///using System.Collections.Generic;
-        ///using System.Text;
-        ///using roschar = System.ReadOnlySpan&lt;char&gt;;
-        ///
-        ///namespace XmlSerDe.Generator.EmbeddedCode
-        ///{
-        ///    public static class Helper
-        ///    {
-        ///        public static roschar DetermineType(roschar fullNode)
-        ///        {
-        ///            var index = 0;
-        ///
-        ///            //пропускаем пробелы
-        ///            while (char.IsWhiteSpace(fullNode[index]))
-        ///            {
-        ///                index++;
-        ///            }
-        ///
-        ///            if (fullNode[index++] != &apos;&lt;&apos;)
-        ///            {
-        ///  [rest of string was truncated]&quot;;.
-        /// </summary>
-        internal static string EmbeddedHelperCode {
-            get {
-                return ResourceManager.GetString("EmbeddedHelperCode", resourceCulture);
-            }
-        }
     }
 }

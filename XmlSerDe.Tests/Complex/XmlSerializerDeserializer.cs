@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
-using XmlSerDe.Generator.EmbeddedCode;
+using XmlSerDe.Common;
 using XmlSerDe.Tests.Complex.Subject;
 //using roschar = System.ReadOnlySpan<char>;
 
@@ -13,6 +13,7 @@ namespace XmlSerDe.Tests.Complex
 
     [XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
     [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
+    [XmlExhauster(typeof(Utf8BinaryExhausterEmpty))]
     [XmlSubject(typeof(SerializeKeyValue), false)]
     [XmlSubject(typeof(PerformanceTime), false)]
     [XmlSubject(typeof(InfoContainer), true)]

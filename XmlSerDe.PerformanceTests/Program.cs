@@ -1,7 +1,4 @@
 ﻿using BenchmarkDotNet.Exporters;
-using Microsoft.Diagnostics.Runtime.Utilities;
-using Microsoft.Diagnostics.Tracing.Parsers;
-using Microsoft.Diagnostics.Tracing.Parsers.MicrosoftAntimalwareEngine;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -10,7 +7,6 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Xml.Serialization;
-using XmlSerDe.Generator.EmbeddedCode;
 
 namespace XmlSerDe.PerformanceTests
 {

@@ -3,7 +3,7 @@ using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace XmlSerDe.Generator.EmbeddedCode
+namespace XmlSerDe.Common
 {
     /// <summary>
     /// UTF-8 string to binary exhauster (mostly) based on rented buffers.
@@ -57,7 +57,7 @@ namespace XmlSerDe.Generator.EmbeddedCode
                 var rented = ArrayPool<byte>.Shared.Rent(valueLength * 2);
                 var byteCount = Encoding.UTF8.GetBytes(svalue, 0, valueLength, rented, 0);
                 Write(rented, byteCount);
-                ArrayPool<byte>.Shared.Return(rented); //nothing catastrophic happens if there will an exception before this line; please read the doc of renting
+                ArrayPool<byte>.Shared.Return(rented); //nothing catastrophic happens if there will be an exception before this line; please read the doc of renting
             }
         }
 
@@ -305,7 +305,7 @@ namespace XmlSerDe.Generator.EmbeddedCode
                 var rented = ArrayPool<byte>.Shared.Rent(valueLength * 2);
                 var byteCount = Encoding.UTF8.GetBytes(value, 0, valueLength, rented, 0);
                 Write(rented, byteCount);
-                ArrayPool<byte>.Shared.Return(rented); //nothing catastrophic happens if there will an exception before this line; please read the doc of renting
+                ArrayPool<byte>.Shared.Return(rented); //nothing catastrophic happens if there will be an exception before this line; please read the doc of renting
             }
         }
 
@@ -334,6 +334,9 @@ namespace XmlSerDe.Generator.EmbeddedCode
         private int _totalLength;
         private readonly int _dateTimeLength;
 
+        /// <summary>
+        /// Estimated total char count (not bytes!).
+        /// </summary>
         public int EstimatedTotalLength => _totalLength;
 
         public DefaultLengthEstimatorExhauster(
@@ -592,12 +595,21 @@ namespace XmlSerDe.Generator.EmbeddedCode
                 return;
             }
 
+            var specialSymbolOverhead = CalculateOverheadFromXmlSpecialSymbol(
+                value
+                );
+
+            _totalLength += value!.Length + specialSymbolOverhead;
+        }
+
+        private static int CalculateOverheadFromXmlSpecialSymbol(string value)
+        {
             const string XmlSpecialCharacters = "<>&`\"";
 
             var span = value.AsSpan();
             var sspan = XmlSpecialCharacters.AsSpan();
 
-            var specialSymbolCount = 0;
+            var specialSymbolOverhead = 0;
             while (!span.IsEmpty)
             {
                 var index = MemoryExtensions.IndexOfAny(span, sspan);
@@ -606,15 +618,14 @@ namespace XmlSerDe.Generator.EmbeddedCode
                     break;
                 }
 
-                //estimate at top limit
-                specialSymbolCount += 4;
+                //estimate at top limit (must be 5, but -1 symbol here due to we have an one symbol per every special symbol in the incoming string)
+                specialSymbolOverhead += (5 - 1);
 
                 span = span.Slice(index + 1);
             }
 
-            _totalLength += value!.Length + specialSymbolCount;
+            return specialSymbolOverhead;
         }
-
     }
 
     /// <summary>

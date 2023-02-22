@@ -6,7 +6,7 @@ using System.Net;
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
-using XmlSerDe.Generator.EmbeddedCode;
+using XmlSerDe.Common;
 using Xunit;
 
 namespace XmlSerDe.Tests
@@ -27,13 +27,27 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1_Serialize_Test0()
         {
-            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
+            var sb = new DefaultStringBuilderExhauster();
             XmlSerializerDeserializer1.Serialize(
                 sb,
                 new XmlObject1(),
                 false
                 );
             var xml = sb.ToString();
+            Xunit.Assert.Equal("<XmlObject1></XmlObject1>", xml);
+        }
+
+        [Fact]
+        public void XmlObject1_SerializeStream_Test0()
+        {
+            using var ms = new MemoryStream();
+            var be = new Utf8BinaryExhausterChild(ms);
+            XmlSerializerDeserializer1.Serialize(
+                be,
+                new XmlObject1(),
+                false
+                );
+            var xml = Encoding.UTF8.GetString(ms.ToArray());
             Xunit.Assert.Equal("<XmlObject1></XmlObject1>", xml);
         }
 
@@ -101,7 +115,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject2_Serialize_Test1()
         {
-            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
+            var sb = new DefaultStringBuilderExhauster();
             XmlSerializerDeserializer2.Serialize(
                 sb,
                 new XmlObject2
@@ -254,7 +268,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject6_Serialize_Test0()
         {
-            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
+            var sb = new DefaultStringBuilderExhauster();
             XmlSerializerDeserializer6.Serialize(
                 sb,
                 new XmlObject6
@@ -324,7 +338,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject910_Serialize_Test1()
         {
-            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
+            var sb = new DefaultStringBuilderExhauster();
             XmlSerializerDeserializer910.Serialize(
                 sb,
                 new XmlObject10()
@@ -395,7 +409,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1112_Serialize_Test0()
         {
-            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
+            var sb = new DefaultStringBuilderExhauster();
             XmlSerializerDeserializer1112.Serialize(
                 sb,
                 new XmlObject12()
@@ -507,7 +521,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject15_Serialize_Test0()
         {
-            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
+            var sb = new DefaultStringBuilderExhauster();
             XmlSerializerDeserializer15.Serialize(
                 sb,
                 new XmlObject15()
@@ -553,7 +567,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1617_Serialize_Test0()
         {
-            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
+            var sb = new DefaultStringBuilderExhauster();
             XmlSerializerDeserializer1617.Serialize(
                 sb,
                 new XmlObject17()
@@ -573,6 +587,29 @@ namespace XmlSerDe.Tests
                 );
         }
 
+        [Fact]
+        public void XmlObject1617_SerializeStream_Test0()
+        {
+            using var ms = new MemoryStream();
+            var be = new Utf8BinaryExhausterChild(ms);
+            XmlSerializerDeserializer1617.Serialize(
+                be,
+                new XmlObject17()
+                {
+                    MyList = new List<XmlObject16>
+                    {
+                        new XmlObject16 { MyField = 1 },
+                        new XmlObject16 { MyField = 2 },
+                    }
+                },
+                false
+                );
+            var xml = Encoding.UTF8.GetString(ms.ToArray());
+            Xunit.Assert.Equal(
+                @"<XmlObject17><MyList><XmlObject16><MyField>1</MyField></XmlObject16><XmlObject16><MyField>2</MyField></XmlObject16></MyList></XmlObject17>",
+                xml
+                );
+        }
 
 
 

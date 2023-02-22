@@ -2,10 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Xml;
-using XmlSerDe.Generator.EmbeddedCode;
+using XmlSerDe.Common;
 using XmlSerDe.Generator.Helper;
 
 namespace XmlSerDe.Generator.Producer
@@ -186,6 +185,9 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 
             var sb = new StringBuilder();
 
+            var exhaustTypeGlobalName = exhaustType.ToGlobalDisplayString();
+            var exhaustTypeAliasName = "exh" + exhaustTypeGlobalName.GetHashCode().ToString().Replace("-", "_");
+
             sb.AppendLine($@"
 namespace {typeof(BuiltinSourceProducer).Namespace}");
 
@@ -193,14 +195,17 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 {
     using System;
     using roschar = System.ReadOnlySpan<char>;
+    using {{exhaustTypeAliasName}} = {{exhaustTypeGlobalName}};
+    using MethodImpl = global::System.Runtime.CompilerServices.MethodImplAttribute;
+    using MethodImplOptions = global::System.Runtime.CompilerServices.MethodImplOptions;
 
     public static partial class {{BuiltinCodeHelperClassName}}
     {
 
 """);
 
-            GenerateAppendXmlHeadMethod(sb, exhaustType);
-            GenerateSerializeMethods(sb, exhaustType);
+            GenerateAppendXmlHeadMethod(sb, exhaustTypeAliasName);
+            GenerateSerializeMethods(sb, exhaustTypeAliasName);
 
             sb.AppendLine($$"""
     }
@@ -212,14 +217,12 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 
         private void GenerateAppendXmlHeadMethod(
             StringBuilder sb,
-            INamedTypeSymbol exhaustType
+            string exhaustTypeAliasName
             )
         {
-            var exhaustTypeGlobalName = exhaustType.ToGlobalDisplayString();
-
             sb.AppendLine($$"""
-        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        public static void {{AppendXmlHeadMethodName}}({{exhaustTypeGlobalName}} sb)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void {{AppendXmlHeadMethodName}}({{exhaustTypeAliasName}} sb)
         {
             sb.{{nameof(IExhauster.Append)}}(XmlHead);
         }
@@ -274,7 +277,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 
         private void GenerateSerializeMethods(
             StringBuilder sb,
-            INamedTypeSymbol exhaustType
+            string exhaustTypeAliasName
             )
         {
             if (sb is null)
@@ -282,12 +285,10 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
                 throw new ArgumentNullException(nameof(sb));
             }
 
-            if (exhaustType is null)
+            if (exhaustTypeAliasName is null)
             {
-                throw new ArgumentNullException(nameof(exhaustType));
+                throw new ArgumentNullException(nameof(exhaustTypeAliasName));
             }
-
-            var exhaustTypeGlobalName = exhaustType.ToGlobalDisplayString();
 
             for (var bi = 0; bi < Builtins.Builtins.Count; bi++)
             {
@@ -306,8 +307,8 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
                 var xmlTypeNameCloseVar = $"XmlTypeNameClose{bi}";
 
                 sb.AppendLine($$"""
-        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        public static void {{ClassSourceProducer.HeadSerializeMethodName}}({{exhaustTypeGlobalName}} sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void {{ClassSourceProducer.HeadSerializeMethodName}}({{exhaustTypeAliasName}} sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
         {
             sb.Append({{xmlTypeNameOpenVar}});
             sb.Append({{buildWriteValue}});
@@ -316,8 +317,8 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 """);
 
                 sb.AppendLine($$"""
-        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        public static void {{ClassSourceProducer.HeadlessSerializeMethodName}}({{exhaustTypeGlobalName}} sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void {{ClassSourceProducer.HeadlessSerializeMethodName}}({{exhaustTypeAliasName}} sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
         {
             sb.Append({{buildWriteValue}});
         }

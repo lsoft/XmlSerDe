@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
+using XmlSerDe.Common;
 using XmlSerDe.Tests.Complex.Subject;
 using Xunit;
 
@@ -169,7 +170,7 @@ namespace XmlSerDe.Tests.Complex
             //deserialize with different deserializer
             var first = Deserialize_SystemXml(ser_xmlserde);
             var second = Deserialize_XmlSerDe(
-                Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                global::XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
                     ser_system.AsSpan()
                     )
                 );
@@ -268,7 +269,7 @@ namespace XmlSerDe.Tests.Complex
             InfoContainer infoContainer
             )
         {
-            var sb = new global::XmlSerDe.Generator.EmbeddedCode.DefaultStringBuilderExhauster();
+            var sb = new DefaultStringBuilderExhauster();
             XmlSerializerDeserializer.Serialize(sb, infoContainer, false);
             var xml = sb.ToString();
             return xml;

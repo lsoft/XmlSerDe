@@ -6,9 +6,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Text;
 using XmlSerDe.Generator.Helper;
-using XmlSerDe.Generator.EmbeddedCode;
 using System.Xml.Serialization;
-using System.Xml.Linq;
+using XmlSerDe.Common;
 
 namespace XmlSerDe.Generator.Producer
 {
@@ -997,9 +996,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     }
                     var type = (INamedTypeSymbol)ca0.Value!;
                     var typegn = type.ToGlobalDisplayString();
-                    if (type.AllInterfaces.All(i => i.ToFullDisplayString() != "XmlSerDe.Generator.EmbeddedCode.IExhauster"))
+                    if (type.AllInterfaces.All(i => i.ToFullDisplayString() != "XmlSerDe.Common.IExhauster"))
                     {
-                        throw new InvalidOperationException($"Type {typegn} must be derived from XmlSerDe.Generator.EmbeddedCode.IExhauster interface");
+                        throw new InvalidOperationException($"Type {typegn} must be derived from XmlSerDe.Common.IExhauster interface");
                     }
 
                     exhaustList.Add(type);
