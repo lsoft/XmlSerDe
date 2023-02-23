@@ -187,9 +187,9 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject23_Deserialize_Test0()
+        public void XmlObject2_3_Deserialize_Test0()
         {
-            XmlSerializerDeserializer23.Deserialize(
+            XmlSerializerDeserializer2_3.Deserialize(
                 (@"<XmlObject3><XmlObjectProperty><IntProperty>123</IntProperty><StringProperty>" + XmlEncodedString + @"</StringProperty></XmlObjectProperty></XmlObject3>").AsSpan(),
                 out XmlObject3 xo
                 );
@@ -204,9 +204,9 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject45_Deserialize_Test0()
+        public void XmlObject4_5_Deserialize_Test0()
         {
-            XmlSerializerDeserializer45.Deserialize(
+            XmlSerializerDeserializer4_5.Deserialize(
                 (@"<XmlObject5><XmlObjectProperty xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""XmlObject4Specific1""> <StringProperty>MyString</StringProperty><IntProperty>123</IntProperty>   </XmlObjectProperty></XmlObject5>").AsSpan(),
                 out XmlObject5 xo
                 );
@@ -219,9 +219,9 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject45_Deserialize_Test1()
+        public void XmlObject4_5_Deserialize_Test1()
         {
-            XmlSerializerDeserializer45.Deserialize(
+            XmlSerializerDeserializer4_5.Deserialize(
                 (@"<XmlObject5 xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance""><XmlObjectProperty p3:type=""XmlObject4Specific1""> <StringProperty>MyString</StringProperty><IntProperty>123</IntProperty>   </XmlObjectProperty></XmlObject5>").AsSpan(),
                 out XmlObject5 xo
                 );
@@ -290,9 +290,9 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject78_Deserialize_Test0()
+        public void XmlObject7_8_Deserialize_Test0()
         {
-            XmlSerializerDeserializer78.Deserialize(
+            XmlSerializerDeserializer7_8.Deserialize(
                 (@"<XmlObject8 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><XmlObject7Property><StringProperty>a</StringProperty></XmlObject7Property></XmlObject8>").AsSpan(),
                 out XmlObject8 xo
                 );
@@ -305,7 +305,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject910_Deserialize_Test1()
+        public void XmlObject9_10_Deserialize_Test1()
         {
             //var ms = new MemoryStream();
             //new XmlSerializer(
@@ -322,7 +322,7 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer910.Deserialize(
+            XmlSerializerDeserializer9_10.Deserialize(
                 (@"   <XmlObject10>   <XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1"">  <StringProperty>a</StringProperty><IntProperty>123</IntProperty>  </XmlObjectProperty></XmlObject10>").AsSpan(),
                 out XmlObject10 xo
                 );
@@ -336,10 +336,10 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject910_Serialize_Test1()
+        public void XmlObject9_10_Serialize_Test1()
         {
             var sb = new DefaultStringBuilderExhauster();
-            XmlSerializerDeserializer910.Serialize(
+            XmlSerializerDeserializer9_10.Serialize(
                 sb,
                 new XmlObject10()
                 {
@@ -363,7 +363,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject1112_Deserialize_Test0()
+        public void XmlObject11_12_Deserialize_Test0()
         {
             //var ms = new MemoryStream();
             //new XmlSerializer(
@@ -388,7 +388,7 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer1112.Deserialize(
+            XmlSerializerDeserializer11_12.Deserialize(
                 (@"<XmlObject12><XmlObjectProperty><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><StringProperty>At0</StringProperty><IntProperty>0</IntProperty></XmlObject11Abstract><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><StringProperty>At1</StringProperty><IntProperty>1</IntProperty></XmlObject11Abstract></XmlObjectProperty></XmlObject12>").AsSpan(),
                 out XmlObject12 xo
                 );
@@ -407,10 +407,10 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject1112_Serialize_Test0()
+        public void XmlObject11_12_Serialize_Test0()
         {
             var sb = new DefaultStringBuilderExhauster();
-            XmlSerializerDeserializer1112.Serialize(
+            XmlSerializerDeserializer11_12.Serialize(
                 sb,
                 new XmlObject12()
                 {
@@ -540,7 +540,7 @@ namespace XmlSerDe.Tests
 
 
         [Fact]
-        public void XmlObject1617_Deserialize_Test0()
+        public void XmlObject16_17_Deserialize_Test0()
         {
             //var ms = new MemoryStream();
             //new XmlSerializer(
@@ -557,7 +557,7 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer1617.Deserialize(@"<XmlObject17><MyList><XmlObject16><MyField>1</MyField></XmlObject16><XmlObject16><MyField>2</MyField></XmlObject16></MyList></XmlObject17>".AsSpan(), out XmlObject17 xo);
+            XmlSerializerDeserializer16_17.Deserialize(@"<XmlObject17><MyList><XmlObject16><MyField>1</MyField></XmlObject16><XmlObject16><MyField>2</MyField></XmlObject16></MyList></XmlObject17>".AsSpan(), out XmlObject17 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(2, xo.MyList.Count);
             Xunit.Assert.Equal(1, xo.MyList[0].MyField);
@@ -565,10 +565,10 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject1617_Serialize_Test0()
+        public void XmlObject16_17_Serialize_Test0()
         {
             var sb = new DefaultStringBuilderExhauster();
-            XmlSerializerDeserializer1617.Serialize(
+            XmlSerializerDeserializer16_17.Serialize(
                 sb,
                 new XmlObject17()
                 {
@@ -588,11 +588,11 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject1617_SerializeStream_Test0()
+        public void XmlObject16_17_SerializeStream_Test0()
         {
             using var ms = new MemoryStream();
             var be = new Utf8BinaryExhausterChild(ms);
-            XmlSerializerDeserializer1617.Serialize(
+            XmlSerializerDeserializer16_17.Serialize(
                 be,
                 new XmlObject17()
                 {
@@ -718,6 +718,56 @@ namespace XmlSerDe.Tests
         }
 
 
+        [Fact]
+        public void XmlObject20_Deserialize_Test0()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject20), new Type[] { }).Serialize(
+            //        ms,
+            //        new XmlObject20()
+            //        {
+            //            Bytes = new sbyte[3]
+            //            {
+            //                -1,
+            //                0,
+            //                1
+            //            }
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer20.Deserialize(@"<XmlObject20><Bytes><byte>-1</byte><byte>0</byte><byte>1</byte></Bytes></XmlObject20>".AsSpan(), out XmlObject20 xo);
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(3, xo.Bytes.Length);
+            Xunit.Assert.Equal(-1, xo.Bytes[0]);
+            Xunit.Assert.Equal(0, xo.Bytes[1]);
+            Xunit.Assert.Equal(1, xo.Bytes[2]);
+        }
+
+        [Fact]
+        public void XmlObject20_Serialize_Test0()
+        {
+            var sb = new DefaultStringBuilderExhauster();
+            XmlSerializerDeserializer20.Serialize(
+                sb,
+                new XmlObject20()
+                {
+                    Bytes = new sbyte[3]
+                    {
+                        -1,
+                        0,
+                        1
+                    }
+                },
+                false
+                );
+            var xml = sb.ToString();
+            Xunit.Assert.Equal(
+                @"<XmlObject20><Bytes><byte>-1</byte><byte>0</byte><byte>1</byte></Bytes></XmlObject20>",
+                xml
+                );
+        }
 
 
 
