@@ -613,6 +613,58 @@ namespace XmlSerDe.Tests
 
 
 
+        [Fact]
+        public void XmlObject18_Deserialize_Test0()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject18), new Type[] { }).Serialize(
+            //        ms,
+            //        new XmlObject18()
+            //        {
+            //            Enums = new List<XmlEnum18>
+            //            {
+            //                XmlEnum18.A,
+            //                XmlEnum18.B,
+            //                XmlEnum18.C,
+            //            }
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer18.Deserialize(@"<XmlObject18><Enums><XmlEnum18>A</XmlEnum18><XmlEnum18>B</XmlEnum18><XmlEnum18>C</XmlEnum18></Enums></XmlObject18>".AsSpan(), out XmlObject18 xo);
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(3, xo.Enums.Count);
+            Xunit.Assert.Equal(XmlEnum18.A, xo.Enums[0]);
+            Xunit.Assert.Equal(XmlEnum18.B, xo.Enums[1]);
+            Xunit.Assert.Equal(XmlEnum18.C, xo.Enums[2]);
+        }
+
+        [Fact]
+        public void XmlObject18_Serialize_Test0()
+        {
+            var sb = new DefaultStringBuilderExhauster();
+            XmlSerializerDeserializer18.Serialize(
+                sb,
+                new XmlObject18()
+                {
+                    Enums = new List<XmlEnum18>
+                    {
+                        XmlEnum18.A,
+                        XmlEnum18.B,
+                        XmlEnum18.C,
+                    }
+                    },
+                false
+                );
+            var xml = sb.ToString();
+            Xunit.Assert.Equal(
+                @"<XmlObject18><Enums><XmlEnum18>A</XmlEnum18><XmlEnum18>B</XmlEnum18><XmlEnum18>C</XmlEnum18></Enums></XmlObject18>",
+                xml
+                );
+        }
+
+
 
 
         //        [Fact]

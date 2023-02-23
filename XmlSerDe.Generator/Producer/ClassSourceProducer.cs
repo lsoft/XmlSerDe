@@ -300,11 +300,8 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
             else if (memberType.EnumUnderlyingType != null)
             {
-                _sb.AppendLine($$"""
-                sb.{{nameof(IExhauster.Append)}}("<{{member.Name}}>");
-                sb.{{nameof(IExhauster.Append)}}(obj.{{member.Name}}.ToString());
-                sb.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
-""");
+                var gses = GenerateSerializeEnum(member.Name, member.Name);
+                _sb.AppendLine(gses);
             }
             //TODO array and other collections
             else if (
@@ -331,13 +328,34 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 }
                 else
                 {
-                    _sb.AppendLine($$"""
+                    if (listItemType.EnumUnderlyingType != null)
+                    {
+                        var indexVarName = "index";
+
+                        var gses = GenerateSerializeEnum(
+                            listItemType.Name,
+                            $"{member.Name}[{indexVarName}]"
+                            );
+
+                        _sb.AppendLine($$"""
+
+                for(var {{indexVarName}} = 0; {{indexVarName}} < obj.{{member.Name}}.Count; {{indexVarName}}++)
+                {
+{{gses}}
+                }
+""");
+
+                    }
+                    else
+                    {
+                        _sb.AppendLine($$"""
 
                 for(var index = 0; index < obj.{{member.Name}}.Count; index++)
                 {
                     {{HeadSerializeMethodName}}(sb, obj.{{member.Name}}[index]);
                 }
 """);
+                    }
                 }
 
                 _sb.AppendLine($$"""
@@ -381,6 +399,15 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
 """);
 
+        }
+
+        private readonly string GenerateSerializeEnum(string enumTypeName, string enumPropertyName)
+        {
+            return $$"""
+                sb.{{nameof(IExhauster.Append)}}("<{{enumTypeName}}>");
+                sb.{{nameof(IExhauster.Append)}}(obj.{{enumPropertyName}}.ToString());
+                sb.{{nameof(IExhauster.Append)}}("</{{enumTypeName}}>");
+""";
         }
 
 
@@ -652,33 +679,20 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
             else if (memberType.EnumUnderlyingType != null)
             {
-                if (string.IsNullOrEmpty(parserInvocation))
-                {
-                    _sb.AppendLine($$"""
-                    //Enum
-                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
-                    {
-                        var child2 = child.{{nameof(XmlNode2.Internals)}};
-                        result.{{member.Name}} = ({{memberType.ToGlobalDisplayString()}})Enum.Parse(typeof({{memberType.ToGlobalDisplayString()}}), child2);
-                    }
-""");
-                }
-                else
-                {
-                    var fullParserInvocation = string.Format(
-                        parserInvocation,
-                        "child2"
-                        );
+                var fullParserInvocation = GenerateEnumParseStatement(
+                    memberType,
+                    parserInvocation,
+                    $"child.{nameof(XmlNode2.Internals)}"
+                    );
 
-                    _sb.AppendLine($$"""
+                _sb.AppendLine($$"""
                     //Enum
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
-                        var child2 = child.{{nameof(XmlNode2.Internals)}};
                         result.{{member.Name}} = {{fullParserInvocation}};
                     }
 """);
-                }
+
             }
             //TODO array and other collections
             else if (
@@ -687,7 +701,16 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 )
             {
                 var listItemType = (INamedTypeSymbol)memberType.TypeArguments[0];
-                var classAndMethodName = DetermineClassName(listItemType) + "." + HeadDeserializeMethodName;
+
+                const string child2VarName = "child2";
+                const string listItemParseResultVarName = "iresult";
+
+                var listItemParseStatement = GenerateListItemParseStatement(
+                    parserInvocation,
+                    child2VarName,
+                    listItemType,
+                    listItemParseResultVarName
+                    );
 
                 _sb.AppendLine($$"""
                     //List<T>
@@ -699,20 +722,20 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         }
 
                         var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                        {{typeof(XmlNode2).FullName}} child2 = new();
+                        {{typeof(XmlNode2).FullName}} {{child2VarName}} = new();
                         while(true)
                         {
-                            {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(childInternals, child.XmlnsAttributeName, ref child2);
-                            if(child2.{{nameof(XmlNode2.IsEmpty)}})
+                            {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(childInternals, child.XmlnsAttributeName, ref {{child2VarName}});
+                            if({{child2VarName}}.{{nameof(XmlNode2.IsEmpty)}})
                             {
                                 break;
                             }
 
-                            {{classAndMethodName}}(child2.{{nameof(XmlNode2.FullNode)}}, child2.XmlnsAttributeName, out {{listItemType.ToGlobalDisplayString()}} iresult);
-                            result.{{member.Name}}.Add(iresult);
+                            {{listItemParseStatement}}
+                            result.{{member.Name}}.Add({{listItemParseResultVarName}});
 
                             childInternals = childInternals.Slice(
-                                child2.{{nameof(XmlNode2.FullNode)}}.Length
+                                {{child2VarName}}.{{nameof(XmlNode2.FullNode)}}.Length
                                 );
                             if(childInternals.IsEmpty)
                             {
@@ -783,6 +806,57 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                 }
 
+            }
+        }
+
+        private readonly string GenerateListItemParseStatement(
+            string? parserInvocation,
+            string child2VarName,
+            INamedTypeSymbol listItemType,
+            string listItemParseResultVarName
+            )
+        {
+            if (listItemType.EnumUnderlyingType != null)
+            {
+                var listItemVarName = $"{child2VarName}.{nameof(XmlNode2.Internals)}";
+                var enumParseStatement = GenerateEnumParseStatement(
+                    listItemType,
+                    parserInvocation,
+                    listItemVarName
+                    );
+                return $"var {listItemParseResultVarName} = {enumParseStatement};";
+            }
+            else
+            {
+                var listItemVarName = $"{child2VarName}.{nameof(XmlNode2.FullNode)}";
+                var classAndMethodName = DetermineClassName(listItemType) + "." + HeadDeserializeMethodName;
+
+                return $@"{classAndMethodName}({listItemVarName}, {child2VarName}.{nameof(XmlNode2.XmlnsAttributeName)}, out {listItemType.ToGlobalDisplayString()} {listItemParseResultVarName});";
+            }
+        }
+
+        private readonly string GenerateEnumParseStatement(
+            INamedTypeSymbol memberType,
+            string? parserInvocation,
+            string varName
+            )
+        {
+            if (!string.IsNullOrEmpty(parserInvocation))
+            {
+                var fullParserInvocation = string.Format(
+                    parserInvocation,
+                    varName
+                    );
+
+                return fullParserInvocation;
+            }
+            else
+            {
+                var fullParserInvocation =
+                    $@"({memberType.ToGlobalDisplayString()})Enum.Parse(typeof({memberType.ToGlobalDisplayString()}), {varName})"
+                    ;
+
+                return fullParserInvocation;
             }
         }
 
