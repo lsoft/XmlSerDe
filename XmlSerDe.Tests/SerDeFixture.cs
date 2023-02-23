@@ -875,6 +875,61 @@ namespace XmlSerDe.Tests
         }
 
 
+
+
+        [Fact]
+        public void XmlObject23_24_Deserialize_Test0()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject23), new Type[] { typeof(XmlObject24) }).Serialize(
+            //        ms,
+            //        new XmlObject23()
+            //        {
+            //            Objs = new XmlObject24[]
+            //            {
+            //                new XmlObject24(),
+            //                new XmlObject24(),
+            //                new XmlObject24()
+            //            }
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer23_24.Deserialize(@"<XmlObject23><Objs><XmlObject24></XmlObject24><XmlObject24></XmlObject24><XmlObject24></XmlObject24></Objs></XmlObject23>".AsSpan(), out XmlObject23 xo);
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(3, xo.Objs.Length);
+            Xunit.Assert.NotNull(xo.Objs[0]);
+            Xunit.Assert.NotNull(xo.Objs[1]);
+            Xunit.Assert.NotNull(xo.Objs[2]);
+        }
+
+        [Fact]
+        public void XmlObject23_24_Serialize_Test0()
+        {
+            var sb = new DefaultStringBuilderExhauster();
+            XmlSerializerDeserializer23_24.Serialize(
+                sb,
+                new XmlObject23()
+                {
+                    Objs = new XmlObject24[]
+                    {
+                        new XmlObject24(),
+                        new XmlObject24(),
+                        new XmlObject24()
+                    }
+                },
+                false
+                );
+            var xml = sb.ToString();
+            Xunit.Assert.Equal(
+                @"<XmlObject23><Objs><XmlObject24></XmlObject24><XmlObject24></XmlObject24><XmlObject24></XmlObject24></Objs></XmlObject23>",
+                xml
+                );
+        }
+
+
+
         //        [Fact]
         //        public void TestGenerator()
         //        {

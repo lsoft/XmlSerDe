@@ -116,4 +116,9 @@ namespace XmlSerDe.Tests
     {
     }
 
+    [XmlSubject(typeof(XmlObject23), true)]
+    [XmlSubject(typeof(XmlObject24), false)]
+    public partial class XmlSerializerDeserializer23_24
+    {
+    }
 }
