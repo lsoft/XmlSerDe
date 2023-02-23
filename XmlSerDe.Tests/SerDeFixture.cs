@@ -823,6 +823,56 @@ namespace XmlSerDe.Tests
 
 
 
+        [Fact]
+        public void XmlObject22_Deserialize_Test0()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject22), new Type[] { }).Serialize(
+            //        ms,
+            //        new XmlObject22()
+            //        {
+            //            Enums = new XmlEnum22[3]
+            //            {
+            //                XmlEnum22.A,
+            //                XmlEnum22.B,
+            //                XmlEnum22.C
+            //            }
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer22.Deserialize(@"<XmlObject22><Enums><XmlEnum22>A</XmlEnum22><XmlEnum22>B</XmlEnum22><XmlEnum22>C</XmlEnum22></Enums></XmlObject22>".AsSpan(), out XmlObject22 xo);
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(3, xo.Enums.Length);
+            Xunit.Assert.Equal(XmlEnum22.A, xo.Enums[0]);
+            Xunit.Assert.Equal(XmlEnum22.B, xo.Enums[1]);
+            Xunit.Assert.Equal(XmlEnum22.C, xo.Enums[2]);
+        }
+
+        [Fact]
+        public void XmlObject22_Serialize_Test0()
+        {
+            var sb = new DefaultStringBuilderExhauster();
+            XmlSerializerDeserializer22.Serialize(
+                sb,
+                new XmlObject22()
+                {
+                    Enums = new XmlEnum22[3]
+                    {
+                        XmlEnum22.A,
+                        XmlEnum22.B,
+                        XmlEnum22.C
+                    }
+                },
+                false
+                );
+            var xml = sb.ToString();
+            Xunit.Assert.Equal(
+                @"<XmlObject22><Enums><XmlEnum22>A</XmlEnum22><XmlEnum22>B</XmlEnum22><XmlEnum22>C</XmlEnum22></Enums></XmlObject22>",
+                xml
+                );
+        }
 
 
         //        [Fact]

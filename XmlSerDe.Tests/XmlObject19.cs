@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace XmlSerDe.Tests
 {
-    public  class XmlObject19
+    public class XmlObject19
     {
         public int[] Ints;
     }

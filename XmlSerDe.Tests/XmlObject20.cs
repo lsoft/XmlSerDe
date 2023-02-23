@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace XmlSerDe.Tests
 {
-    public  class XmlObject20
+    public class XmlObject20
     {
         public sbyte[] Bytes;
     }
