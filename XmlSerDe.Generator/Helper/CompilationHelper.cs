@@ -63,6 +63,20 @@ namespace XmlSerDe.Generator.Helper
                     ;
         }
 
+        public static IArrayTypeSymbol Array(
+            this Compilation compilation,
+            params ITypeSymbol[] genericParameters
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.CreateArrayTypeSymbol(genericParameters[0]);
+        }
+
         public static INamedTypeSymbol List(
             this Compilation compilation,
             params ITypeSymbol[] genericParameters
@@ -78,6 +92,7 @@ namespace XmlSerDe.Generator.Helper
                     .Construct(genericParameters)
                     ;
         }
+
         public static INamedTypeSymbol Exception(
             this Compilation compilation
             )

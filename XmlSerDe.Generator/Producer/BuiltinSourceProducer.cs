@@ -34,7 +34,7 @@ namespace XmlSerDe.Generator.Producer
 
         public static bool TryGetBuiltin(
             Compilation compilation,
-            INamedTypeSymbol type,
+            ITypeSymbol type,
             out Builtin builtin)
         {
             var builtins = GenerateBuiltins(compilation);

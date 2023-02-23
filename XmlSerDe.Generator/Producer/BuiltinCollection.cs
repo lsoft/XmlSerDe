@@ -20,7 +20,7 @@ namespace XmlSerDe.Generator.Producer
             Builtins = builtins;
         }
 
-        public bool TryGet(INamedTypeSymbol target, out Builtin rbuiltin)
+        public bool TryGet(ITypeSymbol target, out Builtin rbuiltin)
         {
             if (target is null)
             {

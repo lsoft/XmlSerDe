@@ -666,6 +666,62 @@ namespace XmlSerDe.Tests
 
 
 
+        [Fact]
+        public void XmlObject19_Deserialize_Test0()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject19), new Type[] { }).Serialize(
+            //        ms,
+            //        new XmlObject19()
+            //        {
+            //            Ints = new int[3]
+            //            {
+            //                -1,
+            //                0,
+            //                1
+            //            }
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer19.Deserialize(@"<XmlObject19><Ints><int>-1</int><int>0</int><int>1</int></Ints></XmlObject19>".AsSpan(), out XmlObject19 xo);
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(3, xo.Ints.Length);
+            Xunit.Assert.Equal(-1, xo.Ints[0]);
+            Xunit.Assert.Equal(0, xo.Ints[1]);
+            Xunit.Assert.Equal(1, xo.Ints[2]);
+        }
+
+        [Fact]
+        public void XmlObject19_Serialize_Test0()
+        {
+            var sb = new DefaultStringBuilderExhauster();
+            XmlSerializerDeserializer19.Serialize(
+                sb,
+                new XmlObject19()
+                {
+                    Ints = new int[3]
+                    {
+                        -1,
+                        0,
+                        1
+                    }
+                },
+                false
+                );
+            var xml = sb.ToString();
+            Xunit.Assert.Equal(
+                @"<XmlObject19><Ints><int>-1</int><int>0</int><int>1</int></Ints></XmlObject19>",
+                xml
+                );
+        }
+
+
+
+
+
+
 
         //        [Fact]
         //        public void TestGenerator()

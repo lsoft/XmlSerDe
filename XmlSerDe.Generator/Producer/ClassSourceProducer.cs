@@ -8,6 +8,7 @@ using System.Text;
 using XmlSerDe.Generator.Helper;
 using System.Xml.Serialization;
 using XmlSerDe.Common;
+using System.Reflection;
 
 namespace XmlSerDe.Generator.Producer
 {
@@ -269,7 +270,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
             var memberType = ParseMember(member);
             _sb.AppendLine($$"""
-            //{{memberType.ToFullDisplayString()}} {{member.Name}}
+            //{{memberType.ToGlobalDisplayString()}} {{member.Name}}
 """);
 
             var canBeNull = !memberType.IsValueType;
@@ -288,7 +289,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
 
 
-            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType, out var memberBuiltin))
+            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType.Symbol, out var memberBuiltin))
             {
                 _sb.AppendLine($$"""
                 sb.{{nameof(IExhauster.Append)}}("<{{member.Name}}>");
@@ -298,75 +299,31 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
 
             }
-            else if (memberType.EnumUnderlyingType != null)
+            else if (memberType.IsEnum)
             {
                 var gses = GenerateSerializeEnum(member.Name, member.Name);
                 _sb.AppendLine(gses);
             }
-            //TODO array and other collections
-            else if (
-                memberType.TypeArguments.Length > 0
-                && (SymbolEqualityComparer.Default.Equals(memberType, _compilation.List(memberType.TypeArguments[0])))
-                )
+            //TODO other collections?
+            else if (memberType.IsCollection(out var collectionItemType))
             {
+                var countOrLength = memberType.DetermineCountOrLength();
+
+                var scms = GenerateSerializeCollectionMember(member, (INamedTypeSymbol)collectionItemType!);
+
                 _sb.AppendLine($$"""
                 sb.{{nameof(IExhauster.Append)}}("<{{member.Name}}>");
-
-""");
-
-                var listItemType = (INamedTypeSymbol)memberType.TypeArguments[0];
-
-                if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out var listItemBuiltin))
+                for(var index = 0; index < obj.{{member.Name}}.{{countOrLength}}; index++)
                 {
-                    _sb.AppendLine($$"""
-
-                for(var index = 0; index < obj.{{member.Name}}.Count; index++)
-                {
-                    {{BuiltinSerializeHeadFullMethodName}}(sb, obj.{{member.Name}}[index]);
+{{scms}}
                 }
-""");
-                }
-                else
-                {
-                    if (listItemType.EnumUnderlyingType != null)
-                    {
-                        var indexVarName = "index";
-
-                        var gses = GenerateSerializeEnum(
-                            listItemType.Name,
-                            $"{member.Name}[{indexVarName}]"
-                            );
-
-                        _sb.AppendLine($$"""
-
-                for(var {{indexVarName}} = 0; {{indexVarName}} < obj.{{member.Name}}.Count; {{indexVarName}}++)
-                {
-{{gses}}
-                }
-""");
-
-                    }
-                    else
-                    {
-                        _sb.AppendLine($$"""
-
-                for(var index = 0; index < obj.{{member.Name}}.Count; index++)
-                {
-                    {{HeadSerializeMethodName}}(sb, obj.{{member.Name}}[index]);
-                }
-""");
-                    }
-                }
-
-                _sb.AppendLine($$"""
                 sb.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
-
 """);
 
             }
             else
             {
-                var subjectFound = SerializationInfoCollection.TryGetSubject(memberType, out var ssi);
+                var subjectFound = SerializationInfoCollection.TryGetSubject(memberType.Symbol, out var ssi);
                 if (subjectFound && ssi.Deriveds.Count > 0)
                 {
                     foreach (var derived in ssi.Deriveds)
@@ -399,6 +356,32 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
 """);
 
+        }
+
+        private readonly string GenerateSerializeCollectionMember(
+            ISymbol member,
+            INamedTypeSymbol listItemType
+            )
+        {
+            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out var listItemBuiltin))
+            {
+                return $"                {BuiltinSerializeHeadFullMethodName}(sb, obj.{member.Name}[index]);";
+            }
+            else if (listItemType.EnumUnderlyingType != null)
+            {
+                var indexVarName = "index";
+
+                var gses = GenerateSerializeEnum(
+                    listItemType.Name,
+                    $"{member.Name}[{indexVarName}]"
+                    );
+
+                return gses;
+            }
+            else
+            {
+                return $"                {HeadSerializeMethodName}(sb, obj.{member.Name}[index]);";
+            }
         }
 
         private readonly string GenerateSerializeEnum(string enumTypeName, string enumPropertyName)
@@ -656,13 +639,13 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         private readonly void GenerateDeserializeMember(
             int index,
             ISymbol member,
-            INamedTypeSymbol memberType,
+            TypeSymbol memberType,
             string? parserInvocation
             )
         {
             var elseif = index > 0 ? "else " : "";
 
-            if(string.IsNullOrEmpty(parserInvocation) && BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType, out var builtin))
+            if(string.IsNullOrEmpty(parserInvocation) && BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType.Symbol, out var builtin))
             {
                 var finalClause = string.Format(
                     builtin.ConverterClause,
@@ -670,14 +653,14 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     );
 
                 _sb.AppendLine($$"""
-                    //{{memberType.ToFullDisplayString()}}  {{member.Name}}
+                    //{{memberType.ToGlobalDisplayString()}}  {{member.Name}}
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         result.{{member.Name}} = {{finalClause}};
                     }
 """);
             }
-            else if (memberType.EnumUnderlyingType != null)
+            else if (memberType.IsEnum)
             {
                 var fullParserInvocation = GenerateEnumParseStatement(
                     memberType,
@@ -694,13 +677,13 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
 
             }
-            //TODO array and other collections
-            else if (
-                memberType.TypeArguments.Length > 0
-                && (SymbolEqualityComparer.Default.Equals(memberType, _compilation.List(memberType.TypeArguments[0])))
-                )
+            //TODO other collections?
+            else if (memberType.IsCollection(out var collectionItemType))
             {
-                var listItemType = (INamedTypeSymbol)memberType.TypeArguments[0];
+                var listItemType = new TypeSymbol(
+                    _compilation,
+                    collectionItemType!
+                    );
 
                 const string child2VarName = "child2";
                 const string listItemParseResultVarName = "iresult";
@@ -712,27 +695,32 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     listItemParseResultVarName
                     );
 
+                var poolVarName = "pool";
+
+                var assignStatement = GenerateAssignStatement(
+                    memberType,
+                    member.Name,
+                    poolVarName
+                    );
+
                 _sb.AppendLine($$"""
                     //List<T>
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
-                        if(result.{{member.Name}} == default)
-                        {
-                            result.{{member.Name}} = new {{memberType.ToGlobalDisplayString()}}();
-                        }
+                        var {{poolVarName}} = new global::System.Collections.Generic.List<{{listItemType.ToGlobalDisplayString()}}>();
 
                         var childInternals = child.{{nameof(XmlNode2.Internals)}};
                         {{typeof(XmlNode2).FullName}} {{child2VarName}} = new();
                         while(true)
                         {
-                            {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(childInternals, child.XmlnsAttributeName, ref {{child2VarName}});
+                            {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, ref {{child2VarName}});
                             if({{child2VarName}}.{{nameof(XmlNode2.IsEmpty)}})
                             {
                                 break;
                             }
 
                             {{listItemParseStatement}}
-                            result.{{member.Name}}.Add({{listItemParseResultVarName}});
+                            {{poolVarName}}.Add({{listItemParseResultVarName}});
 
                             childInternals = childInternals.Slice(
                                 {{child2VarName}}.{{nameof(XmlNode2.FullNode)}}.Length
@@ -742,6 +730,8 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                                 break;
                             }
                         }
+
+                        {{assignStatement}}
                     }
 """);
             }
@@ -749,7 +739,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 //здесь, вероятно, какой-то другой тип
 
-                if (!SerializationInfoCollection.TryGetSubject(memberType, out var subject))
+                if (!SerializationInfoCollection.TryGetSubject(memberType.Symbol, out var subject))
                 {
                     throw new InvalidOperationException($"(2) Unknown type {memberType.ToGlobalDisplayString()}");
                 }
@@ -759,7 +749,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     //тут могут быть вариации
                     //генерируем метод с проверками наследников
 
-                    var classAndMethodName = DetermineClassName(memberType) + "." + HeadlessDeserializeMethodName;
+                    var classAndMethodName = DetermineClassName(memberType.Symbol) + "." + HeadlessDeserializeMethodName;
 
                     _sb.AppendLine($$"""
                     //custom type
@@ -780,7 +770,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                         {
                             var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                            {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{memberType.ToGlobalDisplayString()}} iresult);
+                            {{classAndMethodName}}(childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult);
                             result.{{member.Name}} = iresult;
                         }
                     }
@@ -792,14 +782,14 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                     var withHeadBody = memberType.IsAbstract;
                     var methodName = withHeadBody ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
-                    var classAndMethodName = DetermineClassName(memberType) + "." + methodName;
+                    var classAndMethodName = DetermineClassName(memberType.Symbol) + "." + methodName;
 
                     _sb.AppendLine($$"""
                     //custom type
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                        {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{memberType.ToGlobalDisplayString()}} iresult);
+                        {{classAndMethodName}}(childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult);
                         result.{{member.Name}} = iresult;
                     }
 """);
@@ -809,14 +799,32 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
         }
 
+        private readonly string GenerateAssignStatement(
+            TypeSymbol memberType,
+            string memberName,
+            string poolVarName
+            )
+        {
+            if (memberType.IsList(out _))
+            {
+                return $"result.{memberName} = {poolVarName};";
+            }
+            else if (memberType.IsArray(out _))
+            {
+                return $"result.{memberName} = {poolVarName}.ToArray();";
+            }
+
+            throw new InvalidOperationException($"Unknown type {memberType.ToGlobalDisplayString()}");
+        }
+
         private readonly string GenerateListItemParseStatement(
             string? parserInvocation,
             string child2VarName,
-            INamedTypeSymbol listItemType,
+            TypeSymbol listItemType,
             string listItemParseResultVarName
             )
         {
-            if (listItemType.EnumUnderlyingType != null)
+            if (listItemType.IsEnum)
             {
                 var listItemVarName = $"{child2VarName}.{nameof(XmlNode2.Internals)}";
                 var enumParseStatement = GenerateEnumParseStatement(
@@ -829,14 +837,14 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             else
             {
                 var listItemVarName = $"{child2VarName}.{nameof(XmlNode2.FullNode)}";
-                var classAndMethodName = DetermineClassName(listItemType) + "." + HeadDeserializeMethodName;
+                var classAndMethodName = DetermineClassName(listItemType.Symbol) + "." + HeadDeserializeMethodName;
 
                 return $@"{classAndMethodName}({listItemVarName}, {child2VarName}.{nameof(XmlNode2.XmlnsAttributeName)}, out {listItemType.ToGlobalDisplayString()} {listItemParseResultVarName});";
             }
         }
 
         private readonly string GenerateEnumParseStatement(
-            INamedTypeSymbol memberType,
+            TypeSymbol memberType,
             string? parserInvocation,
             string varName
             )
@@ -899,7 +907,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
         }
 
-        private readonly string DetermineClassName(INamedTypeSymbol listItemType)
+        private readonly string DetermineClassName(ITypeSymbol listItemType)
         {
             if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out _))
             {
@@ -951,23 +959,157 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
         }
 
-        private static INamedTypeSymbol ParseMember(ISymbol member)
+        private readonly TypeSymbol ParseMember(ISymbol member)
         {
-            INamedTypeSymbol memberType;
-            if (member is IPropertySymbol property1)
+            if (member is IPropertySymbol property)
             {
-                memberType = (INamedTypeSymbol)property1.Type;
+                return new TypeSymbol(
+                    _compilation,
+                    property.Type
+                    );
             }
-            else if (member is IFieldSymbol field1)
+            else if (member is IFieldSymbol field)
             {
-                memberType = (INamedTypeSymbol)field1.Type;
+                return new TypeSymbol(
+                    _compilation,
+                    field.Type
+                    );
             }
             else
             {
                 throw new NotImplementedException($"Unknown member type: {member.GetType().Name}");
             }
+        }
 
-            return memberType;
+        public readonly struct TypeSymbol
+        {
+            private readonly Compilation _compilation;
+
+            public readonly ITypeSymbol Symbol;
+            public readonly string GlobalName;
+
+            public bool IsEnum
+            {
+                get
+                {
+                    if (Symbol is INamedTypeSymbol nts)
+                    {
+                        return nts.EnumUnderlyingType != null;
+                    }
+                    if (Symbol is IArrayTypeSymbol ats)
+                    {
+                        return false; //TODO: arrays of enums are possible!
+                    }
+
+                    return false;
+                }
+            }
+
+            public ITypeSymbol? CollectionItemType
+            {
+                get
+                {
+                    if (Symbol is INamedTypeSymbol nts)
+                    {
+                        if (nts.TypeArguments.Length == 0)
+                        {
+                            return null;
+                        }
+
+                        if (nts.TypeArguments.Length > 1)
+                        {
+                            throw new NotSupportedException($"{nts.ToGlobalDisplayString()} does not support");
+                        }
+
+                        return nts.TypeArguments[0];
+                    }
+                    if (Symbol is IArrayTypeSymbol ats)
+                    {
+                        return ats.ElementType;
+                    }
+
+                    return null;
+                }
+            }
+
+            public readonly bool IsValueType
+            {
+                get
+                {
+                    return
+                        Symbol.IsValueType;
+                }
+            }
+
+            public readonly bool IsAbstract
+            {
+                get
+                {
+                    return Symbol.IsAbstract;
+                }
+            }
+
+            public TypeSymbol(
+                Compilation compilation,
+                ITypeSymbol symbol
+                )
+            {
+                if (compilation is null)
+                {
+                    throw new ArgumentNullException(nameof(compilation));
+                }
+
+                if (symbol is null)
+                {
+                    throw new ArgumentNullException(nameof(symbol));
+                }
+
+                _compilation = compilation;
+                Symbol = symbol;
+                GlobalName = symbol is IArrayTypeSymbol ats
+                    ? $"{ats.ElementType.ToGlobalDisplayString()}[]"
+                    : symbol.ToGlobalDisplayString();
+            }
+
+            public readonly bool IsCollection(out ITypeSymbol? collectionItemType)
+            {
+                return
+                    IsList(out collectionItemType)
+                    || IsArray(out collectionItemType)
+                    ;
+            }
+
+            public readonly bool IsArray(out ITypeSymbol? collectionItemType)
+            {
+                collectionItemType = CollectionItemType;
+
+                return
+                    collectionItemType is not null
+                    && SymbolEqualityComparer.Default.Equals(Symbol, _compilation.Array(new[] { collectionItemType }))
+                    ;
+            }
+
+            public readonly bool IsList(out ITypeSymbol? collectionItemType)
+            {
+                collectionItemType = CollectionItemType;
+
+                return
+                    collectionItemType is not null
+                    && SymbolEqualityComparer.Default.Equals(Symbol, _compilation.List(new[] { collectionItemType }))
+                    ;
+            }
+
+            public readonly string DetermineCountOrLength()
+            {
+                if (IsArray(out _))
+                {
+                    return "Length";
+                }
+
+                return "Count";
+            }
+
+            public readonly string ToGlobalDisplayString() => GlobalName;
         }
 
         private static SerializationInfoCollection ParseAttributes(

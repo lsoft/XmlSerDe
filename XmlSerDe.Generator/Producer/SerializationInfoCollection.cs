@@ -31,7 +31,7 @@ namespace XmlSerDe.Generator.Producer
         }
 
         public bool TryGetSubject(
-            INamedTypeSymbol target,
+            ITypeSymbol target,
             out SerializationInfo info
             )
         {

@@ -95,4 +95,12 @@ namespace XmlSerDe.Tests
     public partial class XmlSerializerDeserializer18
     {
     }
+
+    [XmlSubject(typeof(XmlObject19), true)]
+    public partial class XmlSerializerDeserializer19
+    {
+    }
+
+
+
 }
