@@ -770,6 +770,58 @@ namespace XmlSerDe.Tests
         }
 
 
+        [Fact]
+        public void XmlObject21_Deserialize_Test0()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject21), new Type[] { }).Serialize(
+            //        ms,
+            //        new XmlObject21()
+            //        {
+            //            Guids = new Guid[3]
+            //            {
+            //                Guid.Parse("7E6F7737-042D-4046-BF85-5596B47D6847"),
+            //                Guid.Parse("E7EC0690-A00F-4F96-B772-A0529447121F"),
+            //                Guid.Parse("3CD3F5B1-B364-4C30-8DC3-C7F9DFEAFB88"),
+            //            }
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer21.Deserialize(@"<XmlObject21><Guids><guid>7e6f7737-042d-4046-bf85-5596b47d6847</guid><guid>e7ec0690-a00f-4f96-b772-a0529447121f</guid><guid>3cd3f5b1-b364-4c30-8dc3-c7f9dfeafb88</guid></Guids></XmlObject21>".AsSpan(), out XmlObject21 xo);
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(3, xo.Guids.Length);
+            Xunit.Assert.Equal(Guid.Parse("7E6F7737-042D-4046-BF85-5596B47D6847"), xo.Guids[0]);
+            Xunit.Assert.Equal(Guid.Parse("E7EC0690-A00F-4F96-B772-A0529447121F"), xo.Guids[1]);
+            Xunit.Assert.Equal(Guid.Parse("3CD3F5B1-B364-4C30-8DC3-C7F9DFEAFB88"), xo.Guids[2]);
+        }
+
+        [Fact]
+        public void XmlObject21_Serialize_Test0()
+        {
+            var sb = new DefaultStringBuilderExhauster();
+            XmlSerializerDeserializer21.Serialize(
+                sb,
+                new XmlObject21()
+                {
+                    Guids = new Guid[3]
+                    {
+                        Guid.Parse("7E6F7737-042D-4046-BF85-5596B47D6847"),
+                        Guid.Parse("E7EC0690-A00F-4F96-B772-A0529447121F"),
+                        Guid.Parse("3CD3F5B1-B364-4C30-8DC3-C7F9DFEAFB88"),
+                    }
+                },
+                false
+                );
+            var xml = sb.ToString();
+            Xunit.Assert.Equal(
+                @"<XmlObject21><Guids><guid>7e6f7737-042d-4046-bf85-5596b47d6847</guid><guid>e7ec0690-a00f-4f96-b772-a0529447121f</guid><guid>3cd3f5b1-b364-4c30-8dc3-c7f9dfeafb88</guid></Guids></XmlObject21>",
+                xml
+                );
+        }
+
+
 
 
 
