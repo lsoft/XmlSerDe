@@ -81,6 +81,10 @@ Job=.NET 6.0  Runtime=.NET 6.0
 |          'Serialize: XmlSerDe' |  2.636 us | 0.0172 us | 0.0160 us | 3.3073 |    6921 B |
 |    'Serialize: XmlSerDe (est)' |  2.715 us | 0.0326 us | 0.0289 us | 2.4185 |    5065 B |
 | 'Serialize: XmlSerDe (stream)' |  2.844 us | 0.0232 us | 0.0217 us | 0.2823 |     592 B |
+
+
+|                         Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
+|------------------------------- |----------:|----------:|----------:|-------:|----------:|
 |      'Deserialize: System.Xml' | 14.010 us | 0.0682 us | 0.0638 us | 7.8125 |   16392 B |
 |        'Deserialize: XmlSerDe' | 11.089 us | 0.1024 us | 0.0958 us | 0.3510 |     736 B |
 ```
