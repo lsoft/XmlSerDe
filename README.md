@@ -105,15 +105,15 @@ the code:
         return r;
     }
 
-    public string Serialize(InfoContainer subject)
+    public string Serialize()
     {
         var dsbe = new DefaultStringBuilderExhauster();
-        XmlSerializerDeserializer.Serialize(dsbe, subject, false);
+        XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
         var xml = dsbe.ToString();
         return xml;
     }
 
-    public string Serialize_Est(InfoContainer subject)
+    public string Serialize_Est()
     {
         //estimation phase:
         var dlee = new DefaultLengthEstimatorExhauster();
@@ -124,7 +124,7 @@ the code:
         var dsbe = new DefaultStringBuilderExhauster(
             new StringBuilder(estimateXmlLength)
             );
-        XmlSerializerDeserializer.Serialize(dsbe, subject, false);
+        XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
         var xml = dsbe.ToString();
         return xml;
     }
