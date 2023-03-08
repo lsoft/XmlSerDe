@@ -9,7 +9,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XmlSerDe.Tests", "XmlSerDe.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XmlSerDe.PerformanceTests", "XmlSerDe.PerformanceTests\XmlSerDe.PerformanceTests.csproj", "{BCB69829-2A8D-4026-B55F-960A6AB8BE66}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XmlSerDe.Common", "XmlSerDe.Common\XmlSerDe.Common.csproj", "{56DB8188-336C-4792-AED8-73301C5D5F50}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XmlSerDe.Common", "XmlSerDe.Common\XmlSerDe.Common.csproj", "{56DB8188-336C-4792-AED8-73301C5D5F50}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XmlSerDe.Components", "XmlSerDe.Components\XmlSerDe.Components.csproj", "{08F65E0B-27CC-4D8F-ADEB-0CD15E0A5D65}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{56DB8188-336C-4792-AED8-73301C5D5F50}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{56DB8188-336C-4792-AED8-73301C5D5F50}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{56DB8188-336C-4792-AED8-73301C5D5F50}.Release|Any CPU.Build.0 = Release|Any CPU
+		{08F65E0B-27CC-4D8F-ADEB-0CD15E0A5D65}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{08F65E0B-27CC-4D8F-ADEB-0CD15E0A5D65}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{08F65E0B-27CC-4D8F-ADEB-0CD15E0A5D65}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{08F65E0B-27CC-4D8F-ADEB-0CD15E0A5D65}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

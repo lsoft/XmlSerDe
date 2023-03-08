@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
 using XmlSerDe.Common;
+using XmlSerDe.Components.Exhauster;
 //using roschar = System.ReadOnlySpan<char>;
 
 namespace XmlSerDe.Tests

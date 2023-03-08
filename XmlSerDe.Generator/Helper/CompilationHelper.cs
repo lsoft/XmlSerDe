@@ -16,7 +16,14 @@ namespace XmlSerDe.Generator.Helper
                 throw new ArgumentNullException(nameof(compilation));
             }
 
-            return compilation.GetTypeByMetadataName("XmlSerDe.Common.DefaultStringBuilderExhauster")!;
+            var result =  compilation.GetTypeByMetadataName("XmlSerDe.Components.Exhauster.DefaultStringBuilderExhauster");
+
+            if (result is null)
+            {
+                throw new InvalidOperationException($"Cannot find {nameof(DefaultStringBuilderExhauster)} in Compilation");
+            }
+
+            return result;
         }
 
         public static INamedTypeSymbol Func(

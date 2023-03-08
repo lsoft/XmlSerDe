@@ -9,6 +9,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Xml.Serialization;
 using XmlSerDe.Common;
+using XmlSerDe.Components.Exhauster;
 using XmlSerDe.Tests.Complex;
 using XmlSerDe.Tests.Complex.Subject;
 using roschar = System.ReadOnlySpan<char>;

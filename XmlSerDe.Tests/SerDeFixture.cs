@@ -7,6 +7,7 @@ using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
 using XmlSerDe.Common;
+using XmlSerDe.Components.Exhauster;
 using Xunit;
 
 namespace XmlSerDe.Tests
@@ -654,7 +655,7 @@ namespace XmlSerDe.Tests
                         XmlEnum18.B,
                         XmlEnum18.C,
                     }
-                    },
+                },
                 false
                 );
             var xml = sb.ToString();

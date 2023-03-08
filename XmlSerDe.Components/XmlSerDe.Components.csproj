@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+<!--    <TargetFrameworks>netstandard2.0</TargetFrameworks> -->
+    <LangVersion>Latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <WarningsAsErrors>nullable;CS8766;CS8767</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" />
+  </ItemGroup>
+
+</Project>

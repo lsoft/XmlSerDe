@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using XmlSerDe.Common;
+using XmlSerDe.Components.Exhauster;
 
 namespace XmlSerDe.Tests.Complex.Subject
 {
