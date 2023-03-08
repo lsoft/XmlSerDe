@@ -121,4 +121,20 @@ namespace XmlSerDe.Tests
     public partial class XmlSerializerDeserializer23_24
     {
     }
+
+    [XmlSubject(typeof(XmlObject25), true)]
+    [XmlSubject(typeof(XmlObject26), false)]
+    [XmlDerivedSubject(typeof(XmlObject26), typeof(XmlObject27))]
+    [XmlSubject(typeof(XmlObject27), false)]
+    public partial class XmlSerializerDeserializer25_26_27
+    {
+    }
+
+    [XmlSubject(typeof(XmlObject28), true)]
+    [XmlSubject(typeof(XmlObject29), false)]
+    [XmlDerivedSubject(typeof(XmlObject29), typeof(XmlObject30))]
+    [XmlSubject(typeof(XmlObject30), false)]
+    public partial class XmlSerializerDeserializer28_29_30
+    {
+    }
 }

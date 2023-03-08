@@ -183,8 +183,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
             }
 
-            var isTypeUnknown = subject.IsAbstract;
-            if (isTypeUnknown)
+            if (deriveds.Count > 0)
             {
                 foreach (var derived in deriveds)
                 {
@@ -744,7 +743,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     throw new InvalidOperationException($"(2) Unknown type {memberType.ToGlobalDisplayString()}");
                 }
 
-                if (memberType.IsAbstract || subject.Deriveds.Count > 0)
+                if (subject.Deriveds.Count > 0)
                 {
                     //тут могут быть вариации
                     //генерируем метод с проверками наследников
@@ -752,7 +751,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     var classAndMethodName = DetermineClassName(memberType.Symbol) + "." + HeadlessDeserializeMethodName;
 
                     _sb.AppendLine($$"""
-                    //custom type
+                    //custom type (with custom types dispatching)
                     var childPreciseType = child.{{nameof(XmlNode2.GetPreciseNodeType)}}();
                     {{elseif}}if(!childPreciseType.IsEmpty)
                     {
@@ -780,12 +779,11 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 {
                     //здесь всё четко, нет никаких вариаций типов и соотв. не должно быть типа в дочерней ноде
 
-                    var withHeadBody = memberType.IsAbstract;
-                    var methodName = withHeadBody ? HeadDeserializeMethodName : HeadlessDeserializeMethodName;
+                    var methodName = HeadlessDeserializeMethodName;
                     var classAndMethodName = DetermineClassName(memberType.Symbol) + "." + methodName;
 
                     _sb.AppendLine($$"""
-                    //custom type
+                    //custom type (no custom type dispatch)
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         var childInternals = child.{{nameof(XmlNode2.Internals)}};
@@ -1259,6 +1257,14 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     var type = (INamedTypeSymbol)ca0.Value!;
                     var typegn = type.ToGlobalDisplayString();
                     var derived = (INamedTypeSymbol)ca1.Value!;
+
+                    if (derived.IsAbstract)
+                    {
+                        throw new InvalidOperationException(
+                            $"{derived.ToGlobalDisplayString()} must be non abstract class"
+                            );
+                    }
+
                     sinfos[typegn].AddDerived(derived);
                 }
             }

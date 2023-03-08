@@ -930,6 +930,131 @@ namespace XmlSerDe.Tests
 
 
 
+        [Fact]
+        public void XmlObject25_26_27_Deserialize_Test0()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject25), new Type[] { typeof(XmlObject26), typeof(XmlObject27) }).Serialize(
+            //        ms,
+            //        new XmlObject25()
+            //        {
+            //            Prop25 = new XmlObject27
+            //            {
+            //                Prop26 = 26,
+            //                Prop27 = 27
+            //            }
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer25_26_27.Deserialize(@"<XmlObject25 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""><Prop25 xsi:type=""XmlObject27""><Prop26>26</Prop26><Prop27>27</Prop27></Prop25></XmlObject25>".AsSpan(), out XmlObject25 xo);
+            Xunit.Assert.NotNull(xo);
+            var xo27 = xo.Prop25 as XmlObject27;
+            Xunit.Assert.NotNull(xo27);
+            Xunit.Assert.Equal(26, xo27.Prop26);
+            Xunit.Assert.Equal(27, xo27.Prop27);
+        }
+
+        [Fact]
+        public void XmlObject25_26_27_Serialize_Test0()
+        {
+            var sb = new DefaultStringBuilderExhauster();
+            XmlSerializerDeserializer25_26_27.Serialize(
+                sb,
+                new XmlObject25()
+                {
+                    Prop25 = new XmlObject27
+                    {
+                        Prop26 = 26,
+                        Prop27 = 27
+                    }
+                },
+                false
+                );
+            var xml = sb.ToString();
+            Xunit.Assert.Equal(
+                @"<XmlObject25><Prop25 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject27""><Prop27>27</Prop27><Prop26>26</Prop26></Prop25></XmlObject25>",
+                xml
+                );
+        }
+
+
+        [Fact]
+        public void XmlObject28_29_30_Deserialize_Test0()
+        {
+            //var ms = new MemoryStream();
+            //new XmlSerializer(
+            //    typeof(XmlObject28), new Type[] { typeof(XmlObject29), typeof(XmlObject30) }).Serialize(
+            //        ms,
+            //        new XmlObject28()
+            //        {
+            //            Prop28 = new List<XmlObject29>
+            //            {
+            //                new XmlObject30
+            //                {
+            //                    Prop29 = 129,
+            //                    Prop30 = 130
+            //                },
+            //                new XmlObject30
+            //                {
+            //                    Prop29 = 229,
+            //                    Prop30 = 230
+            //                },
+            //            }
+            //        }
+            //    );
+            //var q = Encoding.UTF8.GetString(ms.ToArray());
+
+            XmlSerializerDeserializer28_29_30.Deserialize(@"<XmlObject28 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""><Prop28><XmlObject29 xsi:type=""XmlObject30""><Prop29>129</Prop29><Prop30>130</Prop30></XmlObject29><XmlObject29 xsi:type=""XmlObject30""><Prop29>229</Prop29><Prop30>230</Prop30></XmlObject29></Prop28></XmlObject28>".AsSpan(), out XmlObject28 xo);
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(2, xo.Prop28.Count);
+
+            var xo1 = xo.Prop28[0] as XmlObject30;
+            Xunit.Assert.NotNull(xo1);
+            Xunit.Assert.Equal(129, xo1.Prop29);
+            Xunit.Assert.Equal(130, xo1.Prop30);
+
+            var xo2 = xo.Prop28[1] as XmlObject30;
+            Xunit.Assert.NotNull(xo2);
+            Xunit.Assert.Equal(229, xo2.Prop29);
+            Xunit.Assert.Equal(230, xo2.Prop30);
+        }
+
+        [Fact]
+        public void XmlObject28_29_30_Serialize_Test0()
+        {
+            var sb = new DefaultStringBuilderExhauster();
+            XmlSerializerDeserializer28_29_30.Serialize(
+                sb,
+                new XmlObject28()
+                {
+                    Prop28 = new List<XmlObject29>
+                    {
+                        new XmlObject30
+                        {
+                            Prop29 = 129,
+                            Prop30 = 130
+                        },
+                        new XmlObject30
+                        {
+                            Prop29 = 229,
+                            Prop30 = 230
+                        },
+                    }
+                },
+                false
+                );
+            var xml = sb.ToString();
+            Xunit.Assert.Equal(
+                @"<XmlObject28><Prop28><XmlObject29 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject30""><Prop30>130</Prop30><Prop29>129</Prop29></XmlObject29><XmlObject29 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject30""><Prop30>230</Prop30><Prop29>229</Prop29></XmlObject29></Prop28></XmlObject28>",
+                xml
+                );
+        }
+
+
+
+
         //        [Fact]
         //        public void TestGenerator()
         //        {

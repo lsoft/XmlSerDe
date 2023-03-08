@@ -18,50 +18,50 @@ namespace XmlSerDe.Tests.Complex
             typeof(InfoContainer),
             new[]
             {
-            typeof(Derived3Info),
-            typeof(Derived1Info),
-            typeof(Derived2Info),
-            typeof(SerializeKeyValue),
-            typeof(PerformanceTime)
+                typeof(Derived3Info),
+                typeof(Derived1Info),
+                typeof(Derived2Info),
+                typeof(SerializeKeyValue),
+                typeof(PerformanceTime)
             }
             );
 
         public static readonly InfoContainer DefaultObject = new InfoContainer
         {
             InfoCollection = new List<BaseInfo>
-        {
-            new Derived3Info
             {
-                Email = "example@example.com"
-            },
-            new Derived1Info
-            {
-                BasePersonificationInfo = RawString
-            },
-            new Derived2Info
-            {
-                HotKeyUsed = false,
-                StepsCounter = 1,
-                EventsTime = new List<SerializeKeyValue>
+                new Derived3Info
                 {
-                    new SerializeKeyValue
+                    Email = "example@example.com"
+                },
+                new Derived1Info
+                {
+                    BasePersonificationInfo = RawString
+                },
+                new Derived2Info
+                {
+                    HotKeyUsed = false,
+                    StepsCounter = 1,
+                    EventsTime = new List<SerializeKeyValue>
                     {
-                        Key = KeyValueKindEnum.Three,
-                        Value = new PerformanceTime { SecondsSpan = 3, StartTime = DateTime.Parse("2022-09-28T14:51:39.2438815+03:00") }
-                    },
-                    new SerializeKeyValue
-                    {
-                        Key = KeyValueKindEnum.One,
-                        Value = new PerformanceTime { SecondsSpan = 0, StartTime = DateTime.Parse("2022-09-28T14:28:00.5009069+03:00") }
-                    },
-                    new SerializeKeyValue
-                    {
-                        Key = KeyValueKindEnum.Two,
-                        Value = new PerformanceTime { SecondsSpan = 1, StartTime = DateTime.Parse("2022-09-28T14:28:02.3089553+03:00") }
-                    },
+                        new SerializeKeyValue
+                        {
+                            Key = KeyValueKindEnum.Three,
+                            Value = new PerformanceTime { SecondsSpan = 3, StartTime = DateTime.Parse("2022-09-28T14:51:39.2438815+03:00") }
+                        },
+                        new SerializeKeyValue
+                        {
+                            Key = KeyValueKindEnum.One,
+                            Value = new PerformanceTime { SecondsSpan = 0, StartTime = DateTime.Parse("2022-09-28T14:28:00.5009069+03:00") }
+                        },
+                        new SerializeKeyValue
+                        {
+                            Key = KeyValueKindEnum.Two,
+                            Value = new PerformanceTime { SecondsSpan = 1, StartTime = DateTime.Parse("2022-09-28T14:28:02.3089553+03:00") }
+                        },
+                    }
                 }
             }
-        }
         };
 
         public const string RawString = "my string !@#$%^&*()_+|-=\\';[]{},./<>?";
@@ -195,17 +195,17 @@ namespace XmlSerDe.Tests.Complex
             }
 
             {
-                var firstau = (Derived3Info)first.InfoCollection[0];
-                var secondau = (Derived3Info)second.InfoCollection[0];
-                if (firstau.InfoType != secondau.InfoType)
+                var firstic = (Derived3Info)first.InfoCollection[0];
+                var secondic = (Derived3Info)second.InfoCollection[0];
+                if (firstic.InfoType != secondic.InfoType)
                 {
                     throw new Exception("InfoType");
                 }
-                if (firstau.PhoneNumber != secondau.PhoneNumber)
+                if (firstic.PhoneNumber != secondic.PhoneNumber)
                 {
                     throw new Exception("PhoneNumber");
                 }
-                if (firstau.Email != secondau.Email)
+                if (firstic.Email != secondic.Email)
                 {
                     throw new Exception("Email");
                 }

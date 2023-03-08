@@ -26,6 +26,8 @@ namespace XmlSerDe.Generator.Producer
                 throw new ArgumentNullException(nameof(infos));
             }
 
+            infos.ForEach(i => i.Check());
+
             ExhaustList = exhaustList;
             Infos = infos;
         }

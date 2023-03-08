@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.CodeAnalysis;
+using XmlSerDe.Common;
+using XmlSerDe.Generator.Helper;
 
 namespace XmlSerDe.Generator.Producer
 {
@@ -76,6 +78,19 @@ namespace XmlSerDe.Generator.Producer
                 FactoryInvocation,
                 parserInvocation
                 );
+        }
+
+        internal void Check()
+        {
+            if (Subject.IsAbstract)
+            {
+                if (Deriveds.Count == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"{Subject.ToGlobalDisplayString()} must have at least one declared implementation via {nameof(XmlDerivedSubjectAttribute)}"
+                        );
+                }
+            }
         }
     }
 }
