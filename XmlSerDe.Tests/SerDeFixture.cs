@@ -8,6 +8,7 @@ using System.Xml;
 using System.Xml.Serialization;
 using XmlSerDe.Common;
 using XmlSerDe.Components.Exhauster;
+using XmlSerDe.Components.Injector;
 using Xunit;
 
 namespace XmlSerDe.Tests
@@ -21,7 +22,10 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1_Deserialize_Test0()
         {
-            XmlSerializerDeserializer1.Deserialize(@"<XmlObject1></XmlObject1>".AsSpan(), out XmlObject1 xo);
+            XmlSerializerDeserializer1.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject1></XmlObject1>".AsSpan(),
+                out XmlObject1 xo);
             Xunit.Assert.NotNull(xo);
         }
 
@@ -56,6 +60,7 @@ namespace XmlSerDe.Tests
         public void XmlObject1_Deserialize_Test0_WithHead()
         {
             XmlSerializerDeserializer1.Deserialize(
+                DefaultInjector.Instance,
                 XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
                     @"<?xml version=""1.0"" encoding=""utf-8""?><XmlObject1></XmlObject1>".AsSpan()
                     ), out XmlObject1 xo);
@@ -65,14 +70,20 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1_Deserialize_Test1()
         {
-            XmlSerializerDeserializer1.Deserialize(@"<XmlObject1/>".AsSpan(), out XmlObject1 xo);
+            XmlSerializerDeserializer1.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject1/>".AsSpan(),
+                out XmlObject1 xo);
             Xunit.Assert.NotNull(xo);
         }
 
         [Fact]
         public void XmlObject1_Deserialize_Test2()
         {
-            XmlSerializerDeserializer1.Deserialize(@"<XmlObject1     />".AsSpan(), out XmlObject1 xo);
+            XmlSerializerDeserializer1.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject1     />".AsSpan(),
+                out XmlObject1 xo);
             Xunit.Assert.NotNull(xo);
         }
 
@@ -80,6 +91,7 @@ namespace XmlSerDe.Tests
         public void XmlObject1_Deserialize_Test3()
         {
             XmlSerializerDeserializer1.Deserialize(
+                DefaultInjector.Instance,
                 @"<object xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""XmlObject1""></object>".AsSpan(),
                 out XmlObject1 xo
                 );
@@ -93,6 +105,7 @@ namespace XmlSerDe.Tests
         public void XmlObject2_Deserialize_Test0()
         {
             XmlSerializerDeserializer2.Deserialize(
+                DefaultInjector.Instance,
                 @"<XmlObject2></XmlObject2>".AsSpan(),
                 out XmlObject2 xo
                 );
@@ -105,6 +118,7 @@ namespace XmlSerDe.Tests
         public void XmlObject2_Deserialize_Test1()
         {
             XmlSerializerDeserializer2.Deserialize(
+                DefaultInjector.Instance,
                 (@"<XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan(),
                 out XmlObject2 xo
                 );
@@ -137,6 +151,7 @@ namespace XmlSerDe.Tests
         public void XmlObject2_Deserialize_Test1_WithHead()
         {
             XmlSerializerDeserializer2.Deserialize(
+                DefaultInjector.Instance,
                 XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
                     (@"<?xml version=""1.0"" encoding=""utf-8""?>    <XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
                     ),
@@ -151,6 +166,7 @@ namespace XmlSerDe.Tests
         public void XmlObject2_Deserialize_Test2()
         {
             XmlSerializerDeserializer2.Deserialize(
+                DefaultInjector.Instance,
                 (@"<XmlObject2><IntProperty>123</IntProperty><StringProperty>" + XmlEncodedString + @"</StringProperty></XmlObject2>").AsSpan(),
                 out XmlObject2 xo
                 );
@@ -163,6 +179,7 @@ namespace XmlSerDe.Tests
         public void XmlObject2_Deserialize_Test3()
         {
             XmlSerializerDeserializer2.Deserialize(
+                DefaultInjector.Instance,
                 (@"<object xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""XmlObject2""><IntProperty>123</IntProperty><StringProperty>" + XmlEncodedString + @"</StringProperty></object>").AsSpan(),
                 out XmlObject2 xo
                 );
@@ -175,6 +192,7 @@ namespace XmlSerDe.Tests
         public void XmlObject2_Deserialize_Test4()
         {
             XmlSerializerDeserializer2.Deserialize(
+                DefaultInjector.Instance,
                 (@"<XmlObject2><IntProperty/><StringProperty/></XmlObject2>").AsSpan(),
                 out XmlObject2 xo
                 );
@@ -191,6 +209,7 @@ namespace XmlSerDe.Tests
         public void XmlObject2_3_Deserialize_Test0()
         {
             XmlSerializerDeserializer2_3.Deserialize(
+                DefaultInjector.Instance,
                 (@"<XmlObject3><XmlObjectProperty><IntProperty>123</IntProperty><StringProperty>" + XmlEncodedString + @"</StringProperty></XmlObjectProperty></XmlObject3>").AsSpan(),
                 out XmlObject3 xo
                 );
@@ -208,6 +227,7 @@ namespace XmlSerDe.Tests
         public void XmlObject4_5_Deserialize_Test0()
         {
             XmlSerializerDeserializer4_5.Deserialize(
+                DefaultInjector.Instance,
                 (@"<XmlObject5><XmlObjectProperty xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""XmlObject4Specific1""> <StringProperty>MyString</StringProperty><IntProperty>123</IntProperty>   </XmlObjectProperty></XmlObject5>").AsSpan(),
                 out XmlObject5 xo
                 );
@@ -223,6 +243,7 @@ namespace XmlSerDe.Tests
         public void XmlObject4_5_Deserialize_Test1()
         {
             XmlSerializerDeserializer4_5.Deserialize(
+                DefaultInjector.Instance,
                 (@"<XmlObject5 xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance""><XmlObjectProperty p3:type=""XmlObject4Specific1""> <StringProperty>MyString</StringProperty><IntProperty>123</IntProperty>   </XmlObjectProperty></XmlObject5>").AsSpan(),
                 out XmlObject5 xo
                 );
@@ -256,6 +277,7 @@ namespace XmlSerDe.Tests
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
             XmlSerializerDeserializer6.Deserialize(
+                DefaultInjector.Instance,
                 (@"<XmlObject6><StringsProperty><string>a</string><string>b</string></StringsProperty></XmlObject6>").AsSpan(),
                 out XmlObject6 xo
                 );
@@ -294,6 +316,7 @@ namespace XmlSerDe.Tests
         public void XmlObject7_8_Deserialize_Test0()
         {
             XmlSerializerDeserializer7_8.Deserialize(
+                DefaultInjector.Instance,
                 (@"<XmlObject8 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><XmlObject7Property><StringProperty>a</StringProperty></XmlObject7Property></XmlObject8>").AsSpan(),
                 out XmlObject8 xo
                 );
@@ -324,6 +347,7 @@ namespace XmlSerDe.Tests
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
             XmlSerializerDeserializer9_10.Deserialize(
+                DefaultInjector.Instance,
                 (@"   <XmlObject10>   <XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1"">  <StringProperty>a</StringProperty><IntProperty>123</IntProperty>  </XmlObjectProperty></XmlObject10>").AsSpan(),
                 out XmlObject10 xo
                 );
@@ -390,6 +414,7 @@ namespace XmlSerDe.Tests
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
             XmlSerializerDeserializer11_12.Deserialize(
+                DefaultInjector.Instance,
                 (@"<XmlObject12><XmlObjectProperty><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><StringProperty>At0</StringProperty><IntProperty>0</IntProperty></XmlObject11Abstract><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><StringProperty>At1</StringProperty><IntProperty>1</IntProperty></XmlObject11Abstract></XmlObjectProperty></XmlObject12>").AsSpan(),
                 out XmlObject12 xo
                 );
@@ -445,7 +470,10 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject13_Deserialize_Test0()
         {
-            XmlSerializerDeserializer13.Deserialize(@"<XmlObject13><IntProperty>123</IntProperty><StringProperty>a</StringProperty></XmlObject13>".AsSpan(), out XmlObject13 xo);
+            XmlSerializerDeserializer13.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject13><IntProperty>123</IntProperty><StringProperty>a</StringProperty></XmlObject13>".AsSpan(),
+                out XmlObject13 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(0, xo.IntProperty);
             Xunit.Assert.Equal("a", xo.StringProperty);
@@ -467,7 +495,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer14.Deserialize(@"<XmlObject14 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><NullableDateTime xsi:nil=""true"" /><NullableGuid xsi:nil=""true"" /></XmlObject14>".AsSpan(), out XmlObject14 xo);
+            XmlSerializerDeserializer14.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject14 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><NullableDateTime xsi:nil=""true"" /><NullableGuid xsi:nil=""true"" /></XmlObject14>".AsSpan(),
+                out XmlObject14 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Null(xo.NullableDateTime);
             Xunit.Assert.Null(xo.NullableGuid);
@@ -489,7 +520,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer14.Deserialize(@"<XmlObject14 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><NullableDateTime>2023-02-01T11:23:28.2389138</NullableDateTime><NullableGuid>268450C0-C71B-4440-A04E-D83ABFBD9FAC</NullableGuid></XmlObject14>".AsSpan(), out XmlObject14 xo);
+            XmlSerializerDeserializer14.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject14 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema""><NullableDateTime>2023-02-01T11:23:28.2389138</NullableDateTime><NullableGuid>268450C0-C71B-4440-A04E-D83ABFBD9FAC</NullableGuid></XmlObject14>".AsSpan(),
+                out XmlObject14 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(dt, xo.NullableDateTime);
             Xunit.Assert.Equal(new Guid("268450C0-C71B-4440-A04E-D83ABFBD9FAC"), xo.NullableGuid);
@@ -514,7 +548,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer15.Deserialize(@"<XmlObject15><XmlEnum15>EnumValue1</XmlEnum15></XmlObject15>".AsSpan(), out XmlObject15 xo);
+            XmlSerializerDeserializer15.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject15><XmlEnum15>EnumValue1</XmlEnum15></XmlObject15>".AsSpan(),
+                out XmlObject15 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(XmlEnum15.EnumValue1, xo.XmlEnum15);
         }
@@ -558,7 +595,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer16_17.Deserialize(@"<XmlObject17><MyList><XmlObject16><MyField>1</MyField></XmlObject16><XmlObject16><MyField>2</MyField></XmlObject16></MyList></XmlObject17>".AsSpan(), out XmlObject17 xo);
+            XmlSerializerDeserializer16_17.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject17><MyList><XmlObject16><MyField>1</MyField></XmlObject16><XmlObject16><MyField>2</MyField></XmlObject16></MyList></XmlObject17>".AsSpan(),
+                out XmlObject17 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(2, xo.MyList.Count);
             Xunit.Assert.Equal(1, xo.MyList[0].MyField);
@@ -633,7 +673,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer18.Deserialize(@"<XmlObject18><Enums><XmlEnum18>A</XmlEnum18><XmlEnum18>B</XmlEnum18><XmlEnum18>C</XmlEnum18></Enums></XmlObject18>".AsSpan(), out XmlObject18 xo);
+            XmlSerializerDeserializer18.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject18><Enums><XmlEnum18>A</XmlEnum18><XmlEnum18>B</XmlEnum18><XmlEnum18>C</XmlEnum18></Enums></XmlObject18>".AsSpan(),
+                out XmlObject18 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(3, xo.Enums.Count);
             Xunit.Assert.Equal(XmlEnum18.A, xo.Enums[0]);
@@ -686,7 +729,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer19.Deserialize(@"<XmlObject19><Ints><int>-1</int><int>0</int><int>1</int></Ints></XmlObject19>".AsSpan(), out XmlObject19 xo);
+            XmlSerializerDeserializer19.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject19><Ints><int>-1</int><int>0</int><int>1</int></Ints></XmlObject19>".AsSpan(),
+                out XmlObject19 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(3, xo.Ints.Length);
             Xunit.Assert.Equal(-1, xo.Ints[0]);
@@ -738,7 +784,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer20.Deserialize(@"<XmlObject20><Bytes><byte>-1</byte><byte>0</byte><byte>1</byte></Bytes></XmlObject20>".AsSpan(), out XmlObject20 xo);
+            XmlSerializerDeserializer20.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject20><Bytes><byte>-1</byte><byte>0</byte><byte>1</byte></Bytes></XmlObject20>".AsSpan(),
+                out XmlObject20 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(3, xo.Bytes.Length);
             Xunit.Assert.Equal(-1, xo.Bytes[0]);
@@ -790,7 +839,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer21.Deserialize(@"<XmlObject21><Guids><guid>7e6f7737-042d-4046-bf85-5596b47d6847</guid><guid>e7ec0690-a00f-4f96-b772-a0529447121f</guid><guid>3cd3f5b1-b364-4c30-8dc3-c7f9dfeafb88</guid></Guids></XmlObject21>".AsSpan(), out XmlObject21 xo);
+            XmlSerializerDeserializer21.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject21><Guids><guid>7e6f7737-042d-4046-bf85-5596b47d6847</guid><guid>e7ec0690-a00f-4f96-b772-a0529447121f</guid><guid>3cd3f5b1-b364-4c30-8dc3-c7f9dfeafb88</guid></Guids></XmlObject21>".AsSpan(),
+                out XmlObject21 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(3, xo.Guids.Length);
             Xunit.Assert.Equal(Guid.Parse("7E6F7737-042D-4046-BF85-5596B47D6847"), xo.Guids[0]);
@@ -843,7 +895,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer22.Deserialize(@"<XmlObject22><Enums><XmlEnum22>A</XmlEnum22><XmlEnum22>B</XmlEnum22><XmlEnum22>C</XmlEnum22></Enums></XmlObject22>".AsSpan(), out XmlObject22 xo);
+            XmlSerializerDeserializer22.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject22><Enums><XmlEnum22>A</XmlEnum22><XmlEnum22>B</XmlEnum22><XmlEnum22>C</XmlEnum22></Enums></XmlObject22>".AsSpan(),
+                out XmlObject22 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(3, xo.Enums.Length);
             Xunit.Assert.Equal(XmlEnum22.A, xo.Enums[0]);
@@ -897,7 +952,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer23_24.Deserialize(@"<XmlObject23><Objs><XmlObject24></XmlObject24><XmlObject24></XmlObject24><XmlObject24></XmlObject24></Objs></XmlObject23>".AsSpan(), out XmlObject23 xo);
+            XmlSerializerDeserializer23_24.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject23><Objs><XmlObject24></XmlObject24><XmlObject24></XmlObject24><XmlObject24></XmlObject24></Objs></XmlObject23>".AsSpan(),
+                out XmlObject23 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(3, xo.Objs.Length);
             Xunit.Assert.NotNull(xo.Objs[0]);
@@ -949,7 +1007,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer25_26_27.Deserialize(@"<XmlObject25 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""><Prop25 xsi:type=""XmlObject27""><Prop26>26</Prop26><Prop27>27</Prop27></Prop25></XmlObject25>".AsSpan(), out XmlObject25 xo);
+            XmlSerializerDeserializer25_26_27.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject25 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""><Prop25 xsi:type=""XmlObject27""><Prop26>26</Prop26><Prop27>27</Prop27></Prop25></XmlObject25>".AsSpan(),
+                out XmlObject25 xo);
             Xunit.Assert.NotNull(xo);
             var xo27 = xo.Prop25 as XmlObject27;
             Xunit.Assert.NotNull(xo27);
@@ -1007,7 +1068,10 @@ namespace XmlSerDe.Tests
             //    );
             //var q = Encoding.UTF8.GetString(ms.ToArray());
 
-            XmlSerializerDeserializer28_29_30.Deserialize(@"<XmlObject28 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""><Prop28><XmlObject29 xsi:type=""XmlObject30""><Prop29>129</Prop29><Prop30>130</Prop30></XmlObject29><XmlObject29 xsi:type=""XmlObject30""><Prop29>229</Prop29><Prop30>230</Prop30></XmlObject29></Prop28></XmlObject28>".AsSpan(), out XmlObject28 xo);
+            XmlSerializerDeserializer28_29_30.Deserialize(
+                DefaultInjector.Instance,
+                @"<XmlObject28 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""><Prop28><XmlObject29 xsi:type=""XmlObject30""><Prop29>129</Prop29><Prop30>130</Prop30></XmlObject29><XmlObject29 xsi:type=""XmlObject30""><Prop29>229</Prop29><Prop30>230</Prop30></XmlObject29></Prop28></XmlObject28>".AsSpan(),
+                out XmlObject28 xo);
             Xunit.Assert.NotNull(xo);
             Xunit.Assert.Equal(2, xo.Prop28.Count);
 

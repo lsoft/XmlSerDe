@@ -2,17 +2,18 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.CodeAnalysis;
-using XmlSerDe.Generator.Helper;
 
 namespace XmlSerDe.Generator.Producer
 {
     public readonly struct SerializationInfoCollection
     {
         public readonly List<INamedTypeSymbol> ExhaustList;
+        public readonly List<INamedTypeSymbol> InjectorList;
         public readonly IReadOnlyList<SerializationInfo> Infos;
 
         public SerializationInfoCollection(
             List<INamedTypeSymbol> exhaustList,
+            List<INamedTypeSymbol> injectorList,
             List<SerializationInfo> infos
             )
         {
@@ -20,7 +21,10 @@ namespace XmlSerDe.Generator.Producer
             {
                 throw new ArgumentNullException(nameof(exhaustList));
             }
-
+            if (injectorList is null)
+            {
+                throw new ArgumentNullException(nameof(injectorList));
+            }
             if (infos is null)
             {
                 throw new ArgumentNullException(nameof(infos));
@@ -29,6 +33,7 @@ namespace XmlSerDe.Generator.Producer
             infos.ForEach(i => i.Check());
 
             ExhaustList = exhaustList;
+            InjectorList = injectorList;
             Infos = infos;
         }
 

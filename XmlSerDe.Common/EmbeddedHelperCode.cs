@@ -49,24 +49,18 @@ namespace XmlSerDe.Common
     }
 
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
-    public class XmlParserAttribute : Attribute
+    public class XmlInjectorAttribute : Attribute
     {
-        public readonly Type SubjectType;
-        public readonly string ParserStatement;
+        public readonly Type InjectorType;
 
-        public XmlParserAttribute(Type subjectType, string parserStatement)
+        public XmlInjectorAttribute(Type injectorType)
         {
-            if (subjectType is null)
+            if (injectorType is null)
             {
-                throw new ArgumentNullException(nameof(subjectType));
-            }
-            if (parserStatement is null)
-            {
-                throw new ArgumentNullException(nameof(parserStatement));
+                throw new ArgumentNullException(nameof(injectorType));
             }
 
-            SubjectType = subjectType;
-            ParserStatement = parserStatement;
+            InjectorType = injectorType;
         }
     }
 

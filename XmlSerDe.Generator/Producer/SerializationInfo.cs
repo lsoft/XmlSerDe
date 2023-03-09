@@ -13,7 +13,6 @@ namespace XmlSerDe.Generator.Producer
         public readonly bool IsRoot;
         public readonly List<INamedTypeSymbol> Deriveds;
         public readonly string? FactoryInvocation;
-        public readonly string? ParserInvocation;
 
         public SerializationInfo(
             INamedTypeSymbol subject,
@@ -30,22 +29,19 @@ namespace XmlSerDe.Generator.Producer
 
             Deriveds = new List<INamedTypeSymbol>();
             FactoryInvocation = null;
-            ParserInvocation = null;
         }
 
         private SerializationInfo(
             INamedTypeSymbol subject,
             bool isRoot,
             List<INamedTypeSymbol> deriveds,
-            string? factoryInvocation,
-            string? parserInvocation
+            string? factoryInvocation
             )
         {
             Subject = subject;
             IsRoot = isRoot;
             Deriveds = deriveds;
             FactoryInvocation = factoryInvocation;
-            ParserInvocation = parserInvocation;
         }
 
         public void AddDerived(INamedTypeSymbol derived)
@@ -64,21 +60,10 @@ namespace XmlSerDe.Generator.Producer
                 Subject,
                 IsRoot,
                 Deriveds,
-                factoryInvocation,
-                ParserInvocation
+                factoryInvocation
                 );
         }
 
-        public SerializationInfo WithParserInvocation(string parserInvocation)
-        {
-            return new SerializationInfo(
-                Subject,
-                IsRoot,
-                Deriveds,
-                FactoryInvocation,
-                parserInvocation
-                );
-        }
 
         internal void Check()
         {

@@ -47,44 +47,44 @@ namespace XmlSerDe.Generator.Producer
                 new BuiltinCollection(
                     new List<Builtin>
                     {
-                        new Builtin("global::System.DateTime.Parse({0})", compilation.DateTime(), "dateTime", "{0}", false),
-                        new Builtin("global::System.DateTime.Parse({0})", compilation.NDateTime(), "dateTime", "{0}", false),
+                        new Builtin(compilation.DateTime(), "dateTime", false),
+                        new Builtin(compilation.NDateTime(), "dateTime", false),
 
-                        new Builtin("global::System.Guid.Parse({0})", compilation.Guid(), "guid", "{0}", false),
-                        new Builtin("global::System.Guid.Parse({0})", compilation.NGuid(), "guid", "{0}", false),
+                        new Builtin(compilation.Guid(), "guid", false),
+                        new Builtin(compilation.NGuid(), "guid", false),
 
-                        new Builtin("global::System.Boolean.Parse({0})", compilation.Bool(), "boolean", @"{0}", false),
-                        new Builtin("global::System.Boolean.Parse({0})", compilation.NBool(), "boolean", @"{0}", false),
+                        new Builtin(compilation.Bool(), "boolean", false),
+                        new Builtin(compilation.NBool(), "boolean", false),
 
-                        new Builtin("global::System.Net.WebUtility.HtmlDecode({0}.ToString())", compilation.String(), "string", "{0}", true),
+                        new Builtin(compilation.SByte(), "byte", false),
+                        new Builtin(compilation.NSByte(), "byte", false),
 
-                        new Builtin("global::System.SByte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.SByte(), "byte", "{0}", false),
-                        new Builtin("global::System.SByte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NSByte(), "byte", "{0}", false),
+                        new Builtin(compilation.Byte(), "unsignedByte", false),
+                        new Builtin(compilation.NByte(), "unsignedByte", false),
 
-                        new Builtin("global::System.Byte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Byte(), "unsignedByte", "{0}", false),
-                        new Builtin("global::System.Byte.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NByte(), "unsignedByte", "{0}", false),
+                        new Builtin(compilation.UInt16(), "unsignedShort", false),
+                        new Builtin(compilation.NUInt16(), "unsignedShort", false),
 
-                        new Builtin("global::System.UInt16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt16(), "unsignedShort", "{0}", false),
-                        new Builtin("global::System.UInt16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NUInt16(), "unsignedShort", "{0}", false),
+                        new Builtin(compilation.Int16(), "short", false),
+                        new Builtin(compilation.NInt16(), "short", false),
 
-                        new Builtin("global::System.Int16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int16(), "short", "{0}", false),
-                        new Builtin("global::System.Int16.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt16(), "short", "{0}", false),
+                        new Builtin(compilation.UInt32(), "unsignedInt", false),
+                        new Builtin(compilation.NUInt32(), "unsignedInt", false),
 
-                        new Builtin("global::System.UInt32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt32(), "unsignedInt", "{0}", false),
-                        new Builtin("global::System.UInt32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NUInt32(), "unsignedInt", "{0}", false),
+                        new Builtin(compilation.Int32(), "int", false),
+                        new Builtin(compilation.NInt32(), "int", false),
 
-                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int32(), "int", "{0}", false),
-                        new Builtin("global::System.Int32.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt32(), "int", "{0}", false),
+                        new Builtin(compilation.UInt64(), "unsignedLong", false),
+                        new Builtin(compilation.NUInt64(), "unsignedLong", false),
 
-                        new Builtin("global::System.UInt64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.UInt64(), "unsignedLong", "{0}", false),
-                        new Builtin("global::System.UInt64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NUInt64(), "unsignedLong", "{0}", false),
+                        new Builtin(compilation.Int64(), "long", false),
+                        new Builtin(compilation.NInt64(), "long", false),
 
-                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Int64(), "long", "{0}", false),
-                        new Builtin("global::System.Int64.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NInt64(), "long", "{0}", false),
+                        new Builtin(compilation.Decimal(), "decimal", false),
+                        new Builtin(compilation.NDecimal(), "decimal", false),
 
-                        new Builtin("global::System.Decimal.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.Decimal(), "decimal", "{0}", false),
-                        new Builtin("global::System.Decimal.Parse({0}, provider: global::System.Globalization.CultureInfo.InvariantCulture)", compilation.NDecimal(), "decimal", "{0}", false),
-                        //TODO other builtin branches
+                        new Builtin(compilation.String(), "string", true),
+                        //TODO other builtin branches (+IExhauster, +IInjector)
                     }
                 );
         }
@@ -119,9 +119,13 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
         }
 
         public string GenerateDeserializationBody(
+            INamedTypeSymbol injectorType
             )
         {
             var sb = new StringBuilder();
+
+            var injectorTypeGlobalName = injectorType.ToGlobalDisplayString();
+            var injectorTypeAliasName = "inj" + injectorTypeGlobalName.GetHashCode().ToString().Replace("-", "_");
 
             sb.AppendLine($@"
 namespace {typeof(BuiltinSourceProducer).Namespace}");
@@ -130,13 +134,16 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 {
     using System;
     using roschar = System.ReadOnlySpan<char>;
+    using {{injectorTypeAliasName}} = {{injectorTypeGlobalName}};
+    using MethodImpl = global::System.Runtime.CompilerServices.MethodImplAttribute;
+    using MethodImplOptions = global::System.Runtime.CompilerServices.MethodImplOptions;
 
     public static partial class {{BuiltinCodeHelperClassName}}
     {
 
 """);
 
-            GenerateDeserializeMethods(sb);
+            GenerateDeserializeMethods(sb, injectorTypeAliasName);
 
             sb.AppendLine($$"""
     }
@@ -222,9 +229,9 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
         {
             sb.AppendLine($$"""
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void {{AppendXmlHeadMethodName}}({{exhaustTypeAliasName}} sb)
+        public static void {{AppendXmlHeadMethodName}}({{exhaustTypeAliasName}} exh)
         {
-            sb.{{nameof(IExhauster.Append)}}(XmlHead);
+            exh.{{nameof(IExhauster.Append)}}(XmlHead);
         }
 
 """);
@@ -294,33 +301,26 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             {
                 var builtin = Builtins.Builtins[bi];
 
-                var prepareBeforeWriteClause = string.Format(
-                    builtin.PrepareBeforeWriteClause,
-                    "obj"
-                    );
-
-                var buildWriteValue = builtin.IsNeedToGuardWhenEncoded
-                    ? $"global::System.Net.WebUtility.HtmlEncode({prepareBeforeWriteClause})"
-                    : prepareBeforeWriteClause;
-
                 var xmlTypeNameOpenVar = $"XmlTypeName{bi}";
                 var xmlTypeNameCloseVar = $"XmlTypeNameClose{bi}";
 
+                var methodName = (builtin.IsNeedToGuardWhenEncoded ? nameof(IExhauster.AppendEncoded) : nameof(IExhauster.Append));
+
                 sb.AppendLine($$"""
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void {{ClassSourceProducer.HeadSerializeMethodName}}({{exhaustTypeAliasName}} sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
+        public static void {{ClassSourceProducer.HeadSerializeMethodName}}({{exhaustTypeAliasName}} exh, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
         {
-            sb.Append({{xmlTypeNameOpenVar}});
-            sb.Append({{buildWriteValue}});
-            sb.Append({{xmlTypeNameCloseVar}});
+            exh.Append({{xmlTypeNameOpenVar}});
+            exh.{{methodName}}(obj);
+            exh.Append({{xmlTypeNameCloseVar}});
         }
 """);
 
                 sb.AppendLine($$"""
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void {{ClassSourceProducer.HeadlessSerializeMethodName}}({{exhaustTypeAliasName}} sb, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
+        public static void {{ClassSourceProducer.HeadlessSerializeMethodName}}({{exhaustTypeAliasName}} exh, {{builtin.Symbol.ToGlobalDisplayString()}} obj)
         {
-            sb.Append({{buildWriteValue}});
+            exh.{{methodName}}(obj);
         }
 """);
             }
@@ -328,7 +328,8 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
         }
 
         private void GenerateDeserializeMethods(
-            StringBuilder sb
+            StringBuilder sb,
+            string injectorTypeAliasName
             )
         {
             if (sb is null)
@@ -338,24 +339,11 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
 
             foreach (var builtin in Builtins.Builtins)
             {
-                var parseClause = string.Format(
-                    builtin.ConverterClause,
-                    $"xmlNode.{nameof(XmlNode2.Internals)}"
-                    );
-
-
                 sb.AppendLine($$"""
-        public static void {{ClassSourceProducer.HeadDeserializeMethodName}}(roschar fullNode, roschar xmlnsAttributeName, out {{builtin.Symbol.ToGlobalDisplayString()}} result)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void {{ClassSourceProducer.HeadDeserializeMethodName}}({{injectorTypeAliasName}} inj, roschar fullNode, roschar xmlnsAttributeName, out {{builtin.Symbol.ToGlobalDisplayString()}} result)
         {
-            var xmlNode = new {{typeof(XmlNode2).FullName}}(fullNode, xmlnsAttributeName);
-            var xmlNodeDeclaredType = xmlNode.{{nameof(XmlNode2.DeclaredNodeType)}};
-
-            if(!xmlNodeDeclaredType.SequenceEqual("{{builtin.XmlTypeName}}".AsSpan()))
-            {
-                throw new InvalidOperationException("(0) [C# node {{builtin.Symbol.Name}}] Unknown type " + xmlNodeDeclaredType.ToString());
-            }
-
-            result = {{parseClause}};
+            inj.{{nameof(IInjector.Parse)}}(fullNode, xmlnsAttributeName, out result);
         }
 """);
             }

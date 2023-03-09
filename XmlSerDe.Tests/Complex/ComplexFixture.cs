@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Xml.Serialization;
 using XmlSerDe.Common;
 using XmlSerDe.Components.Exhauster;
+using XmlSerDe.Components.Injector;
 using XmlSerDe.Tests.Complex.Subject;
 using Xunit;
 
@@ -301,7 +302,7 @@ namespace XmlSerDe.Tests.Complex
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static InfoContainer Deserialize_XmlSerDe(ReadOnlySpan<char> xml)
         {
-            XmlSerializerDeserializer.Deserialize(xml, out InfoContainer r);
+            XmlSerializerDeserializer.Deserialize(DefaultInjector.Instance, xml, out InfoContainer r);
             return r;
         }
 

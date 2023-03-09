@@ -22,7 +22,7 @@ namespace XmlSerDe.Generator
         public static readonly string DerivedSubjectAttributeFullName = typeof(XmlDerivedSubjectAttribute).FullName;
         public static readonly string FactoryAttributeFullName = typeof(XmlFactoryAttribute).FullName;
         public static readonly string ExhausterAttributeFullName = typeof(XmlExhausterAttribute).FullName;
-        public static readonly string ParserAttributeFullName = typeof(XmlParserAttribute).FullName;
+        public static readonly string InjectorAttributeFullName = typeof(XmlInjectorAttribute).FullName;
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -58,12 +58,6 @@ namespace XmlSerDe.Generator
                 adder.AddDocumentToCompilation(
                     $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.MainPart.g.cs",
                     SourceText.From(bsgMainPart, Encoding.UTF8)
-                    );
-                var bsgDeserializationBody = bsg.GenerateDeserializationBody(
-                    );
-                adder.AddDocumentToCompilation(
-                    $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.Deserialization.g.cs",
-                    SourceText.From(bsgDeserializationBody, Encoding.UTF8)
                     );
                 var bsgSerializationSharedBody = bsg.GenerateSerializationSharedBody(
                     );
@@ -151,6 +145,16 @@ namespace XmlSerDe.Generator
                             );
                         adder.AddDocumentToCompilation(
                             $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{exhaustType.Name}.g.cs",
+                            SourceText.From(bsgBody, Encoding.UTF8)
+                            );
+                    }
+                    foreach (var injectorType in sp.SerializationInfoCollection.InjectorList)
+                    {
+                        var bsgBody = bsg.GenerateDeserializationBody(
+                            injectorType
+                            );
+                        adder.AddDocumentToCompilation(
+                            $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{injectorType.Name}.g.cs",
                             SourceText.From(bsgBody, Encoding.UTF8)
                             );
                     }

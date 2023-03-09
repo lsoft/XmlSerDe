@@ -75,7 +75,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 {
     public partial class {{_deSubjectReflectionFormat1}}
     {
-        private delegate {{_deSubjectGlobalType}} DeserializeMethodDelegate(roschar fullNode);
 
 """);
 
@@ -83,7 +82,10 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 GenerateSerializeMethods(exhaustType);
             }
-            GenerateDeserializeMethods();
+            foreach (var injectorType in this.SerializationInfoCollection.InjectorList)
+            {
+                GenerateDeserializeMethods(injectorType);
+            }
 
             _sb.AppendLine($$"""
     }
@@ -143,14 +145,14 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             var exhaustTypeGlobalName = exhaustType.ToGlobalDisplayString();
 
             _sb.AppendLine($$"""
-        public static void {{HeadSerializeMethodName}}({{exhaustTypeGlobalName}} sb, {{ssGlobalName}} obj, bool appendXmlHead)
+        public static void {{HeadSerializeMethodName}}({{exhaustTypeGlobalName}} exh, {{ssGlobalName}} obj, bool appendXmlHead)
         {
             if(appendXmlHead)
             {
-                global::{{typeof(BuiltinSourceProducer).Namespace}}.{{BuiltinSourceProducer.BuiltinCodeHelperClassName}}.{{BuiltinSourceProducer.AppendXmlHeadMethodName}}(sb);
+                global::{{typeof(BuiltinSourceProducer).Namespace}}.{{BuiltinSourceProducer.BuiltinCodeHelperClassName}}.{{BuiltinSourceProducer.AppendXmlHeadMethodName}}(exh);
             }
 
-            {{HeadSerializeMethodName}}(sb, obj);
+            {{HeadSerializeMethodName}}(exh, obj);
         }
 
 """);
@@ -168,7 +170,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             var exhaustTypeGlobalName = exhaustType.ToGlobalDisplayString();
 
             _sb.AppendLine($$"""
-        private static void {{methodName}}({{exhaustTypeGlobalName}} sb, {{ssGlobalName}} obj)
+        private static void {{methodName}}({{exhaustTypeGlobalName}} exh, {{ssGlobalName}} obj)
         {
 """);
 
@@ -194,9 +196,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 if(obj is {{derived.ToGlobalDisplayString()}} dobj)
                 {
-                    sb.{{nameof(IExhauster.Append)}}(@"<{{subject.Name}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.Name}}"">");
-                    {{HeadlessSerializeMethodName}}(sb, dobj);
-                    sb.{{nameof(IExhauster.Append)}}("</{{subject.Name}}>");
+                    exh.{{nameof(IExhauster.Append)}}(@"<{{subject.Name}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.Name}}"">");
+                    {{HeadlessSerializeMethodName}}(exh, dobj);
+                    exh.{{nameof(IExhauster.Append)}}("</{{subject.Name}}>");
                     return;
                 }
             }
@@ -209,7 +211,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 if(obj is {{derived.ToGlobalDisplayString()}} dobj)
                 {
-                    {{HeadlessSerializeMethodName}}(sb, dobj);
+                    {{HeadlessSerializeMethodName}}(exh, dobj);
                     return;
                 }
             }
@@ -224,7 +226,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                     _sb.AppendLine($$"""
 
-            sb.{{nameof(IExhauster.Append)}}("<{{subject.Name}}>");
+            exh.{{nameof(IExhauster.Append)}}("<{{subject.Name}}>");
 
 """);
                 }
@@ -239,7 +241,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 {
                     _sb.AppendLine($$"""
 
-            sb.{{nameof(IExhauster.Append)}}("</{{subject.Name}}>");
+            exh.{{nameof(IExhauster.Append)}}("</{{subject.Name}}>");
 
 """);
                 }
@@ -288,12 +290,12 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
 
 
-            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType.Symbol, out var memberBuiltin))
+            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType.Symbol, out _))
             {
                 _sb.AppendLine($$"""
-                sb.{{nameof(IExhauster.Append)}}("<{{member.Name}}>");
-                {{BuiltinSerializeHeadlessFullMethodName}}(sb, obj.{{member.Name}});
-                sb.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
+                exh.{{nameof(IExhauster.Append)}}("<{{member.Name}}>");
+                {{BuiltinSerializeHeadlessFullMethodName}}(exh, obj.{{member.Name}});
+                exh.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
 
 """);
 
@@ -311,12 +313,12 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 var scms = GenerateSerializeCollectionMember(member, (INamedTypeSymbol)collectionItemType!);
 
                 _sb.AppendLine($$"""
-                sb.{{nameof(IExhauster.Append)}}("<{{member.Name}}>");
+                exh.{{nameof(IExhauster.Append)}}("<{{member.Name}}>");
                 for(var index = 0; index < obj.{{member.Name}}.{{countOrLength}}; index++)
                 {
 {{scms}}
                 }
-                sb.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
+                exh.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
 """);
 
             }
@@ -332,9 +334,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 {
                     if(obj.{{member.Name}} is {{derived.ToGlobalDisplayString()}} dobj)
                     {
-                        sb.{{nameof(IExhauster.Append)}}(@"<{{member.Name}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.Name}}"">");
-                        {{HeadlessSerializeMethodName}}(sb, dobj);
-                        sb.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
+                        exh.{{nameof(IExhauster.Append)}}(@"<{{member.Name}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.Name}}"">");
+                        {{HeadlessSerializeMethodName}}(exh, dobj);
+                        exh.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
                     }
                 }
 
@@ -344,9 +346,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 else
                 {
                     _sb.AppendLine($$"""
-                sb.{{nameof(IExhauster.Append)}}(@"<{{member.Name}}>");
-                {{HeadlessSerializeMethodName}}(sb, obj.{{member.Name}});
-                sb.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
+                exh.{{nameof(IExhauster.Append)}}(@"<{{member.Name}}>");
+                {{HeadlessSerializeMethodName}}(exh, obj.{{member.Name}});
+                exh.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
 """);
                 }
             }
@@ -362,9 +364,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             INamedTypeSymbol listItemType
             )
         {
-            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out var listItemBuiltin))
+            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out _))
             {
-                return $"                {BuiltinSerializeHeadFullMethodName}(sb, obj.{member.Name}[index]);";
+                return $"                    {BuiltinSerializeHeadFullMethodName}(exh, obj.{member.Name}[index]);";
             }
             else if (listItemType.EnumUnderlyingType != null)
             {
@@ -379,16 +381,16 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
             else
             {
-                return $"                {HeadSerializeMethodName}(sb, obj.{member.Name}[index]);";
+                return $"                {HeadSerializeMethodName}(exh, obj.{member.Name}[index]);";
             }
         }
 
         private readonly string GenerateSerializeEnum(string enumTypeName, string enumPropertyName)
         {
             return $$"""
-                sb.{{nameof(IExhauster.Append)}}("<{{enumTypeName}}>");
-                sb.{{nameof(IExhauster.Append)}}(obj.{{enumPropertyName}}.ToString());
-                sb.{{nameof(IExhauster.Append)}}("</{{enumTypeName}}>");
+                exh.{{nameof(IExhauster.Append)}}("<{{enumTypeName}}>");
+                exh.{{nameof(IExhauster.Append)}}(obj.{{enumPropertyName}}.ToString());
+                exh.{{nameof(IExhauster.Append)}}("</{{enumTypeName}}>");
 """;
         }
 
@@ -397,7 +399,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
         #region deserialize
 
-        private readonly void GenerateDeserializeMethods()
+        private readonly void GenerateDeserializeMethods(
+            INamedTypeSymbol injectorType
+            )
         {
             _sb.AppendLine($$"""
 #region deserialize
@@ -406,6 +410,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             foreach (var ssi in SerializationInfoCollection.Infos)
             {
                 GenerateDeserializeMethod(
+                    injectorType,
                     ssi
                     );
             }
@@ -417,39 +422,41 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         }
 
         private readonly void GenerateDeserializeMethod(
+            INamedTypeSymbol injectorType,
             SerializationInfo ssi
             )
         {
             var subject = ssi.Subject;
 
-            GenerateDeserializeMethod(subject, ssi.Deriveds, ssi.FactoryInvocation, ssi.ParserInvocation, true);
-            GenerateDeserializeMethod(subject, ssi.Deriveds, ssi.FactoryInvocation, ssi.ParserInvocation, false);
+            GenerateDeserializeMethod(injectorType, subject, ssi.Deriveds, ssi.FactoryInvocation, true);
+            GenerateDeserializeMethod(injectorType, subject, ssi.Deriveds, ssi.FactoryInvocation, false);
 
             if(ssi.IsRoot)
             {
-                GenerateRootDeserializeMethod(subject);
+                GenerateRootDeserializeMethod(injectorType, subject);
             }
         }
 
         private readonly void GenerateRootDeserializeMethod(
+            INamedTypeSymbol injectorType,
             INamedTypeSymbol subject
             )
         {
             var ssGlobalName = subject.ToGlobalDisplayString();
 
             _sb.AppendLine($$"""
-        public static void {{HeadDeserializeMethodName}}(roschar xmlFullNode, out {{ssGlobalName}} result)
+        public static void {{HeadDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar xmlFullNode, out {{ssGlobalName}} result)
         {
-            {{HeadDeserializeMethodName}}(xmlFullNode, roschar.Empty, out result);
+            {{HeadDeserializeMethodName}}(inj, xmlFullNode, roschar.Empty, out result);
         }
 """);
         }
 
         private readonly void GenerateDeserializeMethod(
+            INamedTypeSymbol injectorType,
             INamedTypeSymbol subject,
             List<INamedTypeSymbol> derived,
             string? factoryInvocation,
-            string? parserInvocation,
             bool withHeadMethod
             )
         {
@@ -459,7 +466,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             var ssGlobalName = subject.ToGlobalDisplayString();
 
             _sb.AppendLine($$"""
-        private static void {{methodName}}(roschar {{roscharVarName}}, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
+        private static void {{methodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar {{roscharVarName}}, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
         {
 """);
 
@@ -477,7 +484,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
 """);
 
-                GenerateDeserializeDispatch(derived);
+                GenerateDeserializeDispatch(injectorType, derived);
 
                 _sb.AppendLine($$"""
 
@@ -520,8 +527,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 {
                     GenerateDeserializeMembers(
                         members,
-                        withHeadMethod,
-                        parserInvocation
+                        withHeadMethod
                         );
                 }
             }
@@ -533,6 +539,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
 
         private readonly void GenerateDeserializeDispatch(
+            INamedTypeSymbol injectorType,
             List<INamedTypeSymbol> derived
             )
         {
@@ -548,7 +555,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 //{{nameof(GenerateDeserializeDispatch)}}
                 if (xmlNodePreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
                 {
-                    {{classAndMethodName}}(xmlNodeInternals, xmlNode.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult);
+                    {{classAndMethodName}}(inj, xmlNodeInternals, xmlNode.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult);
                     result = iresult;
                     return;
                 }
@@ -570,7 +577,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         //{{nameof(GenerateDeserializeDispatch2)}}
                         if (childPreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
                         {
-                            {{classAndMethodName}}(childInternals, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult);
+                            {{classAndMethodName}}(inj, childInternals, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult);
                             result.{{memberName}} = iresult;
                         }
 """);
@@ -580,8 +587,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
         private readonly void GenerateDeserializeMembers(
             List<ISymbol> members,
-            bool withHeadMethod,
-            string? parserInvocation
+            bool withHeadMethod
             )
         {
             var xmlnsAttributeNameVarName = withHeadMethod
@@ -619,7 +625,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 var memberType = ParseMember(member);
 
-                GenerateDeserializeMember(memberIndex, member, memberType, parserInvocation);
+                GenerateDeserializeMember(memberIndex, member, memberType);
                 memberIndex++;
             }
 
@@ -638,24 +644,19 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         private readonly void GenerateDeserializeMember(
             int index,
             ISymbol member,
-            TypeSymbol memberType,
-            string? parserInvocation
+            TypeSymbol memberType
             )
         {
             var elseif = index > 0 ? "else " : "";
 
-            if(string.IsNullOrEmpty(parserInvocation) && BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType.Symbol, out var builtin))
+            if(BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType.Symbol, out _))
             {
-                var finalClause = string.Format(
-                    builtin.ConverterClause,
-                    $"child.{nameof(XmlNode2.Internals)}"
-                    );
-
                 _sb.AppendLine($$"""
                     //{{memberType.ToGlobalDisplayString()}}  {{member.Name}}
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
-                        result.{{member.Name}} = {{finalClause}};
+                        inj.{{nameof(IInjector.ParseBody)}}(child.{{nameof(XmlNode2.Internals)}}, out {{memberType.GlobalName}} injr);
+                        result.{{member.Name}} = injr;
                     }
 """);
             }
@@ -663,7 +664,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 var fullParserInvocation = GenerateEnumParseStatement(
                     memberType,
-                    parserInvocation,
                     $"child.{nameof(XmlNode2.Internals)}"
                     );
 
@@ -688,7 +688,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 const string listItemParseResultVarName = "iresult";
 
                 var listItemParseStatement = GenerateListItemParseStatement(
-                    parserInvocation,
                     child2VarName,
                     listItemType,
                     listItemParseResultVarName
@@ -769,7 +768,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                         {
                             var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                            {{classAndMethodName}}(childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult);
+                            {{classAndMethodName}}(inj, childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult);
                             result.{{member.Name}} = iresult;
                         }
                     }
@@ -787,7 +786,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                        {{classAndMethodName}}(childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult);
+                        {{classAndMethodName}}(inj, childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult);
                         result.{{member.Name}} = iresult;
                     }
 """);
@@ -816,7 +815,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         }
 
         private readonly string GenerateListItemParseStatement(
-            string? parserInvocation,
             string child2VarName,
             TypeSymbol listItemType,
             string listItemParseResultVarName
@@ -827,7 +825,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 var listItemVarName = $"{child2VarName}.{nameof(XmlNode2.Internals)}";
                 var enumParseStatement = GenerateEnumParseStatement(
                     listItemType,
-                    parserInvocation,
                     listItemVarName
                     );
                 return $"var {listItemParseResultVarName} = {enumParseStatement};";
@@ -837,33 +834,20 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 var listItemVarName = $"{child2VarName}.{nameof(XmlNode2.FullNode)}";
                 var classAndMethodName = DetermineClassName(listItemType.Symbol) + "." + HeadDeserializeMethodName;
 
-                return $@"{classAndMethodName}({listItemVarName}, {child2VarName}.{nameof(XmlNode2.XmlnsAttributeName)}, out {listItemType.ToGlobalDisplayString()} {listItemParseResultVarName});";
+                return $@"{classAndMethodName}(inj, {listItemVarName}, {child2VarName}.{nameof(XmlNode2.XmlnsAttributeName)}, out {listItemType.ToGlobalDisplayString()} {listItemParseResultVarName});";
             }
         }
 
         private readonly string GenerateEnumParseStatement(
             TypeSymbol memberType,
-            string? parserInvocation,
             string varName
             )
         {
-            if (!string.IsNullOrEmpty(parserInvocation))
-            {
-                var fullParserInvocation = string.Format(
-                    parserInvocation,
-                    varName
-                    );
+            var fullParserInvocation =
+                $@"({memberType.ToGlobalDisplayString()})Enum.Parse(typeof({memberType.ToGlobalDisplayString()}), {varName})"
+                ;
 
-                return fullParserInvocation;
-            }
-            else
-            {
-                var fullParserInvocation =
-                    $@"({memberType.ToGlobalDisplayString()})Enum.Parse(typeof({memberType.ToGlobalDisplayString()}), {varName})"
-                    ;
-
-                return fullParserInvocation;
-            }
+            return fullParserInvocation;
         }
 
         #endregion
@@ -905,9 +889,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
         }
 
-        private readonly string DetermineClassName(ITypeSymbol listItemType)
+        private readonly string DetermineClassName(ITypeSymbol type)
         {
-            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out _))
+            if (BuiltinSourceProducer.TryGetBuiltin(_compilation, type, out _))
             {
                 return typeof(BuiltinSourceProducer).Namespace + "." + BuiltinSourceProducer.BuiltinCodeHelperClassName;
             }
@@ -1126,6 +1110,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
 
             var exhaustList = new List<INamedTypeSymbol>();
+            var injectorList = new List<INamedTypeSymbol>();
             var sinfos = new Dictionary<string, SerializationInfo>();
 
             foreach (var attribute in deSubject.GetAttributes())
@@ -1141,7 +1126,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     XmlDeserializeGenerator.DerivedSubjectAttributeFullName,
                     XmlDeserializeGenerator.FactoryAttributeFullName,
                     XmlDeserializeGenerator.ExhausterAttributeFullName,
-                    XmlDeserializeGenerator.ParserAttributeFullName))
+                    XmlDeserializeGenerator.InjectorAttributeFullName))
                 {
                     continue;
                 }
@@ -1217,7 +1202,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                     exhaustList.Add(type);
                 }
-                else if (fsa == XmlDeserializeGenerator.ParserAttributeFullName)
+                else if (fsa == XmlDeserializeGenerator.InjectorAttributeFullName)
                 {
                     var ca0 = attribute.ConstructorArguments[0];
                     if (ca0.Kind != TypedConstantKind.Type)
@@ -1226,19 +1211,12 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     }
                     var type = (INamedTypeSymbol)ca0.Value!;
                     var typegn = type.ToGlobalDisplayString();
-                    if (!sinfos.ContainsKey(typegn))
+                    if (type.AllInterfaces.All(i => i.ToFullDisplayString() != "XmlSerDe.Common.IInjector"))
                     {
-                        throw new InvalidOperationException($"Type is not contains in the attribute list: {typegn}");
+                        throw new InvalidOperationException($"Type {typegn} must be derived from XmlSerDe.Common.IInjector interface");
                     }
 
-                    var ca1 = attribute.ConstructorArguments[1];
-                    if (ca1.Kind != TypedConstantKind.Primitive)
-                    {
-                        throw new InvalidOperationException("Something wrong with attributes 7");
-                    }
-
-                    var parserInvocation = (string)ca1.Value!;
-                    sinfos[typegn] = sinfos[typegn].WithParserInvocation(parserInvocation);
+                    injectorList.Add(type);
                 }
                 else
                 {
@@ -1275,8 +1253,15 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 exhaustList.Add(compilation.DefaultStringBuilderExhauster());
             }
 
+            //add default injector if no one specified
+            if (injectorList.Count == 0)
+            {
+                injectorList.Add(compilation.DefaultInjector());
+            }
+
             return new SerializationInfoCollection(
                 exhaustList,
+                injectorList,
                 sinfos.Values.ToList()
                 );
         }

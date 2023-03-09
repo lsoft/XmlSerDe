@@ -7,6 +7,25 @@ namespace XmlSerDe.Generator.Helper
 {
     public static class CompilationHelper
     {
+        public static INamedTypeSymbol DefaultInjector(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            var result = compilation.GetTypeByMetadataName("XmlSerDe.Components.Injector.DefaultInjector");
+
+            if (result is null)
+            {
+                throw new InvalidOperationException($"Cannot find {nameof(DefaultInjector)} in Compilation");
+            }
+
+            return result;
+        }
+
         public static INamedTypeSymbol DefaultStringBuilderExhauster(
             this Compilation compilation
             )

@@ -101,7 +101,7 @@ the code:
 
     public InfoContainer Deserialize(ReadOnlySpan<char> xml)
     {
-        XmlSerializerDeserializer.Deserialize(xml, out InfoContainer r);
+        XmlSerializerDeserializer.Deserialize(DefaultInjector.Instance, xml, out InfoContainer r);
         return r;
     }
 
@@ -174,6 +174,8 @@ TODO: what attributes means
 ## Deserialization
 
 TODO in general
+
+TODO: what is injector; embedded injector; custom injector; using custom injector to change deserialization format (for DateTime for example).
 
 ## Serialization
 

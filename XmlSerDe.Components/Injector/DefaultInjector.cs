@@ -8,6 +8,8 @@ namespace XmlSerDe.Components.Injector
 {
     public class DefaultInjector : IInjector
     {
+        public static readonly DefaultInjector Instance = new DefaultInjector();
+
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Parse(roschar fullNode, roschar xmlnsAttributeName, out DateTime result)
         {
