@@ -92,7 +92,7 @@ Job=.NET 6.0  Runtime=.NET 6.0
 PTAL on few points:
 
 1. `(est)` test do premature estimation of result XML document length, and allocate the buffer of appropriate size. Serialization with estimation on may be a bit slower than a regular one, but it allocate less.
-2. `(stream)` test serializes data into the binary for sending into stream and\or network. For test purposes we do not send the data anywhere. Low allocations are possible because of `ArrayPool<>.Rent` use.
+2. `(stream)` test serializes the data into the binary for sending into stream and\or network. For test purposes we do not send the data anywhere. Low allocations are possible because of `ArrayPool<>.Rent` use.
 3. Deserialization process allocate only 5% memory in comparison to the standard serializer.
 
 the code:
