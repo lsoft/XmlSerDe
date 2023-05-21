@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Runtime;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -172,6 +173,7 @@ namespace XmlSerDe.Common
         }
 
         public XmlNode2(
+            XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName
             )
@@ -203,7 +205,7 @@ namespace XmlSerDe.Common
             FullHeadPrefixLength = fullNode.Length - trimmed.Length;
             ScanHead_Core(fullNode, trimmed, out var fullHeadLength, out DeclaredNodeType, out IsBodyless);
             FullHead = fullNode.Slice(0, fullHeadLength);
-            Internals = GetInternalsOf();
+            Internals = GetInternalsOf(settings.ContainsXmlComments);
 
             if (xmlnsAttributeName.IsEmpty)
             {
@@ -263,23 +265,25 @@ namespace XmlSerDe.Common
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void GetFirst(
+            ref XmlDeserializeSettings settings,
             roschar nodes,
             roschar xmlnsAttributeName,
             ref XmlNode2 result
             )
         {
-            var length = GetFirstLength(nodes);
+            var length = GetFirstLength(ref settings, nodes);
             if (length == 0)
             {
                 result = new XmlNode2();
                 return;
             }
 
-            result = new XmlNode2(nodes.Slice(0, length), xmlnsAttributeName);
+            result = new XmlNode2(settings, nodes.Slice(0, length), xmlnsAttributeName);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int GetFirstLength(
+            ref XmlDeserializeSettings settings,
             roschar nodes
             )
         {
@@ -338,7 +342,7 @@ namespace XmlSerDe.Common
 
                     //учтем возможный комментарий
                     var rcspan = nodes.Slice(resultCandidate);
-                    resultCandidate += GetLeadingCommentLengthIfExists(rcspan);
+                    resultCandidate += GetLeadingCommentLengthIfExists(settings.ContainsXmlComments, rcspan);
                     return resultCandidate;
                 }
                 else
@@ -347,13 +351,13 @@ namespace XmlSerDe.Common
 
                     //учтем этот возможный комментарий
                     var innerNodes = nodes.Slice(index);
-                    var lcl = GetLeadingCommentLengthIfExists(innerNodes);
+                    var lcl = GetLeadingCommentLengthIfExists(settings.ContainsXmlComments, innerNodes);
                     if(lcl > 0)
                     {
                         innerNodes = innerNodes.Slice(lcl);
                     }
 
-                    var childLength = GetFirstLength(innerNodes);
+                    var childLength = GetFirstLength(ref settings, innerNodes);
                     //получили дочернюю ноду, пропускаем ее
                     index += lcl + childLength;
                 }
@@ -361,6 +365,7 @@ namespace XmlSerDe.Common
         }
 
         private readonly roschar GetInternalsOf(
+            bool containsXmlComments
             )
         {
             if(FullHead.IsEmpty)
@@ -401,17 +406,38 @@ namespace XmlSerDe.Common
 
             var sfn = FullNode.Slice(startIndex); //without head
             //detect and skip leading comment if exists
-            startIndex += GetLeadingCommentLengthIfExists(sfn);
+            startIndex += GetLeadingCommentLengthIfExists(containsXmlComments, sfn);
 
             return FullNode.Slice(startIndex, cindex - startIndex);
         }
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int GetLeadingCommentLengthIfExists(
+        public static bool IsXmlCommentExistsHeuristic(
             roschar span
             )
         {
+            var startCommentSpan = "<!--".AsSpan();
+
+            var foundIndex = MemoryExtensions.IndexOf(
+                span,
+                startCommentSpan
+                );
+
+            return foundIndex >= 0;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int GetLeadingCommentLengthIfExists(
+            bool containsXmlComments,
+            roschar span
+            )
+        {
+            if (!containsXmlComments)
+            {
+                return 0;
+            }
+
             var result = 0;
 
             while (true)
@@ -561,6 +587,26 @@ namespace XmlSerDe.Common
                 trimmedLength + iofa0 + iofa1 + iofa2 + iofa3 + 4 - iindex
                 );
         }
+    }
+
+    /// <summary>
+    /// Settings for deserialization process.
+    /// </summary>
+    public readonly ref struct XmlDeserializeSettings
+    {
+        /// <summary>
+        /// Heuristic: true if XML document likely contains a XML comments.
+        /// If so, we need to spent CPU time for parsing them.
+        /// </summary>
+        public readonly bool ContainsXmlComments;
+
+        public XmlDeserializeSettings(
+            bool containsXmlComments
+            )
+        {
+            ContainsXmlComments = containsXmlComments;
+        }
+
     }
 
     public readonly ref struct AttributeProcessResult

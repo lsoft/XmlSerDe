@@ -84,14 +84,14 @@ Job=.NET 7.0  Runtime=.NET 7.0
 |                         Method |     Mean |     Error |    StdDev |   Gen0 |   Gen1 | Allocated |
 |------------------------------- |---------:|----------:|----------:|-------:|-------:|----------:|
 |      'Deserialize: System.Xml' | 7.265 us | 0.0404 us | 0.0359 us | 1.2741 | 0.0610 |   16072 B |
-|        'Deserialize: XmlSerDe' | 6.417 us | 0.0210 us | 0.0186 us | 0.0610 |      - |     824 B |
+|        'Deserialize: XmlSerDe' | 5.437 us | 0.0486 us | 0.0455 us | 0.0610 |      - |     824 B |
 ```
 
 PTAL on few points:
 
-1. `(est)` test do premature estimation of result XML document length, and allocate the buffer of appropriate size. Serialization with estimation on may be a bit slower than a regular one, but it allocate less.
+1. `(est)` test do premature estimation of result XML document length (via serialization to dev/null), and allocate the buffer of appropriate size. Serialization with estimation on may be a bit slower than a regular one, but it allocate less.
 2. `(stream)` test serializes the data into the binary for sending into stream and\or network. For test purposes we do not send the data anywhere. Low allocations are possible because of `ArrayPool<>.Rent` use.
-3. Deserialization process allocate only 5% memory in comparison to the standard serializer.
+3. Deserialization process is a bit faster and allocate only 5% memory in comparison to the standard serializer.
 
 the code:
 

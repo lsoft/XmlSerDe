@@ -447,7 +447,10 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             _sb.AppendLine($$"""
         public static void {{HeadDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar xmlFullNode, out {{ssGlobalName}} result)
         {
-            {{HeadDeserializeMethodName}}(inj, xmlFullNode, roschar.Empty, out result);
+            var settings = new {{typeof(XmlDeserializeSettings).FullName}}(
+                {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.IsXmlCommentExistsHeuristic)}}(xmlFullNode)
+                );
+            {{HeadDeserializeMethodName}}(ref settings, inj, xmlFullNode, roschar.Empty, out result);
         }
 """);
         }
@@ -466,14 +469,14 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             var ssGlobalName = subject.ToGlobalDisplayString();
 
             _sb.AppendLine($$"""
-        private static void {{methodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar {{roscharVarName}}, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
+        private static void {{methodName}}(ref {{typeof(XmlDeserializeSettings).FullName}} settings, {{injectorType.ToGlobalDisplayString()}} inj, roschar {{roscharVarName}}, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
         {
 """);
 
             if (withHeadMethod)
             {
                 _sb.AppendLine($$"""
-            var xmlNode = new {{typeof(XmlNode2).FullName}}({{roscharVarName}}, xmlnsAttributeName);
+            var xmlNode = new {{typeof(XmlNode2).FullName}}(settings, {{roscharVarName}}, xmlnsAttributeName);
             var xmlNodePreciseType = xmlNode.{{nameof(XmlNode2.GetPreciseNodeType)}}();
             if(xmlNodePreciseType.IsEmpty)
             {
@@ -555,7 +558,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 //{{nameof(GenerateDeserializeDispatch)}}
                 if (xmlNodePreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
                 {
-                    {{classAndMethodName}}(inj, xmlNodeInternals, xmlNode.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult);
+                    {{classAndMethodName}}(ref settings, inj, xmlNodeInternals, xmlNode.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult);
                     result = iresult;
                     return;
                 }
@@ -577,7 +580,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         //{{nameof(GenerateDeserializeDispatch2)}}
                         if (childPreciseType.SequenceEqual(nameof({{d.Name}}).AsSpan()))
                         {
-                            {{classAndMethodName}}(inj, childInternals, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult);
+                            {{classAndMethodName}}(ref settings, inj, childInternals, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult);
                             result.{{memberName}} = iresult;
                         }
 """);
@@ -611,7 +614,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 {{typeof(XmlNode2).FullName}} child = new();
                 while(true)
                 {
-                    {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(internals, {{xmlnsAttributeNameVarName}} /*1*/, ref child);
+                    {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(ref settings, internals, {{xmlnsAttributeNameVarName}} /*1*/, ref child);
                     if(child.IsEmpty)
                     {
                         break;
@@ -636,7 +639,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     {
                         break;
                     }
-                    var lcl = {{nameof(XmlNode2)}}.{{nameof(XmlNode2.GetLeadingCommentLengthIfExists)}}(internals);
+                    var lcl = {{nameof(XmlNode2)}}.{{nameof(XmlNode2.GetLeadingCommentLengthIfExists)}}(settings.{{nameof(XmlDeserializeSettings.ContainsXmlComments)}}, internals);
                     if(lcl > 0)
                     {
                         internals = internals.Slice(lcl);
@@ -720,7 +723,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         {{typeof(XmlNode2).FullName}} {{child2VarName}} = new();
                         while(true)
                         {
-                            {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, ref {{child2VarName}});
+                            {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetFirst)}}(ref settings, childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, ref {{child2VarName}});
                             if({{child2VarName}}.{{nameof(XmlNode2.IsEmpty)}})
                             {
                                 break;
@@ -777,7 +780,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                         {
                             var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                            {{classAndMethodName}}(inj, childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult);
+                            {{classAndMethodName}}(ref settings, inj, childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult);
                             result.{{member.Name}} = iresult;
                         }
                     }
@@ -795,7 +798,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         var childInternals = child.{{nameof(XmlNode2.Internals)}};
-                        {{classAndMethodName}}(inj, childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult);
+                        {{classAndMethodName}}(ref settings, inj, childInternals, child.{{nameof(XmlNode2.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult);
                         result.{{member.Name}} = iresult;
                     }
 """);
@@ -843,7 +846,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 var listItemVarName = $"{child2VarName}.{nameof(XmlNode2.FullNode)}";
                 var classAndMethodName = DetermineClassName(listItemType.Symbol) + "." + HeadDeserializeMethodName;
 
-                return $@"{classAndMethodName}(inj, {listItemVarName}, {child2VarName}.{nameof(XmlNode2.XmlnsAttributeName)}, out {listItemType.ToGlobalDisplayString()} {listItemParseResultVarName});";
+                return $@"{classAndMethodName}(ref settings, inj, {listItemVarName}, {child2VarName}.{nameof(XmlNode2.XmlnsAttributeName)}, out {listItemType.ToGlobalDisplayString()} {listItemParseResultVarName});";
             }
         }
 

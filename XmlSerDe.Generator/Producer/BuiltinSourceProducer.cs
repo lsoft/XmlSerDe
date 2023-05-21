@@ -242,6 +242,12 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             sb.AppendLine($$"""
         public static roschar {{CutXmlHeadMethodName}}(roschar xml)
         {
+            var containsXmlComments = {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.IsXmlCommentExistsHeuristic)}}(xml);
+            return {{CutXmlHeadMethodName}}(containsXmlComments, xml);
+        }
+
+        public static roschar {{CutXmlHeadMethodName}}(bool containsXmlComments, roschar xml)
+        {
             var startOfHead = "<?xml".AsSpan();
 
             var trimmedXml = xml.Trim();
@@ -254,7 +260,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             var index = trimmedXml.IndexOf(endOfHead);
 
             var headless = trimmedXml.Slice(index + endOfHead.Length).Trim();
-            var lcl = XmlSerDe.Common.{{nameof(XmlNode2)}}.{{nameof(XmlNode2.GetLeadingCommentLengthIfExists)}}(headless);
+            var lcl = {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetLeadingCommentLengthIfExists)}}(containsXmlComments, headless);
             if(lcl < 0)
             {
                 return headless;
@@ -349,9 +355,9 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             {
                 sb.AppendLine($$"""
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void {{ClassSourceProducer.HeadDeserializeMethodName}}({{injectorTypeAliasName}} inj, roschar fullNode, roschar xmlnsAttributeName, out {{builtin.Symbol.ToGlobalDisplayString()}} result)
+        public static void {{ClassSourceProducer.HeadDeserializeMethodName}}(ref {{typeof(XmlDeserializeSettings).FullName}} settings, {{injectorTypeAliasName}} inj, roschar fullNode, roschar xmlnsAttributeName, out {{builtin.Symbol.ToGlobalDisplayString()}} result)
         {
-            inj.{{nameof(IInjector.Parse)}}(fullNode, xmlnsAttributeName, out result);
+            inj.{{nameof(IInjector.Parse)}}(ref settings, fullNode, xmlnsAttributeName, out result);
         }
 """);
             }

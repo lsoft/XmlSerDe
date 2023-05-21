@@ -8,11 +8,13 @@ namespace XmlSerDe.Common
     public interface IInjector
     {
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out DateTime value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out DateTime? value
@@ -27,11 +29,13 @@ namespace XmlSerDe.Common
             );
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out Guid value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out Guid? value
@@ -46,11 +50,13 @@ namespace XmlSerDe.Common
             );
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out bool value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out bool? value
@@ -65,11 +71,13 @@ namespace XmlSerDe.Common
             );
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out sbyte value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out sbyte? value
@@ -84,11 +92,13 @@ namespace XmlSerDe.Common
             );
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out byte value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out byte? value
@@ -103,11 +113,13 @@ namespace XmlSerDe.Common
             );
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out ushort value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out ushort? value
@@ -123,11 +135,13 @@ namespace XmlSerDe.Common
 
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out short value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out short? value
@@ -142,11 +156,13 @@ namespace XmlSerDe.Common
             );
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out uint value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out uint? value
@@ -161,11 +177,13 @@ namespace XmlSerDe.Common
             );
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out int value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out int? value
@@ -180,11 +198,13 @@ namespace XmlSerDe.Common
             );
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out ulong value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out ulong? value
@@ -199,11 +219,13 @@ namespace XmlSerDe.Common
             );
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out long value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out long? value
@@ -218,11 +240,13 @@ namespace XmlSerDe.Common
             );
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out decimal value
             );
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out decimal? value
@@ -237,6 +261,7 @@ namespace XmlSerDe.Common
             );
 
         void Parse(
+            ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
             out string value

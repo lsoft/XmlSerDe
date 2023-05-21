@@ -60,44 +60,44 @@ Job=.NET 7.0  Runtime=.NET 7.0
 [MemoryDiagnoser]
 public class SerializeDeserializeFixture : ComplexFixture
 {
-    #region serialize
+    //#region serialize
 
-    [Benchmark(Description = "Serialize: System.Xml")]
-    public string Serialize_SystemXml_Test()
-    {
-        return Serialize_SystemXml(DefaultObject);
-    }
+    //[Benchmark(Description = "Serialize: System.Xml")]
+    //public string Serialize_SystemXml_Test()
+    //{
+    //    return Serialize_SystemXml(DefaultObject);
+    //}
 
-    [Benchmark(Description = "Serialize: XmlSerDe")]
-    public string Serialize_XmlSerDe_Test()
-    {
-        return Serialize_XmlSerDe(DefaultObject);
-    }
+    //[Benchmark(Description = "Serialize: XmlSerDe")]
+    //public string Serialize_XmlSerDe_Test()
+    //{
+    //    return Serialize_XmlSerDe(DefaultObject);
+    //}
 
-    [Benchmark(Description = "Serialize: XmlSerDe (est)")]
-    public string Serialize_XmlSerDe_Estimated_Test()
-    {
-        var dlee = new DefaultLengthEstimatorExhauster();
-        XmlSerializerDeserializer.Serialize(dlee, DefaultObject, false);
-        var estimateXmlLength = dlee.EstimatedTotalLength;
+    //[Benchmark(Description = "Serialize: XmlSerDe (est)")]
+    //public string Serialize_XmlSerDe_Estimated_Test()
+    //{
+    //    var dlee = new DefaultLengthEstimatorExhauster();
+    //    XmlSerializerDeserializer.Serialize(dlee, DefaultObject, false);
+    //    var estimateXmlLength = dlee.EstimatedTotalLength;
 
-        var dsbe = new DefaultStringBuilderExhauster(
-            new StringBuilder(estimateXmlLength)
-            );
-        XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
-        var xml = dsbe.ToString();
-        return xml;
-    }
+    //    var dsbe = new DefaultStringBuilderExhauster(
+    //        new StringBuilder(estimateXmlLength)
+    //        );
+    //    XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
+    //    var xml = dsbe.ToString();
+    //    return xml;
+    //}
 
-    [Benchmark(Description = "Serialize: XmlSerDe (stream)")]
-    public void Serialize_XmlSerDe_ToStream_Test()
-    {
-        var be = new Utf8BinaryExhausterEmpty(
-            );
-        XmlSerializerDeserializer.Serialize(be, DefaultObject, false);
-    }
+    //[Benchmark(Description = "Serialize: XmlSerDe (stream)")]
+    //public void Serialize_XmlSerDe_ToStream_Test()
+    //{
+    //    var be = new Utf8BinaryExhausterEmpty(
+    //        );
+    //    XmlSerializerDeserializer.Serialize(be, DefaultObject, false);
+    //}
 
-    #endregion
+    //#endregion
 
     #region deserialize
 
@@ -110,7 +110,8 @@ public class SerializeDeserializeFixture : ComplexFixture
     [Benchmark(Description = "Deserialize: XmlSerDe")]
     public InfoContainer Deserialize_XmlSerDe_Test()
     {
-        return Deserialize_XmlSerDe(AuxXml.AsSpan());
+        var auxspan = AuxXml.AsSpan();
+        return Deserialize_XmlSerDe(auxspan);
     }
 
     #endregion

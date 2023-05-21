@@ -11,9 +11,9 @@ namespace XmlSerDe.Components.Injector
         public static readonly DefaultInjector Instance = new DefaultInjector();
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out DateTime result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out DateTime result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("dateTime".AsSpan()))
@@ -24,9 +24,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out DateTime? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out DateTime? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("dateTime".AsSpan()))
@@ -50,9 +50,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out Guid result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out Guid result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("guid".AsSpan()))
@@ -63,9 +63,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out Guid? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out Guid? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("guid".AsSpan()))
@@ -88,9 +88,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out bool result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out bool result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("boolean".AsSpan()))
@@ -101,9 +101,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out bool? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out bool? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("boolean".AsSpan()))
@@ -126,9 +126,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out sbyte result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out sbyte result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("byte".AsSpan()))
@@ -139,9 +139,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out sbyte? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out sbyte? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("byte".AsSpan()))
@@ -164,9 +164,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out byte result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out byte result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("unsignedByte".AsSpan()))
@@ -177,9 +177,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out byte? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out byte? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("unsignedByte".AsSpan()))
@@ -202,9 +202,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out ushort result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ushort result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("unsignedShort".AsSpan()))
@@ -215,9 +215,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out ushort? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ushort? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("unsignedShort".AsSpan()))
@@ -240,9 +240,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out short result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out short result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("short".AsSpan()))
@@ -253,9 +253,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out short? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out short? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("short".AsSpan()))
@@ -278,9 +278,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out uint result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out uint result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("unsignedInt".AsSpan()))
@@ -291,9 +291,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out uint? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out uint? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("unsignedInt".AsSpan()))
@@ -316,9 +316,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out int result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out int result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("int".AsSpan()))
@@ -329,9 +329,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out int? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out int? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("int".AsSpan()))
@@ -354,9 +354,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out ulong result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ulong result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("unsignedLong".AsSpan()))
@@ -367,9 +367,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out ulong? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ulong? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("unsignedLong".AsSpan()))
@@ -392,9 +392,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out long result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out long result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("long".AsSpan()))
@@ -405,9 +405,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out long? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out long? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("long".AsSpan()))
@@ -430,9 +430,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out decimal result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out decimal result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("decimal".AsSpan()))
@@ -443,9 +443,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out decimal? result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out decimal? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("decimal".AsSpan()))
@@ -468,9 +468,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(roschar fullNode, roschar xmlnsAttributeName, out string result)
+        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out string result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(fullNode, xmlnsAttributeName);
+            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             if (!xmlNodeDeclaredType.SequenceEqual("string".AsSpan()))

@@ -171,9 +171,10 @@ namespace XmlSerDe.Tests.Complex
 
             //deserialize with different deserializer
             var first = Deserialize_SystemXml(ser_xmlserde);
+            var ser_xmlserde_span = ser_system.AsSpan();
             var second = Deserialize_XmlSerDe(
                 global::XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
-                    ser_system.AsSpan()
+                    ser_xmlserde_span
                     )
                 );
 
