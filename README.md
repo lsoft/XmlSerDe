@@ -9,7 +9,6 @@ Status: prototype.
 Restrictions now:
 
 - Do not support CDATA.
-- Do not support XML comments in the XML document.
 - Do not support malformed XML documents. No guard from malformed XML documents exists. Do not use it with potentially malicious XML documents.
 - Serialized object must have a parameterless contructor and must be visible from the deserialization class.
 - Serialized fields/properties must have accessible setter for deserialization.
