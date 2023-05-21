@@ -313,7 +313,7 @@ namespace XmlSerDe.Common
                 index += iof;
 
                 //возможно, это закрывающий тег, или открывающий дочерней ноды
-                //TODO: или это камент, пока не поддерживается
+                //или это камент
                 var ch1 = nodes[index + 1];
                 if (ch1 == '/')
                 {
@@ -343,9 +343,9 @@ namespace XmlSerDe.Common
                 }
                 else
                 {
-                    //это открывающий тег дочерней ноды
+                    //это открывающий тег дочерней ноды (возможно, с ведущим комментарием)
 
-                    //учтем возможный комментарий
+                    //учтем этот возможный комментарий
                     var innerNodes = nodes.Slice(index);
                     var lcl = GetLeadingCommentLengthIfExists(innerNodes);
                     if(lcl > 0)
@@ -384,11 +384,11 @@ namespace XmlSerDe.Common
                 throw new InvalidOperationException("Closing tag not found.");
             }
 
-            var compareResult = MemoryExtensions.SequenceCompareTo(
+            var compareResult = MemoryExtensions.SequenceEqual(
                 DeclaredNodeType,
                 FullNode.Slice(cindex + 2, DeclaredNodeType.Length)
                 );
-            if (compareResult != 0)
+            if (!compareResult)
             {
                 throw new InvalidOperationException("Mismatched closing tag found for " + DeclaredNodeType.ToString());
             }
@@ -431,11 +431,11 @@ namespace XmlSerDe.Common
 
                 var startCommentSpan = "<!--".AsSpan();
 
-                var isStartComment = MemoryExtensions.SequenceCompareTo(
+                var isStartComment = MemoryExtensions.SequenceEqual(
                     span.Slice(startCommentIndex, startCommentSpan.Length),
                     startCommentSpan
                     );
-                if (isStartComment != 0)
+                if (!isStartComment)
                 {
                     return result;
                 }

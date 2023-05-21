@@ -67,26 +67,25 @@ For the following XML document:
 the performance is:
 
 ```
-BenchmarkDotNet=v0.13.5, OS=Windows 10 (10.0.19045.2604/22H2/2022Update)
-AMD Ryzen 7 4700U with Radeon Graphics, 1 CPU, 8 logical and 8 physical cores
-.NET SDK=7.0.200-preview.22628.1
-  [Host]   : .NET 6.0.14 (6.0.1423.7309), X64 RyuJIT AVX2
-  .NET 6.0 : .NET 6.0.14 (6.0.1423.7309), X64 RyuJIT AVX2
+BenchmarkDotNet=v0.13.5, OS=Windows 11 (10.0.22621.1702/22H2/2022Update/SunValley2)
+13th Gen Intel Core i7-13700H, 1 CPU, 20 logical and 14 physical cores
+.NET SDK=7.0.300-preview.23179.2
+  [Host]   : .NET 6.0.15 (6.0.1523.11507), X64 RyuJIT AVX2
+  .NET 7.0 : .NET 7.0.4 (7.0.423.11508), X64 RyuJIT AVX2
 
-Job=.NET 6.0  Runtime=.NET 6.0
+Job=.NET 7.0  Runtime=.NET 7.0
 
-|                         Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
-|------------------------------- |----------:|----------:|----------:|-------:|----------:|
-|        'Serialize: System.Xml' |  7.799 us | 0.1046 us | 0.0979 us | 6.6986 |   14064 B |
-|          'Serialize: XmlSerDe' |  2.636 us | 0.0172 us | 0.0160 us | 3.3073 |    6921 B |
-|    'Serialize: XmlSerDe (est)' |  2.715 us | 0.0326 us | 0.0289 us | 2.4185 |    5065 B |
-| 'Serialize: XmlSerDe (stream)' |  2.844 us | 0.0232 us | 0.0217 us | 0.2823 |     592 B |
+|                         Method |     Mean |     Error |    StdDev |   Gen0 |   Gen1 | Allocated |
+|------------------------------- |---------:|----------:|----------:|-------:|-------:|----------:|
+|        'Serialize: System.Xml' | 3.676 us | 0.0351 us | 0.0293 us | 1.0300 | 0.0343 |   12960 B |
+|          'Serialize: XmlSerDe' | 1.278 us | 0.0185 us | 0.0173 us | 0.5512 |      - |    6920 B |
+|    'Serialize: XmlSerDe (est)' | 1.207 us | 0.0095 us | 0.0084 us | 0.3910 | 0.0019 |    4928 B |
+| 'Serialize: XmlSerDe (stream)' | 1.289 us | 0.0026 us | 0.0022 us | 0.0458 |      - |     592 B |
 
-
-|                         Method |      Mean |     Error |    StdDev |   Gen0 | Allocated |
-|------------------------------- |----------:|----------:|----------:|-------:|----------:|
-|      'Deserialize: System.Xml' | 14.010 us | 0.0682 us | 0.0638 us | 7.8125 |   16392 B |
-|        'Deserialize: XmlSerDe' | 11.089 us | 0.1024 us | 0.0958 us | 0.3510 |     736 B |
+|                         Method |     Mean |     Error |    StdDev |   Gen0 |   Gen1 | Allocated |
+|------------------------------- |---------:|----------:|----------:|-------:|-------:|----------:|
+|      'Deserialize: System.Xml' | 7.265 us | 0.0404 us | 0.0359 us | 1.2741 | 0.0610 |   16072 B |
+|        'Deserialize: XmlSerDe' | 6.417 us | 0.0210 us | 0.0186 us | 0.0610 |      - |     824 B |
 ```
 
 PTAL on few points:
