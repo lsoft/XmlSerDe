@@ -98,8 +98,68 @@ namespace XmlSerDe.Tests
             Xunit.Assert.NotNull(xo);
         }
 
+        [Fact]
+        public void XmlObject1_Deserialize_Test4()
+        {
+            XmlSerializerDeserializer1.Deserialize(
+                DefaultInjector.Instance,
+                ("<XmlObject1><!-- " + XmlEncodedString  + " --></XmlObject1>").AsSpan(),
+                out XmlObject1 xo);
+            Xunit.Assert.NotNull(xo);
+        }
+
+        [Fact]
+        public void XmlObject1_Deserialize_Test5()
+        {
+            XmlSerializerDeserializer1.Deserialize(
+                DefaultInjector.Instance,
+                ("<XmlObject1>   <!-- " + XmlEncodedString + " -->  </XmlObject1>").AsSpan(),
+                out XmlObject1 xo);
+            Xunit.Assert.NotNull(xo);
+        }
+
+        [Fact]
+        public void XmlObject1_Deserialize_Test6()
+        {
+            XmlSerializerDeserializer1.Deserialize(
+                DefaultInjector.Instance,
+                ("<XmlObject1> <!-- first comment --><!-- " + XmlEncodedString + " -->  </XmlObject1>").AsSpan(),
+                out XmlObject1 xo);
+            Xunit.Assert.NotNull(xo);
+        }
+
+        [Fact]
+        public void XmlObject1_Deserialize_Test7()
+        {
+            XmlSerializerDeserializer1.Deserialize(
+                DefaultInjector.Instance,
+                ("<XmlObject1> <!-- first comment -->   <!-- " + XmlEncodedString + " -->  </XmlObject1>").AsSpan(),
+                out XmlObject1 xo);
+            Xunit.Assert.NotNull(xo);
+        }
 
 
+
+
+        [Fact]
+        public void XmlObject2_Serialize_Test1()
+        {
+            var sb = new DefaultStringBuilderExhauster();
+            XmlSerializerDeserializer2.Serialize(
+                sb,
+                new XmlObject2
+                {
+                    IntProperty = 123,
+                    StringProperty = "hello"
+                },
+                false
+                );
+            var xml = sb.ToString();
+            Xunit.Assert.Equal(
+                @"<XmlObject2><StringProperty>hello</StringProperty><IntProperty>123</IntProperty></XmlObject2>",
+                xml
+                );
+        }
 
         [Fact]
         public void XmlObject2_Deserialize_Test0()
@@ -128,23 +188,16 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject2_Serialize_Test1()
+        public void XmlObject2_Deserialize_Test2()
         {
-            var sb = new DefaultStringBuilderExhauster();
-            XmlSerializerDeserializer2.Serialize(
-                sb,
-                new XmlObject2
-                {
-                    IntProperty = 123,
-                    StringProperty = "hello"
-                },
-                false
+            XmlSerializerDeserializer2.Deserialize(
+                DefaultInjector.Instance,
+                (@"<XmlObject2><!-- comment 2 --><IntProperty>123</IntProperty><!-- comment 3 --><StringProperty></StringProperty><!-- comment 4 --></XmlObject2><!-- comment 5 -->").AsSpan(),
+                out XmlObject2 xo
                 );
-            var xml = sb.ToString();
-            Xunit.Assert.Equal(
-                @"<XmlObject2><StringProperty>hello</StringProperty><IntProperty>123</IntProperty></XmlObject2>",
-                xml
-                );
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(123, xo.IntProperty);
+            Xunit.Assert.Equal(string.Empty, xo.StringProperty);
         }
 
         [Fact]
@@ -163,7 +216,22 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject2_Deserialize_Test2()
+        public void XmlObject2_Deserialize_Test2_WithHead()
+        {
+            XmlSerializerDeserializer2.Deserialize(
+                DefaultInjector.Instance,
+                XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                    (@"<?xml version=""1.0"" encoding=""utf-8""?><!-- comment 1 --><XmlObject2><!-- comment 2 --><IntProperty>123</IntProperty><!-- comment 3 --><StringProperty></StringProperty><!-- comment 4 --></XmlObject2><!-- comment 5 -->").AsSpan()
+                    ),
+                out XmlObject2 xo
+                );
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.Equal(123, xo.IntProperty);
+            Xunit.Assert.Equal(string.Empty, xo.StringProperty);
+        }
+
+        [Fact]
+        public void XmlObject2_Deserialize_Test3()
         {
             XmlSerializerDeserializer2.Deserialize(
                 DefaultInjector.Instance,
@@ -176,7 +244,7 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject2_Deserialize_Test3()
+        public void XmlObject2_Deserialize_Test4()
         {
             XmlSerializerDeserializer2.Deserialize(
                 DefaultInjector.Instance,
@@ -189,7 +257,7 @@ namespace XmlSerDe.Tests
         }
 
         [Fact]
-        public void XmlObject2_Deserialize_Test4()
+        public void XmlObject2_Deserialize_Test5()
         {
             XmlSerializerDeserializer2.Deserialize(
                 DefaultInjector.Instance,
@@ -349,6 +417,54 @@ namespace XmlSerDe.Tests
             XmlSerializerDeserializer9_10.Deserialize(
                 DefaultInjector.Instance,
                 (@"   <XmlObject10>   <XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1"">  <StringProperty>a</StringProperty><IntProperty>123</IntProperty>  </XmlObjectProperty></XmlObject10>").AsSpan(),
+                out XmlObject10 xo
+                );
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.NotNull(xo.XmlObjectProperty);
+            var xoSpecific = xo.XmlObjectProperty as XmlObject9Specific1;
+            Xunit.Assert.NotNull(xoSpecific);
+            Xunit.Assert.Equal("a", xoSpecific.StringProperty);
+            Xunit.Assert.Equal(123, xoSpecific.IntProperty);
+        }
+
+        [Fact]
+        public void XmlObject9_10_Deserialize_Test2()
+        {
+            XmlSerializerDeserializer9_10.Deserialize(
+                DefaultInjector.Instance,
+                (@"   <XmlObject10><!-- comment 1 -->   <XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1""><!-- comment 2 --><StringProperty>a</StringProperty><!-- comment 3 --><IntProperty>123</IntProperty><!-- comment 4 --></XmlObjectProperty></XmlObject10><!-- comment 5 -->").AsSpan(),
+                out XmlObject10 xo
+                );
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.NotNull(xo.XmlObjectProperty);
+            var xoSpecific = xo.XmlObjectProperty as XmlObject9Specific1;
+            Xunit.Assert.NotNull(xoSpecific);
+            Xunit.Assert.Equal("a", xoSpecific.StringProperty);
+            Xunit.Assert.Equal(123, xoSpecific.IntProperty);
+        }
+
+        [Fact]
+        public void XmlObject9_10_Deserialize_Test3()
+        {
+            XmlSerializerDeserializer9_10.Deserialize(
+                DefaultInjector.Instance,
+                (@"   <XmlObject10><!-- comment 1a --><!-- comment 1b --><XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1""><!-- comment 2a --><!-- comment 2b --><StringProperty>a</StringProperty><!-- comment 3a --><!-- comment 3b --><IntProperty>123</IntProperty><!-- comment 4a --><!-- comment 4b --></XmlObjectProperty></XmlObject10><!-- comment 5a --><!-- comment 5b -->").AsSpan(),
+                out XmlObject10 xo
+                );
+            Xunit.Assert.NotNull(xo);
+            Xunit.Assert.NotNull(xo.XmlObjectProperty);
+            var xoSpecific = xo.XmlObjectProperty as XmlObject9Specific1;
+            Xunit.Assert.NotNull(xoSpecific);
+            Xunit.Assert.Equal("a", xoSpecific.StringProperty);
+            Xunit.Assert.Equal(123, xoSpecific.IntProperty);
+        }
+
+        [Fact]
+        public void XmlObject9_10_Deserialize_Test4()
+        {
+            XmlSerializerDeserializer9_10.Deserialize(
+                DefaultInjector.Instance,
+                (@"   <XmlObject10>  <!-- comment 1a -->  <!-- comment 1b -->  <XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1"">  <!-- comment 2a -->  <!-- comment 2b -->  <StringProperty>a</StringProperty>  <!-- comment 3a -->  <!-- comment 3b -->  <IntProperty>123</IntProperty>  <!-- comment 4a -->  <!-- comment 4b -->  </XmlObjectProperty></XmlObject10>  <!-- comment 5a -->  <!-- comment 5b -->  ").AsSpan(),
                 out XmlObject10 xo
                 );
             Xunit.Assert.NotNull(xo);

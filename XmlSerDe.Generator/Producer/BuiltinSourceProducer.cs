@@ -253,7 +253,15 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             var endOfHead = "?>".AsSpan();
             var index = trimmedXml.IndexOf(endOfHead);
 
-            return trimmedXml.Slice(index + endOfHead.Length).Trim();
+            var headless = trimmedXml.Slice(index + endOfHead.Length).Trim();
+            var lcl = XmlSerDe.Common.{{nameof(XmlNode2)}}.{{nameof(XmlNode2.GetLeadingCommentLengthIfExists)}}(headless);
+            if(lcl < 0)
+            {
+                return headless;
+            }
+
+            var headless2 = headless.Slice(lcl);
+            return headless2;
         }
 
 """);

@@ -150,7 +150,7 @@ namespace XmlSerDe.Common
         public readonly bool IsBodyless;
 
         /// <summary>
-        /// Internals of this node (including spaces).
+        /// Internals of this node (including spaces, without leading comment if exists).
         /// </summary>
         public readonly roschar Internals;
 
@@ -334,15 +334,28 @@ namespace XmlSerDe.Common
                     }
 
                     //успех, нашли закрывающий тег
-                    return index + 2 + nodeTypeLength + 1;
+                    var resultCandidate = index + 2 + nodeTypeLength + 1;
+
+                    //учтем возможный комментарий
+                    var rcspan = nodes.Slice(resultCandidate);
+                    resultCandidate += GetLeadingCommentLengthIfExists(rcspan);
+                    return resultCandidate;
                 }
                 else
                 {
                     //это открывающий тег дочерней ноды
+
+                    //учтем возможный комментарий
                     var innerNodes = nodes.Slice(index);
+                    var lcl = GetLeadingCommentLengthIfExists(innerNodes);
+                    if(lcl > 0)
+                    {
+                        innerNodes = innerNodes.Slice(lcl);
+                    }
+
                     var childLength = GetFirstLength(innerNodes);
                     //получили дочернюю ноду, пропускаем ее
-                    index += childLength;
+                    index += lcl + childLength;
                 }
             }
         }
@@ -384,7 +397,66 @@ namespace XmlSerDe.Common
                 throw new InvalidOperationException("Broken closing tag found for " + DeclaredNodeType.ToString());
             }
 
-            return FullNode.Slice(FullHead.Length, cindex - FullHead.Length);
+            var startIndex = FullHead.Length;
+
+            var sfn = FullNode.Slice(startIndex); //without head
+            //detect and skip leading comment if exists
+            startIndex += GetLeadingCommentLengthIfExists(sfn);
+
+            return FullNode.Slice(startIndex, cindex - startIndex);
+        }
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int GetLeadingCommentLengthIfExists(
+            roschar span
+            )
+        {
+            var result = 0;
+
+            while (true)
+            {
+                var startCommentIndex = MemoryExtensions.IndexOf(
+                    span,
+                    "<".AsSpan()
+                    );
+                if (startCommentIndex < 0)
+                {
+                    return result;
+                }
+                if (startCommentIndex + 6 >= span.Length)
+                {
+                    return result;
+                }
+
+                var startCommentSpan = "<!--".AsSpan();
+
+                var isStartComment = MemoryExtensions.SequenceCompareTo(
+                    span.Slice(startCommentIndex, startCommentSpan.Length),
+                    startCommentSpan
+                    );
+                if (isStartComment != 0)
+                {
+                    return result;
+                }
+
+                //that's a comment!
+                var endCommentSpan = "-->".AsSpan();
+
+                //search for end comment index
+                var endCommentIndex = MemoryExtensions.IndexOf(
+                    span,
+                    endCommentSpan
+                    );
+                if (endCommentIndex < 0)
+                {
+                    throw new InvalidOperationException("Mismatched closing tag found for COMMENT around " + span.ToString());
+                }
+
+                var portion = endCommentIndex + endCommentSpan.Length;
+                span = span.Slice(portion);
+                result += portion;
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

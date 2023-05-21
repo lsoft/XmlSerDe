@@ -636,6 +636,15 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     {
                         break;
                     }
+                    var lcl = {{nameof(XmlNode2)}}.{{nameof(XmlNode2.GetLeadingCommentLengthIfExists)}}(internals);
+                    if(lcl > 0)
+                    {
+                        internals = internals.Slice(lcl);
+                        if(internals.IsEmpty)
+                        {
+                            break;
+                        }
+                    }
                 }
             }
 """);
