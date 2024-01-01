@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.13.5" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.13.8" />
     <PackageReference Include="Enums.NET" Version="4.0.1" />
     <PackageReference Include="Microsoft.XmlSerializer.Generator" Version="7.0.0" />
   </ItemGroup>

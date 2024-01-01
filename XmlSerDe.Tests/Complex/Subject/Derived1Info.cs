@@ -7,7 +7,9 @@ namespace XmlSerDe.Tests.Complex.Subject
 {
     public class Derived1Info : BaseInfo
     {
-        public string BasePersonificationInfo { get; set; }
+        public string BasePersonificationInfo1 { get; set; }
+
+        public string BasePersonificationInfo2 { get; set; }
 
         [XmlIgnore]
         public override InfoTypeEnum InfoType

@@ -54,9 +54,52 @@ Job=.NET 7.0  Runtime=.NET 7.0
 |        'Deserialize: XmlSerDe' | 6.417 us | 0.0210 us | 0.0186 us | 0.0610 |      - |     824 B |
 
 
+
+BenchmarkDotNet v0.13.8, Windows 11 (10.0.22621.2283/22H2/2022Update/SunValley2)
+13th Gen Intel Core i7-13700H, 1 CPU, 20 logical and 14 physical cores
+.NET SDK 8.0.100-preview.7.23376.3
+  [Host]   : .NET 7.0.9 (7.0.923.32018), X64 RyuJIT AVX2
+  .NET 7.0 : .NET 7.0.9 (7.0.923.32018), X64 RyuJIT AVX2
+
+Job=.NET 7.0  Runtime=.NET 7.0
+
+| Method                         | Mean     | Error     | StdDev    | Gen0   | Gen1   | Allocated |
+|------------------------------- |---------:|----------:|----------:|-------:|-------:|----------:|
+| 'Serialize: System.Xml'        | 3.823 us | 0.0575 us | 0.0537 us | 1.0529 | 0.0305 |   13296 B |
+| 'Serialize: XmlSerDe'          | 1.395 us | 0.0143 us | 0.0134 us | 0.5779 |      - |    7264 B |
+| 'Serialize: XmlSerDe (est)'    | 1.357 us | 0.0064 us | 0.0060 us | 0.4368 | 0.0038 |    5480 B |
+| 'Serialize: XmlSerDe (stream)' | 1.453 us | 0.0169 us | 0.0158 us | 0.0572 |      - |     720 B |
+| 'Deserialize: System.Xml'      | 7.724 us | 0.0549 us | 0.0514 us | 1.3428 | 0.0610 |   16888 B |
+| 'Deserialize: XmlSerDe'        | 5.919 us | 0.0358 us | 0.0335 us | 0.0916 |      - |    1216 B |
+
+
+
+BenchmarkDotNet v0.13.8, Windows 11 (10.0.22621.2283/22H2/2022Update/SunValley2)
+13th Gen Intel Core i7-13700H, 1 CPU, 20 logical and 14 physical cores
+.NET SDK 8.0.100-preview.7.23376.3
+  [Host]   : .NET 7.0.9 (7.0.923.32018), X64 RyuJIT AVX2
+  .NET 8.0 : .NET 8.0.0 (8.0.23.37506), X64 RyuJIT AVX2
+
+Job=.NET 8.0  Runtime=.NET 8.0
+
+| Method                         | Mean     | Error     | StdDev    | Gen0   | Gen1   | Allocated |
+|------------------------------- |---------:|----------:|----------:|-------:|-------:|----------:|
+| 'Serialize: System.Xml'        | 3.504 us | 0.0089 us | 0.0074 us | 1.0719 | 0.0381 |   13456 B |
+| 'Serialize: XmlSerDe'          | 1.114 us | 0.0050 us | 0.0041 us | 0.5779 |      - |    7264 B |
+| 'Serialize: XmlSerDe (est)'    | 1.086 us | 0.0103 us | 0.0091 us | 0.4368 | 0.0038 |    5480 B |
+| 'Serialize: XmlSerDe (stream)' | 1.185 us | 0.0081 us | 0.0071 us | 0.0572 |      - |     720 B |
+| 'Deserialize: System.Xml'      | 7.260 us | 0.0721 us | 0.0639 us | 1.3428 | 0.0610 |   16879 B |
+| 'Deserialize: XmlSerDe'        | 6.137 us | 0.0649 us | 0.0607 us | 0.0916 |      - |    1216 B |
+
+| Method                    | Mean     | Error     | StdDev    | Gen0   | Gen1   | Allocated |
+|-------------------------- |---------:|----------:|----------:|-------:|-------:|----------:|
+| 'Deserialize: System.Xml' | 7.588 us | 0.1345 us | 0.1123 us | 1.3428 | 0.0610 |  16.48 KB |
+| 'Deserialize: XmlSerDe'   | 6.069 us | 0.0150 us | 0.0140 us | 0.0916 |      - |   1.19 KB |
+
 */
 
-[SimpleJob(RuntimeMoniker.Net70)]
+//[SimpleJob(RuntimeMoniker.Net70)]
+[SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]
 public class SerializeDeserializeFixture : ComplexFixture
 {

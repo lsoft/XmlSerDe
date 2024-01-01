@@ -448,7 +448,8 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         public static void {{HeadDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar xmlFullNode, out {{ssGlobalName}} result)
         {
             var settings = new {{typeof(XmlDeserializeSettings).FullName}}(
-                {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.IsXmlCommentExistsHeuristic)}}(xmlFullNode)
+                {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.IsXmlCommentExistsHeuristic)}}(xmlFullNode),
+                {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.IsCDataBlockExistsHeuristic)}}(xmlFullNode)
                 );
             {{HeadDeserializeMethodName}}(ref settings, inj, xmlFullNode, roschar.Empty, out result);
         }

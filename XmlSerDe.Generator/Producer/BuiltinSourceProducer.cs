@@ -15,7 +15,6 @@ namespace XmlSerDe.Generator.Producer
         public const string CutXmlHeadMethodName = "CutXmlHead";
         public const string AppendXmlHeadMethodName = "AppendXmlHead";
 
-        private readonly Compilation _compilation;
         public readonly BuiltinCollection Builtins;
 
         public BuiltinSourceProducer(
@@ -26,8 +25,6 @@ namespace XmlSerDe.Generator.Producer
             {
                 throw new ArgumentNullException(nameof(compilation));
             }
-
-            _compilation = compilation;
 
             Builtins = GenerateBuiltins(compilation);
         }

@@ -30,7 +30,7 @@ namespace XmlSerDe.Generator
             IncrementalValuesProvider<ClassDeclarationSyntax> classDeclarations = context.SyntaxProvider
                 .CreateSyntaxProvider(
                     predicate: static (s, _) => IsSyntaxTargetForGeneration(s), // select classes with attributes
-                    transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx)) // select the class with the [SeparateThreadWrapper] attribute
+                    transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx)) // select the class with the [XmlSubjectAttribute] or [XmlDerivedSubjectAttribute] attributes
                 .Where(static m => m is not null)!; // filter out attributed classes that we don't care about
 
             // Combine the selected classes with the `Compilation`

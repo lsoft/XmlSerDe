@@ -38,7 +38,8 @@ namespace XmlSerDe.Tests.Complex
                 },
                 new Derived1Info
                 {
-                    BasePersonificationInfo = RawString
+                    BasePersonificationInfo1 = RawString,
+                    BasePersonificationInfo2 = RawString
                 },
                 new Derived2Info
                 {
@@ -77,7 +78,8 @@ namespace XmlSerDe.Tests.Complex
             <Email>example@example.com</Email>
         </BaseInfo>
         <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived1Info"">
-            <BasePersonificationInfo>my string !@#$%^&amp;*()_+|-=\&#39;;[]{},./&lt;&gt;?</BasePersonificationInfo>
+            <BasePersonificationInfo1>" + XmlEncodedString + @"</BasePersonificationInfo1>
+            <BasePersonificationInfo2><![CDATA[" + RawString + @"]]><![CDATA[" + RawString + @"]]></BasePersonificationInfo2>
         </BaseInfo>
         <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived2Info"">
             <HotKeyUsed>false</HotKeyUsed>
@@ -120,7 +122,8 @@ namespace XmlSerDe.Tests.Complex
             <Email>example@example.com</Email>
         </BaseInfo>
         <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived1Info"">
-            <BasePersonificationInfo>my string !@#$%^&amp;*()_+|-=\&#39;;[]{},./&lt;&gt;?</BasePersonificationInfo>
+            <BasePersonificationInfo1>" + XmlEncodedString + @"</BasePersonificationInfo1>
+            <BasePersonificationInfo2><![CDATA[" + RawString + @"]]><![CDATA[" + RawString + @"]]></BasePersonificationInfo2>
         </BaseInfo>
         <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived2Info"">
             <HotKeyUsed>false</HotKeyUsed>
@@ -220,9 +223,13 @@ namespace XmlSerDe.Tests.Complex
                 {
                     throw new Exception("InfoType");
                 }
-                if (firstic.BasePersonificationInfo != secondic.BasePersonificationInfo)
+                if (firstic.BasePersonificationInfo1 != secondic.BasePersonificationInfo1)
                 {
-                    throw new Exception("BasePersonificationInfo");
+                    throw new Exception("BasePersonificationInfo1");
+                }
+                if (firstic.BasePersonificationInfo2 != secondic.BasePersonificationInfo2)
+                {
+                    throw new Exception("BasePersonificationInfo2");
                 }
             }
             {

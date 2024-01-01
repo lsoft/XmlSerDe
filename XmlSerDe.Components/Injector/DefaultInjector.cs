@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Xml;
 using XmlSerDe.Common;
@@ -11,38 +12,40 @@ namespace XmlSerDe.Components.Injector
         public static readonly DefaultInjector Instance = new DefaultInjector();
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out DateTime result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out global::System.DateTime result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("dateTime".AsSpan()))
+            var returnType = "dateTime".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node dateTime] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out DateTime? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out global::System.DateTime? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("dateTime".AsSpan()))
+            var returnType = "dateTime".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable dateTime] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void ParseBody(roschar body, out DateTime result)
+        public void ParseBody(roschar body, out global::System.DateTime result)
         {
             result = DateTime.Parse(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void ParseBody(roschar body, out DateTime? result)
+        public void ParseBody(roschar body, out global::System.DateTime? result)
         {
             result = DateTime.Parse(body);
         }
@@ -50,65 +53,69 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out Guid result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out Guid result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("guid".AsSpan()))
+            var returnType = "guid".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node guid] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out Guid? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out global::System.Guid? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("guid".AsSpan()))
+            var returnType = "guid".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable guid] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void ParseBody(roschar body, out Guid result)
+        public void ParseBody(roschar body, out global::System.Guid result)
         {
-            result = Guid.Parse(body);
+            result = global::System.Guid.Parse(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void ParseBody(roschar body, out Guid? result)
+        public void ParseBody(roschar body, out global::System.Guid? result)
         {
-            result = Guid.Parse(body);
+            result = global::System.Guid.Parse(body);
         }
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out bool result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out bool result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("boolean".AsSpan()))
+            var returnType = "boolean".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node boolean] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out bool? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out bool? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("boolean".AsSpan()))
+            var returnType = "boolean".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable boolean] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
@@ -126,27 +133,29 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out sbyte result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out sbyte result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("byte".AsSpan()))
+            var returnType = "byte".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node byte] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out sbyte? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out sbyte? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("byte".AsSpan()))
+            var returnType = "byte".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable byte] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
@@ -164,27 +173,29 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out byte result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out byte result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("unsignedByte".AsSpan()))
+            var returnType = "unsignedByte".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node unsignedByte] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out byte? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out byte? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("unsignedByte".AsSpan()))
+            var returnType = "unsignedByte".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable unsignedByte] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
@@ -202,27 +213,29 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ushort result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ushort result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("unsignedShort".AsSpan()))
+            var returnType = "unsignedShort".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node unsignedShort] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ushort? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ushort? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("unsignedShort".AsSpan()))
+            var returnType = "unsignedShort".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable unsignedShort] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
@@ -240,27 +253,29 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out short result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out short result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("short".AsSpan()))
+            var returnType = "short".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node short] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out short? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out short? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("short".AsSpan()))
+            var returnType = "short".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable short] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
@@ -278,27 +293,29 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out uint result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out uint result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("unsignedInt".AsSpan()))
+            var returnType = "unsignedInt".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node unsignedInt] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out uint? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out uint? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("unsignedInt".AsSpan()))
+            var returnType = "unsignedInt".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable unsignedInt] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
@@ -316,27 +333,29 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out int result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out int result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("int".AsSpan()))
+            var returnType = "int".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node int] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out int? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out int? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("int".AsSpan()))
+            var returnType = "int".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable int] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
@@ -354,27 +373,29 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ulong result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ulong result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("unsignedLong".AsSpan()))
+            var returnType = "unsignedLong".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node unsignedLong] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ulong? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out ulong? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("unsignedLong".AsSpan()))
+            var returnType = "unsignedLong".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable unsignedLong] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
@@ -392,27 +413,29 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out long result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out long result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("long".AsSpan()))
+            var returnType = "long".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node long] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out long? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out long? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("long".AsSpan()))
+            var returnType = "long".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable long] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
@@ -430,27 +453,29 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out decimal result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out decimal result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("decimal".AsSpan()))
+            var returnType = "decimal".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node decimal] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out decimal? result)
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out decimal? result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("decimal".AsSpan()))
+            var returnType = "decimal".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node Nullable decimal] Unknown type " + xmlNodeDeclaredType.ToString());
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
@@ -467,24 +492,83 @@ namespace XmlSerDe.Components.Injector
         }
 
 
-        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Parse(ref XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out string result)
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out string result)
         {
-            var xmlNode = new XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
-            if (!xmlNodeDeclaredType.SequenceEqual("string".AsSpan()))
+            var returnType = "string".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
             {
-                throw new InvalidOperationException("[C# node string] Unknown type " + xmlNodeDeclaredType.ToString());
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
             }
 
             ParseBody(xmlNode.Internals, out result);
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out string result)
         {
-            result = global::System.Net.WebUtility.HtmlDecode(body.ToString());
+            string? tempResult = null;
+
+        repeat:
+            if (body.StartsWith(global::XmlSerDe.Common.XmlNode2.CDataHead.AsSpan()))
+            {
+                //мы в блоке CDATA, ищем его хвост
+                var headLength = global::XmlSerDe.Common.XmlNode2.CDataHead.Length;
+                var tailLength = global::XmlSerDe.Common.XmlNode2.CDataTail.Length;
+
+                var cdeIndex = body.IndexOf(global::XmlSerDe.Common.XmlNode2.CDataTail.AsSpan());
+                var cDataString = body.Slice(headLength, cdeIndex - headLength);
+                if (tempResult == null)
+                {
+                    tempResult = cDataString.ToString();
+                }
+                else
+                {
+                    tempResult = tempResult + cDataString.ToString();
+                }
+
+                body = body.Slice(cdeIndex + tailLength);
+                goto repeat;
+            }
+
+            if (body.Length == 0)
+            {
+                result = tempResult ?? string.Empty;
+                return;
+            }
+
+            var decoded = global::System.Net.WebUtility.HtmlDecode(body.ToString());
+            if (tempResult == null)
+            {
+                result = decoded;
+            }
+            else
+            {
+                result = tempResult + decoded;
+            }
         }
 
+
+
+        [DoesNotReturn]
+        private static void InvalidOperationException(
+            roschar returnType,
+            roschar xmlNodeDeclaredType
+            )
+        {
+            throw new InvalidOperationException($"[C# node {returnType.ToString()}] Unknown type {xmlNodeDeclaredType.ToString()}");
+        }
+
+        [DoesNotReturn]
+        private static void NullableInvalidOperationException(
+            roschar returnType,
+            roschar xmlNodeDeclaredType
+            )
+        {
+            throw new InvalidOperationException($"[C# node Nullable {returnType.ToString()}] Unknown type {xmlNodeDeclaredType.ToString()}");
+        }
     }
 }

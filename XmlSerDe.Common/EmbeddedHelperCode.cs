@@ -113,6 +113,9 @@ namespace XmlSerDe.Common
         private readonly roschar _xmlnsHttpSpan = "http://www.w3.org/2001/XMLSchema-instance".AsSpan();
         private readonly roschar _typeSpan = "type".AsSpan();
 
+        public static readonly string CDataHead = "<![CDATA[";
+        public static readonly string CDataTail = "]]>";
+
         /// <summary>
         /// Struct is empty.
         /// </summary>
@@ -345,6 +348,14 @@ namespace XmlSerDe.Common
                     resultCandidate += GetLeadingCommentLengthIfExists(settings.ContainsXmlComments, rcspan);
                     return resultCandidate;
                 }
+                else if(settings.ContainsCDataBlocks && sliced.StartsWith(CDataHead.AsSpan()))
+                {
+                    //мы в блоке CDATA, ищем его хвост
+                    var cdeIndex = sliced.IndexOf(CDataTail.AsSpan());
+                    var cDataShift = cdeIndex + CDataTail.Length;
+                    index += cDataShift;
+                    continue;
+                }
                 else
                 {
                     //это открывающий тег дочерней ноды (возможно, с ведущим комментарием)
@@ -428,6 +439,21 @@ namespace XmlSerDe.Common
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool IsCDataBlockExistsHeuristic(
+            roschar span
+            )
+        {
+            var startCommentSpan = XmlNode2.CDataHead.AsSpan();
+
+            var foundIndex = MemoryExtensions.IndexOf(
+                span,
+                startCommentSpan
+                );
+
+            return foundIndex >= 0;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int GetLeadingCommentLengthIfExists(
             bool containsXmlComments,
             roschar span
@@ -496,7 +522,19 @@ namespace XmlSerDe.Common
         {
             var headSpaceCount = fullnode.Length - trimmed.Length;
 
-            //ищем конец имени ноды
+            ////ищем конец имени ноды, учитывая CDATA
+            //var cDataShift = 0;
+            //repeatCData:
+            //if (trimmed.StartsWith(_cDataHead.AsSpan()))
+            //{
+            //    //мы в блоке CDATA, ищем его хвост
+            //    var cdeIndex = trimmed.IndexOf(_cDataTail.AsSpan());
+            //    var cDataShift1 = cdeIndex + _cDataTail.Length;
+            //    trimmed = trimmed.Slice(cDataShift1);
+            //    cDataShift += cDataShift1;
+            //    goto repeatCData;
+            //}
+
             var endOfNameIndex = trimmed.IndexOfAny(
                 '/', '>', ' '
                 );
@@ -510,7 +548,6 @@ namespace XmlSerDe.Common
             isBodyLess = chm1 == '/';
 
             fullHeadLength = headSpaceCount + endOfHeadIndex + 1;
-            //fullHead = fullnode.Slice(0, headSpaceCount + endOfHeadIndex + 1);
             nodeType = fullnode.Slice(headSpaceCount + 1, nodeTypeLength - headSpaceCount - 1);
         }
 
@@ -600,11 +637,19 @@ namespace XmlSerDe.Common
         /// </summary>
         public readonly bool ContainsXmlComments;
 
+        /// <summary>
+        /// Heuristic: true if XML document likely contains a CDATA blocks.
+        /// If so, we need to spent CPU time for parsing them.
+        /// </summary>
+        public readonly bool ContainsCDataBlocks;
+
         public XmlDeserializeSettings(
-            bool containsXmlComments
+            bool containsXmlComments,
+            bool containsCDataBlocks
             )
         {
             ContainsXmlComments = containsXmlComments;
+            ContainsCDataBlocks = containsCDataBlocks;
         }
 
     }
