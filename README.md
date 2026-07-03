@@ -1,25 +1,303 @@
 # XmlSerDe
 
-Allocation free XML serializer/deserializer based on C# incremental source generators (ISG). Because of ISG no performance issues occurs when working with big codebases.
+Allocation-free XML serializer/deserializer based on C# incremental source generators (ISG). Because generation happens at compile time, there is no runtime reflection cost and no performance degradation as the number of serialized types grows.
 
 ## Status
 
-Status: prototype.
+**Prototype.** The API and behavior may change.
 
-Restrictions now:
+## Solution structure
 
-- Do not support CDATA.
-- Do not support malformed XML documents. No guard from malformed XML documents exists. Do not use it with potentially malicious XML documents.
-- Serialized object must have a parameterless contructor and must be visible from the deserialization class.
-- Serialized fields/properties must have accessible setter for deserialization.
-- Only `List<T>` and `T[]` supports as collections.
+| Project | Target | Role |
+|---------|--------|------|
+| **XmlSerDe.Common** | netstandard2.0 | Attributes, `IInjector` / `IExhauster` contracts, and `XmlNode2` — a low-allocation XML node parser over `ReadOnlySpan<char>`. |
+| **XmlSerDe.Components** | net7.0 | Default runtime implementations: injectors and exhausters. |
+| **XmlSerDe.Generator** | netstandard2.0 (Roslyn analyzer) | Incremental source generator that emits serialization/deserialization code at compile time. |
+| **XmlSerDe.Tests** | net7.0 | Functional tests (xUnit). |
+| **XmlSerDe.PerformanceTests** | net7.0 | BenchmarkDotNet benchmarks vs `System.Xml.Serialization`. |
 
-## Features
+**Dependency flow:** consumer app → `XmlSerDe.Common` + `XmlSerDe.Components` + `XmlSerDe.Generator` (analyzer).
 
-- Tuned for no (or minimum) memory allocation.
-- Deserializer can accept a custom object factories which is useful for reuse already allocated objects (see `XmlFactory` attribute in the performance section below).
+## Getting started
 
-# Performance
+### 1. Add project references
+
+```xml
+<ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" />
+<ProjectReference Include="..\XmlSerDe.Components\XmlSerDe.Components.csproj" />
+<ProjectReference Include="..\XmlSerDe.Generator\XmlSerDe.Generator.csproj"
+                  OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+```
+
+### 2. Define your types
+
+```csharp
+public class Order
+{
+    public int Id { get; set; }
+    public string CustomerName { get; set; }
+    public List<OrderLine> Lines { get; set; }
+}
+
+public class OrderLine
+{
+    public string Product { get; set; }
+    public int Quantity { get; set; }
+}
+```
+
+### 3. Declare a partial serializer class
+
+```csharp
+using XmlSerDe.Common;
+using XmlSerDe.Components.Exhauster;
+using XmlSerDe.Components.Injector;
+
+[XmlSubject(typeof(OrderLine), false)]
+[XmlSubject(typeof(Order), true)]   // true = root type (public entry point)
+public partial class OrderSerializer
+{
+}
+```
+
+The class **must** be `partial`. On build, the generator emits `OrderSerializer.g.cs` with `Serialize` and `Deserialize` methods.
+
+### 4. Serialize
+
+```csharp
+var exhauster = new DefaultStringBuilderExhauster();
+OrderSerializer.Serialize(exhauster, order, appendXmlHead: false);
+string xml = exhauster.ToString();
+```
+
+### 5. Deserialize
+
+```csharp
+OrderSerializer.Deserialize(
+    DefaultInjector.Instance,
+    xml.AsSpan(),
+    out Order result);
+```
+
+If the input includes an XML declaration (`<?xml ...?>`), strip it first:
+
+```csharp
+var body = BuiltinCodeHelper.CutXmlHead(fullXml.AsSpan());
+OrderSerializer.Deserialize(DefaultInjector.Instance, body, out Order result);
+```
+
+## Serialization/deserialization class
+
+You register types and configure code generation by decorating a single `partial` class with attributes from `XmlSerDe.Common`. All attributes can be applied multiple times to the same class.
+
+### `[XmlSubject(typeof(T), isRoot)]`
+
+Registers a type for serialization and deserialization.
+
+| Parameter | Meaning |
+|-----------|---------|
+| `SubjectType` | The CLR type to handle. Every member type used in the object graph must be registered before it appears in another type. |
+| `IsRoot` | `true` — generates a public `Deserialize(injector, xml, out T)` and root `Serialize(exh, obj, appendXmlHead)` for this type. Typically exactly one root per serializer class. |
+
+### `[XmlDerivedSubject(typeof(Base), typeof(Derived))]`
+
+Enables polymorphic deserialization via `xsi:type`. The base type must already have `[XmlSubject]`, and the derived type must be concrete and registered with its own `[XmlSubject]`. Abstract bases require at least one derived registration.
+
+### `[XmlExhauster(typeof(T))]`
+
+Registers an `IExhauster` implementation. The generator emits a `Serialize` overload for each registered exhauster. If omitted, `DefaultStringBuilderExhauster` is used automatically.
+
+### `[XmlInjector(typeof(T))]`
+
+Registers an `IInjector` implementation. The generator emits a `Deserialize` overload for each registered injector. If omitted, `DefaultInjector` is used automatically.
+
+### `[XmlFactory(typeof(T), invocationStatement)]`
+
+Replaces `new T()` during deserialization with a custom C# expression. Useful for object pooling and reuse of already-allocated instances.
+
+```csharp
+[XmlFactory(typeof(InfoContainer), "global::MyApp.CachedInfoContainer.Reuse()")]
+```
+
+The factory type must provide a `Reset()`-style method that clears state before reuse. See `CachedInfoContainer` in `XmlSerDe.Tests/Complex/Subject/InfoContainer.cs`.
+
+### Example: polymorphic serializer
+
+```csharp
+[XmlSubject(typeof(BaseInfo), false)]
+[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived1Info))]
+[XmlSubject(typeof(Derived1Info), false)]
+[XmlSubject(typeof(InfoContainer), true)]
+public partial class MySerializer { }
+```
+
+Produces XML compatible with `System.Xml.Serialization` polymorphism:
+
+```xml
+<BaseInfo xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="Derived1Info">
+  <BasePersonificationInfo>my string</BasePersonificationInfo>
+</BaseInfo>
+```
+
+## Deserialization
+
+### Injector
+
+An **injector** (`IInjector`) parses primitive/builtin values from XML nodes. It is the deserialization counterpart to an exhauster.
+
+For each supported builtin type, `IInjector` defines:
+
+- `Parse(ref XmlDeserializeSettings, fullNode, xmlnsAttributeName, out T)` — expects the XSD wrapper element (`<dateTime>`, `<int>`, etc.) inside the property element.
+- `ParseBody(body, out T)` — parses only the inner text.
+
+`DefaultInjector` (singleton: `DefaultInjector.Instance`):
+
+- Validates the declared XSD element name, then delegates to `ParseBody`.
+- Uses standard `*.Parse` methods for numeric types, `DateTime.Parse`, `Guid.Parse`, etc.
+- **Strings:** supports CDATA blocks (concatenates multiple), then `WebUtility.HtmlDecode`.
+- **Booleans:** `"true"` / `"false"`.
+
+### Custom injector
+
+Implement `IInjector` and register it with `[XmlInjector(typeof(MyInjector))]`. Override `ParseBody` to change format — for example, a fixed `DateTime` format:
+
+```csharp
+public class IsoDateInjector : DefaultInjector
+{
+    public new void ParseBody(ReadOnlySpan<char> body, out DateTime result)
+    {
+        result = DateTime.ParseExact(body, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+    }
+}
+```
+
+The generator emits a `Deserialize(MyInjector inj, ReadOnlySpan<char> xml, out TRoot)` overload that routes all builtin parsing through your injector.
+
+### XmlNode2
+
+`XmlNode2` in `XmlSerDe.Common` is a `ref struct` that walks XML without allocating DOM nodes. The root `Deserialize` overload builds `XmlDeserializeSettings` from heuristics (whether comments or CDATA blocks are likely present) and iterates child nodes via `XmlNode2.GetFirst`.
+
+## Serialization
+
+### Exhauster
+
+An **exhauster** (`IExhauster`) is the output sink for serialized data. For each supported builtin type it provides `Append(T)` and `Append(T?)`, plus:
+
+- `Append(string? value)` — raw append.
+- `AppendEncoded(string? value)` — HTML-encodes then appends (used for `string` builtins).
+
+Null nullable values are skipped during serialization.
+
+### Built-in exhausters
+
+| Exhauster | Purpose |
+|-----------|---------|
+| `DefaultStringBuilderExhauster` | Writes to a `StringBuilder`. Optional pre-sized constructor. Default `DateTime` format: `yyyy-MM-ddTHH:mm:ss.fffffffK`. Not thread-safe. |
+| `DefaultLengthEstimatorExhauster` | Counts estimated character length without building output. Exposes `EstimatedTotalLength` — use to pre-size a `StringBuilder` and reduce reallocations. |
+| `Utf8BinaryExhauster` (abstract) | Converts values to UTF-8 bytes. Small values use an internal buffer; larger values rent from `ArrayPool<byte>`. Subclass and implement `Write(byte[] data, int length)` to send data to a stream or network. |
+
+### Two-phase serialization (length estimation)
+
+```csharp
+// Estimation phase
+var estimator = new DefaultLengthEstimatorExhauster();
+OrderSerializer.Serialize(estimator, order, false);
+var estimatedLength = estimator.EstimatedTotalLength;
+
+// Serialization phase with pre-sized buffer
+var exhauster = new DefaultStringBuilderExhauster(new StringBuilder(estimatedLength));
+OrderSerializer.Serialize(exhauster, order, false);
+string xml = exhauster.ToString();
+```
+
+Estimation may be slightly slower than a single pass, but allocates less because the `StringBuilder` does not need to grow.
+
+### Stream serialization
+
+```csharp
+public class StreamExhauster : Utf8BinaryExhauster
+{
+    private readonly Stream _stream;
+    public StreamExhauster(Stream stream) => _stream = stream;
+
+    protected override void Write(byte[] data, int length)
+        => _stream.Write(data, 0, length);
+}
+```
+
+### Custom exhauster
+
+Implement `IExhauster` and register with `[XmlExhauster(typeof(MyExhauster))]`. Override `Append` methods to customize output format.
+
+Set `appendXmlHead: true` on `Serialize` to prepend `<?xml version="1.0" encoding="utf-8"?>`.
+
+## Supported types
+
+### Builtin primitives
+
+XML element names follow XSD conventions:
+
+| C# type | XML inner element |
+|---------|-------------------|
+| `DateTime` / `DateTime?` | `dateTime` |
+| `Guid` / `Guid?` | `guid` |
+| `bool` / `bool?` | `boolean` |
+| `sbyte` / `sbyte?` | `byte` |
+| `byte` / `byte?` | `unsignedByte` |
+| `short` / `short?` | `short` |
+| `ushort` / `ushort?` | `unsignedShort` |
+| `int` / `int?` | `int` |
+| `uint` / `uint?` | `unsignedInt` |
+| `long` / `long?` | `long` |
+| `ulong` / `ulong?` | `unsignedLong` |
+| `decimal` / `decimal?` | `decimal` |
+| `string` | `string` (HTML-encoded on serialize) |
+
+### Complex types
+
+- Classes registered with `[XmlSubject]`
+- **Enums** — serialized as `<EnumTypeName>value</EnumTypeName>`, parsed via `Enum.Parse`
+- **Inheritance** — via `[XmlDerivedSubject]` and `xsi:type`
+- **Collections** — `List<T>` and `T[]` only
+
+### Members
+
+- Public fields and properties (including inherited) with accessible setters
+- `[XmlIgnore]` properties are skipped
+- Private and protected members are skipped
+- XML element names match C# type and property names (not configurable)
+
+## Limitations
+
+- **No CDATA serialization** (CDATA deserialization for strings is partially supported in `DefaultInjector`).
+- **No malformed-XML protection** — do not use with untrusted input.
+- **Parameterless constructor required** unless `[XmlFactory]` is used.
+- Serialized types must be visible to the serializer partial class.
+- Members need accessible setters for deserialization.
+- **Only `List<T>` and `T[]`** as collections.
+- The serializer class must be `partial`.
+- Unknown member types cause a compile-time generator error.
+- Multi-argument generics (e.g. `Dictionary<K,V>`) are not supported.
+
+## How the generator works
+
+`XmlDeserializeGenerator` (`IIncrementalGenerator`) triggers on any `partial class` decorated with `[XmlSubject]` or `[XmlDerivedSubject]`.
+
+For each serializer class it emits:
+
+| Generated file | Contents |
+|----------------|----------|
+| `{ClassName}.g.cs` | `Serialize` / `Deserialize` for each registered type, per exhauster/injector |
+| `BuiltinCodeHelper.MainPart.g.cs` | `CutXmlHead`, shared utilities |
+| `BuiltinCodeHelper.Serialization.Shared.g.cs` | XSD type name constants |
+| `BuiltinCodeHelper.{ExhausterName}.g.cs` | Per-exhauster builtin serialization |
+| `BuiltinCodeHelper.{InjectorName}.g.cs` | Per-injector builtin deserialization dispatch |
+
+**Serialize:** wraps objects in `<TypeName>` elements; polymorphic types get `xmlns:xsi` + `xsi:type`; builtin members use property wrapper + XSD inner element.
+
+**Deserialize:** walks child nodes, dispatches on element name (`SequenceEqual` on spans), resolves polymorphism via `xsi:type`, constructs objects with `new T()` or the `XmlFactory` expression.
+
+## Performance
 
 For the following XML document:
 
@@ -63,17 +341,9 @@ For the following XML document:
 </InfoContainer>
 ```
 
-the performance is:
+Benchmark results (.NET 7.0, Windows 11, Intel Core i7-13700H):
 
 ```
-BenchmarkDotNet=v0.13.5, OS=Windows 11 (10.0.22621.1702/22H2/2022Update/SunValley2)
-13th Gen Intel Core i7-13700H, 1 CPU, 20 logical and 14 physical cores
-.NET SDK=7.0.300-preview.23179.2
-  [Host]   : .NET 6.0.15 (6.0.1523.11507), X64 RyuJIT AVX2
-  .NET 7.0 : .NET 7.0.4 (7.0.423.11508), X64 RyuJIT AVX2
-
-Job=.NET 7.0  Runtime=.NET 7.0
-
 |                         Method |     Mean |     Error |    StdDev |   Gen0 |   Gen1 | Allocated |
 |------------------------------- |---------:|----------:|----------:|-------:|-------:|----------:|
 |        'Serialize: System.Xml' | 3.676 us | 0.0351 us | 0.0293 us | 1.0300 | 0.0343 |   12960 B |
@@ -87,101 +357,100 @@ Job=.NET 7.0  Runtime=.NET 7.0
 |        'Deserialize: XmlSerDe' | 5.437 us | 0.0486 us | 0.0455 us | 0.0610 |      - |     824 B |
 ```
 
-PTAL on few points:
+Notes on the benchmark variants:
 
-1. `(est)` test do premature estimation of result XML document length (via serialization to dev/null), and allocate the buffer of appropriate size. Serialization with estimation on may be a bit slower than a regular one, but it allocate less.
-2. `(stream)` test serializes the data into the binary for sending into stream and\or network. For test purposes we do not send the data anywhere. Low allocations are possible because of `ArrayPool<>.Rent` use.
-3. Deserialization process is a bit faster and allocate only 5% memory in comparison to the standard serializer.
+1. **`(est)`** — runs a length-estimation pass first, then serializes into a pre-sized `StringBuilder`. Slightly different timing, fewer allocations.
+2. **`(stream)`** — serializes to UTF-8 binary via `Utf8BinaryExhauster` (discards output in the benchmark). Low allocations thanks to `ArrayPool<byte>.Rent`.
+3. **Deserialize** — XmlSerDe is faster and allocates roughly 5% of the memory compared to `System.Xml.Serialization`.
 
-the code:
+Example serializer declaration and usage from the benchmark fixture:
 
-```C#
+```csharp
+public InfoContainer Deserialize(ReadOnlySpan<char> xml)
+{
+    XmlSerializerDeserializer.Deserialize(DefaultInjector.Instance, xml, out InfoContainer r);
+    return r;
+}
 
-    public InfoContainer Deserialize(ReadOnlySpan<char> xml)
-    {
-        XmlSerializerDeserializer.Deserialize(DefaultInjector.Instance, xml, out InfoContainer r);
-        return r;
-    }
+public string Serialize()
+{
+    var dsbe = new DefaultStringBuilderExhauster();
+    XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
+    return dsbe.ToString();
+}
 
-    public string Serialize()
-    {
-        var dsbe = new DefaultStringBuilderExhauster();
-        XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
-        var xml = dsbe.ToString();
-        return xml;
-    }
+public string Serialize_Est()
+{
+    var dlee = new DefaultLengthEstimatorExhauster();
+    XmlSerializerDeserializer.Serialize(dlee, DefaultObject, false);
+    var estimateXmlLength = dlee.EstimatedTotalLength;
 
-    public string Serialize_Est()
-    {
-        //estimation phase:
-        var dlee = new DefaultLengthEstimatorExhauster();
-        XmlSerializerDeserializer.Serialize(dlee, DefaultObject, false);
-        var estimateXmlLength = dlee.EstimatedTotalLength;
+    var dsbe = new DefaultStringBuilderExhauster(new StringBuilder(estimateXmlLength));
+    XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
+    return dsbe.ToString();
+}
 
-        //serialization phase:
-        var dsbe = new DefaultStringBuilderExhauster(
-            new StringBuilder(estimateXmlLength)
-            );
-        XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
-        var xml = dsbe.ToString();
-        return xml;
-    }
+public void Serialize_ToStream_Test()
+{
+    var be = new Utf8BinaryExhausterEmpty();
+    XmlSerializerDeserializer.Serialize(be, DefaultObject, false);
+}
 
-    public void Serialize_ToStream_Test()
-    {
-        var be = new Utf8BinaryExhausterEmpty(
-            );
-        XmlSerializerDeserializer.Serialize(be, DefaultObject, false);
-    }
-
-//...
-
-    public class Utf8BinaryExhausterEmpty : Utf8BinaryExhauster
-    {
-        protected override void Write(byte[] data, int length)
-        {
-            //nothing to do in tests
-        }
-    }
-
-    [XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
-    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
-    [XmlExhauster(typeof(Utf8BinaryExhausterEmpty))]
-    [XmlSubject(typeof(SerializeKeyValue), false)]
-    [XmlSubject(typeof(PerformanceTime), false)]
-    [XmlSubject(typeof(InfoContainer), true)]
-    [XmlSubject(typeof(BaseInfo), false)]
-    [XmlDerivedSubject(typeof(BaseInfo), typeof(Derived1Info))]
-    [XmlSubject(typeof(Derived1Info), false)]
-    [XmlDerivedSubject(typeof(BaseInfo), typeof(Derived2Info))]
-    [XmlSubject(typeof(Derived2Info), false)]
-    [XmlDerivedSubject(typeof(BaseInfo), typeof(Derived3Info))]
-    [XmlSubject(typeof(Derived3Info), false)]
-    [XmlFactory(typeof(InfoContainer), "global::" + "XmlSerDe.Tests.Complex.Subject" + "." + nameof(CachedInfoContainer) + "." + nameof(CachedInfoContainer.Reuse) + "()")]
-    public partial class XmlSerializerDeserializer
-    {
-    }
+[XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
+[XmlExhauster(typeof(DefaultStringBuilderExhauster))]
+[XmlExhauster(typeof(Utf8BinaryExhausterEmpty))]
+[XmlSubject(typeof(SerializeKeyValue), false)]
+[XmlSubject(typeof(PerformanceTime), false)]
+[XmlSubject(typeof(InfoContainer), true)]
+[XmlSubject(typeof(BaseInfo), false)]
+[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived1Info))]
+[XmlSubject(typeof(Derived1Info), false)]
+[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived2Info))]
+[XmlSubject(typeof(Derived2Info), false)]
+[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived3Info))]
+[XmlSubject(typeof(Derived3Info), false)]
+[XmlFactory(typeof(InfoContainer), "global::" + "XmlSerDe.Tests.Complex.Subject" + "." + nameof(CachedInfoContainer) + "." + nameof(CachedInfoContainer.Reuse) + "()")]
+public partial class XmlSerializerDeserializer
+{
+}
 ```
 
-## Serialization/deserialization class
+Run benchmarks:
 
-TODO in general
+```bash
+dotnet run -c Release --project XmlSerDe.PerformanceTests
+```
 
-TODO: what attributes means
+## Building and testing
 
-## Deserialization
+```bash
+dotnet build XmlSerDe.sln
+dotnet test XmlSerDe.Tests
+```
 
-TODO in general
+Generated source files are written to `obj/Generated/` when `EmitCompilerGeneratedFiles` is enabled (as in the test project).
 
-TODO: what is injector; embedded injector; custom injector; using custom injector to change deserialization format (for DateTime for example).
+## Test coverage map
 
-## Serialization
+`XmlSerDe.Tests/SerDeFixture.cs` exercises the main features:
 
-TODO in general
-
-TODO: what is exhauster; embedded exhauster; custom exhauster; using custom exhauster to change serialization format (for DateTime for example).
-
+| Tests | Feature |
+|-------|---------|
+| `XmlObject1_*` | Empty root, self-closing tags, `xsi:type`, XML comments, stream serialization |
+| `XmlObject2_*` | Primitives, HTML entity decoding, XML declaration stripping |
+| `XmlObject4_5_*` | Abstract polymorphism |
+| `XmlObject6_*` | `List<string>` |
+| `XmlObject7_8_*` | Public fields |
+| `XmlObject9_10_*`, `XmlObject11_12_*` | Non-abstract / abstract base polymorphism |
+| `XmlObject13_*` | `[XmlIgnore]` |
+| `XmlObject14_*` | Nullable `DateTime?`, `Guid?` |
+| `XmlObject15_*` | Enums |
+| `XmlObject16_17_*` | `List<CustomType>` |
+| `XmlObject18_*` – `XmlObject22_*` | Enum and primitive arrays |
+| `XmlObject23_24_*` | Arrays of custom types |
+| `XmlObject25_26_27_*`, `XmlObject28_29_30_*` | Polymorphism on nested properties and in lists |
+| `ComplexFixture` | Full document with derived types, enums, `DateTime`, `XmlFactory` reuse |
 
 ## Alternatives
 
-You may be interested in the following project: https://github.com/ZingBallyhoo/StackXML
+You may also be interested in [StackXML](https://github.com/ZingBallyhoo/StackXML).

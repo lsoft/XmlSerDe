@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -15,6 +15,7 @@ namespace XmlSerDe.Tests.Complex
     [XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
     [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
     [XmlExhauster(typeof(Utf8BinaryExhausterEmpty))]
+    [XmlExhauster(typeof(Utf8BinaryExhausterStream))]
     [XmlSubject(typeof(SerializeKeyValue), false)]
     [XmlSubject(typeof(PerformanceTime), false)]
     [XmlSubject(typeof(InfoContainer), true)]

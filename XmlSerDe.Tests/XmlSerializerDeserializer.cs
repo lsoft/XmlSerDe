@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -136,6 +136,23 @@ namespace XmlSerDe.Tests
     [XmlDerivedSubject(typeof(XmlObject29), typeof(XmlObject30))]
     [XmlSubject(typeof(XmlObject30), false)]
     public partial class XmlSerializerDeserializer28_29_30
+    {
+    }
+
+    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
+    [XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
+    [XmlSubject(typeof(XmlObject31), true)]
+    public partial class XmlSerializerDeserializer31
+    {
+    }
+
+    [XmlSubject(typeof(XmlObject32), true)]
+    public partial class XmlSerializerDeserializer32
+    {
+    }
+
+    [XmlSubject(typeof(XmlObject33), true)]
+    public partial class XmlSerializerDeserializer33
     {
     }
 }
