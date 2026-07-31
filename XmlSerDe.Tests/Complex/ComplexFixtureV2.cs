@@ -12,6 +12,7 @@ namespace XmlSerDe.Tests.Complex
     /// V2 complex-scenario tests: XmlFactory reuse, length estimation,
     /// stream serialization, and XML head handling.
     /// </summary>
+    [Collection(ComplexTestsCollection.Name)]
     public class ComplexFixtureV2
     {
         [Fact]

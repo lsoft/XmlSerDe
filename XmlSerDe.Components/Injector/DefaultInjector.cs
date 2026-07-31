@@ -483,12 +483,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out decimal result)
         {
-            result = long.Parse(body);
+            result = decimal.Parse(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out decimal? result)
         {
-            result = long.Parse(body);
+            result = decimal.Parse(body);
         }
 
 

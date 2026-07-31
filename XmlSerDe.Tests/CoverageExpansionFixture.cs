@@ -43,11 +43,11 @@ namespace XmlSerDe.Tests
             XmlSerializerDeserializer31.Serialize(sb, CreateFullPrimitivesObject(), false);
             var xml = sb.ToString();
 
-            Assert.Contains("<boolean>true</boolean>", xml);
-            Assert.Contains("<unsignedByte>200</unsignedByte>", xml);
-            Assert.Contains("<decimal>", xml);
-            Assert.Contains("<dateTime>", xml);
-            Assert.Contains("<guid>", xml);
+            Assert.Contains("<BoolProperty>true</BoolProperty>", xml);
+            Assert.Contains("<ByteProperty>200</ByteProperty>", xml);
+            Assert.Contains("<DecimalProperty>", xml);
+            Assert.Contains("<DateTimeProperty>", xml);
+            Assert.Contains("<GuidProperty>", xml);
         }
 
         [Fact]
@@ -112,7 +112,12 @@ namespace XmlSerDe.Tests
             var sb = new DefaultStringBuilderExhauster(new StringBuilder(estimator.EstimatedTotalLength));
             XmlSerializerDeserializer31.Serialize(sb, original, false);
 
-            Assert.Equal(estimator.EstimatedTotalLength, sb.ToString().Length);
+            // DefaultLengthEstimatorExhauster is documented to return an excessive
+            // (upper-bound) estimate, not an exact match, so the actual serialized
+            // length must never exceed the estimate.
+            Assert.True(
+                sb.ToString().Length <= estimator.EstimatedTotalLength,
+                $"Actual length {sb.ToString().Length} exceeded estimated length {estimator.EstimatedTotalLength}");
         }
 
         [Fact]

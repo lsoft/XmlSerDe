@@ -14,6 +14,18 @@ using Xunit;
 
 namespace XmlSerDe.Tests.Complex
 {
+    /// <summary>
+    /// ComplexFixture and ComplexFixtureV2 share the process-wide cached
+    /// InfoContainer instance (see XmlFactory/CachedInfoContainer), so they
+    /// must not run concurrently with each other.
+    /// </summary>
+    [CollectionDefinition(Name)]
+    public class ComplexTestsCollection
+    {
+        public const string Name = "ComplexTests";
+    }
+
+    [Collection(ComplexTestsCollection.Name)]
     public class ComplexFixture
     {
         public static readonly XmlSerializer SystemXmlSerializer = new XmlSerializer(

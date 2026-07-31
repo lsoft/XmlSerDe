@@ -274,7 +274,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             //{{memberType.ToGlobalDisplayString()}} {{member.Name}}
 """);
 
-            var canBeNull = !memberType.IsValueType;
+            var canBeNull = !memberType.IsValueType || memberType.IsNullableValueType;
             if (canBeNull)
             {
                 _sb.AppendLine($$"""
@@ -1033,6 +1033,16 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 {
                     return
                         Symbol.IsValueType;
+                }
+            }
+
+            public readonly bool IsNullableValueType
+            {
+                get
+                {
+                    return
+                        Symbol is INamedTypeSymbol nts
+                        && nts.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
                 }
             }
 
