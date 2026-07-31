@@ -183,7 +183,10 @@ Its attribute parser follows XML 1.0's actual grammar rather than a narrow subse
 - **Quoting:** `AttValue` may be delimited by either `"` or `'` (the closing quote must match the opening one).
 - **Namespace prefix optional:** unprefixed attributes (e.g. `id="1"`) are recognized alongside prefixed ones (e.g. `p3:type="..."`).
 - **Whitespace:** the XML `S` production (`#x20 | #x9 | #xD | #xA`) is honored between the element name and its attributes, not just a literal space.
-- **Entity decoding:** attribute values containing `&` are decoded per XML 1.0 §3.3.3 attribute-value normalization (e.g. `&amp;`, `&#49;`), via the same `WebUtility.HtmlDecode` convention used for element text. Allocates only when `&` is actually present.
+- **`>` inside attribute values:** per XML 1.0 §2.4, `AttValue` only requires escaping `<`, `&`, and the matching quote character — `>` is legal unescaped (e.g. `<Foo attr="1>2">`). The tag-head scan is quote-aware, so it doesn't mistake such a `>` for the tag's actual close.
+- **Attribute-value normalization (XML 1.0 §3.3.3):** entity/character references (`&amp;`, `&#49;`) are decoded via the same `WebUtility.HtmlDecode` convention used for element text, and literal tab/CR/LF characters are collapsed to a single space — but a character reference that expands to whitespace (e.g. `&#10;`) is inserted verbatim and is *not* collapsed, matching the spec's normalization algorithm. Allocates only when a reference or literal tab/CR/LF is actually present.
+
+`BuiltinCodeHelper.CutXmlHead` strips the full XML prolog (XML 1.0 §2.8: `XMLDecl? Misc* (doctypedecl Misc*)?`), not just the `<?xml ...?>` declaration — leading comments, other processing instructions (e.g. `<?xml-stylesheet ...?>`), and a `<!DOCTYPE ...>` declaration (including one with an internal subset containing its own `>` characters) are all skipped via `XmlNode2.SkipPrologMisc`, in any order/combination.
 
 ## Serialization
 
@@ -283,6 +286,8 @@ XML element names follow XSD conventions:
 
 - **No CDATA serialization** (CDATA deserialization for strings is partially supported in `DefaultInjector`).
 - **No malformed-XML *input* protection** — the deserializer does not validate well-formedness of its input; do not use with untrusted input. (Serialization *output*, by contrast, is guarded: `AppendEncoded` rejects string content containing characters illegal per XML 1.0's `Char` production — see [`XmlCharGuard`](#exhauster).)
+- **No DTD support** — a `<!DOCTYPE ...>` in the prolog is skipped over (not parsed), so custom general entities it declares are not resolved; only the five predefined XML entities plus numeric character references (and, leniently, HTML5 named entities via `WebUtility.HtmlDecode`) are understood.
+- **No general XML Namespaces support** — element/attribute names are compared as literal text including any prefix; only the `xmlns:xsi` / `xsi:type` pair used for polymorphism is special-cased.
 - **Parameterless constructor required** unless `[XmlFactory]` is used.
 - Serialized types must be visible to the serializer partial class.
 - Members need accessible setters for deserialization.
@@ -464,6 +469,7 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | `ComplexFixture` / `ComplexFixtureV2` | Full document with derived types, enums, `DateTime`, `XmlFactory` reuse |
 | `SerDeFixtureV2` | Same feature set as `SerDeFixture`, exercised through a second serializer declaration to catch cross-class code-gen issues |
 | `CoverageExpansionFixture` | All primitive types incl. `decimal`/`Guid` round-trips, nullable value-type omission on serialize, length-estimator accuracy, empty/null collections, CDATA strings (including concatenated blocks), HTML-entity-encoded string serialization |
+| `SpecComplianceFixture` | XML 1.0 edge cases: unescaped `>` in attribute values (including a foreign-producer-style extra attribute during polymorphic deserialize), prolog processing instructions / `DOCTYPE` (incl. internal subset) being skipped, attribute-value whitespace normalization vs. character references |
 
 ## Alternatives
 

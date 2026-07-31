@@ -511,6 +511,85 @@ namespace XmlSerDe.Common
             }
         }
 
+        /// <summary>
+        /// Skips everything the XML 1.0 §2.8 prolog grammar allows after an optional
+        /// XMLDecl: prolog ::= XMLDecl? Misc* (doctypedecl Misc*)?  where
+        /// Misc ::= Comment | PI | S. Handles processing instructions with any target
+        /// (not just the XML declaration itself) and a DOCTYPE declaration, including
+        /// one with an internal subset containing its own '&gt;' characters.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static roschar SkipPrologMisc(
+            bool containsXmlComments,
+            roschar span
+            )
+        {
+            while (true)
+            {
+                span = span.TrimStart();
+                if (span.IsEmpty)
+                {
+                    return span;
+                }
+
+                var lcl = GetLeadingCommentLengthIfExists(containsXmlComments, span);
+                if (lcl > 0)
+                {
+                    span = span.Slice(lcl);
+                    continue;
+                }
+
+                if (span.StartsWith("<?".AsSpan()))
+                {
+                    var endIndex = span.IndexOf("?>".AsSpan());
+                    if (endIndex < 0)
+                    {
+                        throw new InvalidOperationException("Malformed processing instruction in XML prolog.");
+                    }
+
+                    span = span.Slice(endIndex + 2);
+                    continue;
+                }
+
+                var doctypeHead = "<!DOCTYPE".AsSpan();
+                if (span.StartsWith(doctypeHead))
+                {
+                    span = SkipDoctypeDeclaration(span.Slice(doctypeHead.Length));
+                    continue;
+                }
+
+                return span;
+            }
+        }
+
+        /// <summary>
+        /// Skips the remainder of a "&lt;!DOCTYPE" declaration, tracking '['/']' depth so a
+        /// '&gt;' inside an internal subset (e.g. inside "&lt;!ELEMENT Foo (#PCDATA)&gt;") doesn't
+        /// prematurely end the declaration.
+        /// </summary>
+        private static roschar SkipDoctypeDeclaration(roschar afterKeyword)
+        {
+            var depth = 0;
+            for (var i = 0; i < afterKeyword.Length; i++)
+            {
+                var c = afterKeyword[i];
+                if (c == '[')
+                {
+                    depth++;
+                }
+                else if (c == ']')
+                {
+                    depth--;
+                }
+                else if (c == '>' && depth <= 0)
+                {
+                    return afterKeyword.Slice(i + 1);
+                }
+            }
+
+            throw new InvalidOperationException("Malformed DOCTYPE declaration in XML prolog.");
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ScanHead_Core(
             roschar fullnode,
@@ -541,15 +620,48 @@ namespace XmlSerDe.Common
                 );
             var nodeTypeLength = headSpaceCount + endOfNameIndex;
 
-            //ищем конец головы
-            var endOfHeadIndex = trimmed.IndexOf(
-                '>'
-                );
+            //ищем конец головы: '>' может встретиться внутри значения атрибута
+            //без экранирования (XML 1.0 §2.4 требует экранирования только '<', '&'
+            //и совпадающей кавычки внутри AttValue), поэтому сканируем с учётом кавычек
+            var endOfHeadIndex = FindUnquotedGt(trimmed);
             var chm1 = trimmed[endOfHeadIndex - 1];
             isBodyLess = chm1 == '/';
 
             fullHeadLength = headSpaceCount + endOfHeadIndex + 1;
             nodeType = fullnode.Slice(headSpaceCount + 1, nodeTypeLength - headSpaceCount - 1);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int FindUnquotedGt(roschar span)
+        {
+            char quote = '\0';
+
+            for (var i = 0; i < span.Length; i++)
+            {
+                var c = span[i];
+
+                if (quote != '\0')
+                {
+                    if (c == quote)
+                    {
+                        quote = '\0';
+                    }
+                    continue;
+                }
+
+                if (c == '"' || c == '\'')
+                {
+                    quote = c;
+                    continue;
+                }
+
+                if (c == '>')
+                {
+                    return i;
+                }
+            }
+
+            throw new InvalidOperationException("Closing '>' not found for element head.");
         }
 
         private static void ParseAttribute(
@@ -646,19 +758,59 @@ namespace XmlSerDe.Common
         }
 
         /// <summary>
-        /// XML 1.0 §3.3.3 requires attribute-value normalization to resolve
-        /// character and general entity references (e.g. &amp;amp; or &amp;#49;).
-        /// Only allocates when a reference might actually be present.
+        /// XML 1.0 §3.3.3 attribute-value normalization: (1) each literal tab, CR or
+        /// LF character is replaced by a single space, and (2) character/general
+        /// entity references (e.g. &amp;amp; or &amp;#49;) are resolved. A character
+        /// reference that expands to whitespace (e.g. &amp;#10;) is inserted verbatim
+        /// and must NOT be collapsed to a space - only *literal* whitespace in the
+        /// source is - so step (1) runs on the raw text before entities are expanded.
+        /// Only allocates when a literal tab/CR/LF or a reference might actually be present.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static roschar DecodeAttributeValue(roschar rawValue)
         {
-            if (rawValue.IndexOf('&') < 0)
+            var hasEntity = rawValue.IndexOf('&') >= 0;
+            var hasLiteralWhitespace = ContainsLiteralTabOrNewline(rawValue);
+
+            if (!hasEntity && !hasLiteralWhitespace)
             {
                 return rawValue;
             }
 
-            return global::System.Net.WebUtility.HtmlDecode(rawValue.ToString()).AsSpan();
+            var normalized = hasLiteralWhitespace
+                ? NormalizeLiteralWhitespace(rawValue)
+                : rawValue.ToString();
+
+            return hasEntity
+                ? global::System.Net.WebUtility.HtmlDecode(normalized).AsSpan()
+                : normalized.AsSpan();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool ContainsLiteralTabOrNewline(roschar value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+                if (c == '\t' || c == '\r' || c == '\n')
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string NormalizeLiteralWhitespace(roschar value)
+        {
+            var chars = new char[value.Length];
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+                chars[i] = (c == '\t' || c == '\r' || c == '\n') ? ' ' : c;
+            }
+
+            return new string(chars);
         }
     }
 

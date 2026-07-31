@@ -248,23 +248,27 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             var startOfHead = "<?xml".AsSpan();
 
             var trimmedXml = xml.Trim();
-            if (!trimmedXml.StartsWith(startOfHead))
+
+            roschar headless;
+            //the XML declaration's target is exactly "xml" followed by whitespace
+            //(XMLDecl ::= '<?xml' VersionInfo ...); a PI target that merely starts
+            //with "xml" (e.g. "<?xml-stylesheet ...?>") is a different, ordinary PI
+            //and must not be mistaken for the declaration
+            if (trimmedXml.StartsWith(startOfHead)
+                && trimmedXml.Length > startOfHead.Length
+                && (trimmedXml[startOfHead.Length] is ' ' or '\t' or '\r' or '\n'))
             {
-                return trimmedXml;
+                var endOfHead = "?>".AsSpan();
+                var index = trimmedXml.IndexOf(endOfHead);
+
+                headless = trimmedXml.Slice(index + endOfHead.Length);
+            }
+            else
+            {
+                headless = trimmedXml;
             }
 
-            var endOfHead = "?>".AsSpan();
-            var index = trimmedXml.IndexOf(endOfHead);
-
-            var headless = trimmedXml.Slice(index + endOfHead.Length).Trim();
-            var lcl = {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.GetLeadingCommentLengthIfExists)}}(containsXmlComments, headless);
-            if(lcl < 0)
-            {
-                return headless;
-            }
-
-            var headless2 = headless.Slice(lcl);
-            return headless2;
+            return {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.SkipPrologMisc)}}(containsXmlComments, headless);
         }
 
 """);
