@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using XmlSerDe.Common;
@@ -40,10 +41,37 @@ namespace XmlSerDe.Components.Exhauster
             return _sb.ToString();
         }
 
+        /// <summary>
+        /// Formats a value using an XSD-compatible, culture-invariant lexical
+        /// representation (decimal point, ASCII digits) regardless of the
+        /// current thread's culture.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void AppendInvariant<T>(T value) where T : ISpanFormattable
+        {
+            Span<char> buffer = stackalloc char[40];
+            if (value.TryFormat(buffer, out var written, default, CultureInfo.InvariantCulture))
+            {
+                _sb.Append(buffer.Slice(0, written));
+            }
+            else
+            {
+                _sb.Append(value.ToString(null, CultureInfo.InvariantCulture));
+            }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(DateTime value)
         {
-            _sb.Append(value.ToString(_dateTimeFormat));
+            Span<char> buffer = stackalloc char[64];
+            if (value.TryFormat(buffer, out var written, _dateTimeFormat.AsSpan(), CultureInfo.InvariantCulture))
+            {
+                _sb.Append(buffer.Slice(0, written));
+            }
+            else
+            {
+                _sb.Append(value.ToString(_dateTimeFormat, CultureInfo.InvariantCulture));
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -54,7 +82,7 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            _sb.Append(value.Value.ToString(_dateTimeFormat));
+            Append(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -66,7 +94,12 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(Guid? value)
         {
-            _sb.Append(value);
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            _sb.Append(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -89,109 +122,154 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(sbyte value)
         {
-            _sb.Append(value);
+            AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(sbyte? value)
         {
-            _sb.Append(value);
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            AppendInvariant(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(byte value)
         {
-            _sb.Append(value);
+            AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(byte? value)
         {
-            _sb.Append(value);
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            AppendInvariant(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(ushort value)
         {
-            _sb.Append(value);
+            AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(ushort? value)
         {
-            _sb.Append(value);
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            AppendInvariant(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(short value)
         {
-            _sb.Append(value);
+            AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(short? value)
         {
-            _sb.Append(value);
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            AppendInvariant(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(uint value)
         {
-            _sb.Append(value);
+            AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(uint? value)
         {
-            _sb.Append(value);
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            AppendInvariant(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(int value)
         {
-            _sb.Append(value);
+            AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(int? value)
         {
-            _sb.Append(value);
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            AppendInvariant(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(ulong value)
         {
-            _sb.Append(value);
+            AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(ulong? value)
         {
-            _sb.Append(value);
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            AppendInvariant(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(long value)
         {
-            _sb.Append(value);
+            AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(long? value)
         {
-            _sb.Append(value);
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            AppendInvariant(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(decimal value)
         {
-            _sb.Append(value);
+            AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(decimal? value)
         {
-            _sb.Append(value);
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            AppendInvariant(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

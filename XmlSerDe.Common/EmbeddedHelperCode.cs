@@ -535,8 +535,9 @@ namespace XmlSerDe.Common
             //    goto repeatCData;
             //}
 
+            //XML whitespace (S production, XML 1.0 §2.3) is #x20 | #x9 | #xD | #xA, not just space
             var endOfNameIndex = trimmed.IndexOfAny(
-                '/', '>', ' '
+                "/> \t\r\n".AsSpan()
                 );
             var nodeTypeLength = headSpaceCount + endOfNameIndex;
 
@@ -595,7 +596,8 @@ namespace XmlSerDe.Common
             var trimmed = internalsOfHead.Slice(iindex).TrimStart();
             var trimmedLength = internalsOfHead.Length - trimmed.Length;
 
-            var iofa0 = trimmed.IndexOfAny("/>:".AsSpan());
+            //ищем ":" (префиксованное имя) или "=" (имя без префикса) - смотря что встретится раньше
+            var iofa0 = trimmed.IndexOfAny("=/>:".AsSpan());
             var c = trimmed[iofa0];
             if (c == '/' || c == '>')
             {
@@ -604,24 +606,42 @@ namespace XmlSerDe.Common
                 return;
             }
 
-            var prefix = internalsOfHead.Slice(trimmedLength, iofa0);
-            trimmed = trimmed.Slice(iofa0 + 1);
+            roschar prefix;
+            roschar name;
+            if (c == ':')
+            {
+                //префиксованный атрибут (например p3:type)
+                prefix = internalsOfHead.Slice(trimmedLength, iofa0);
+                trimmed = trimmed.Slice(iofa0 + 1);
 
-            var iofa1 = trimmed.IndexOfAny("=".AsSpan());
-            var name = trimmed.Slice(0, iofa1);
-            trimmed = trimmed.Slice(iofa1 + 1);
+                var iofa1 = trimmed.IndexOfAny("=".AsSpan());
+                name = trimmed.Slice(0, iofa1);
+                trimmed = trimmed.Slice(iofa1 + 1);
+            }
+            else
+            {
+                //атрибут без префикса (без двоеточия в имени), например id="1"
+                prefix = roschar.Empty;
+                name = internalsOfHead.Slice(trimmedLength, iofa0);
+                trimmed = trimmed.Slice(iofa0 + 1);
+            }
 
-            var iofa2 = trimmed.IndexOfAny("\"".AsSpan());
+            //значение атрибута может быть в двойных или одинарных кавычках (XML 1.0 §2.3, AttValue)
+            var iofa2 = trimmed.IndexOfAny("\"'".AsSpan());
+            var quoteChar = trimmed[iofa2];
             //найдено начало значения
             trimmed = trimmed.Slice(iofa2 + 1);
 
-            var iofa3 = trimmed.IndexOfAny("\"".AsSpan());
+            //закрывающая кавычка должна совпадать по типу с открывающей
+            var iofa3 = trimmed.IndexOf(quoteChar);
             //найден конец значения
             var value = trimmed.Slice(0, iofa3);
 
+            var totalLength = (internalsOfHead.Length - trimmed.Length) + iofa3 + 1 - iindex;
+
             result = new AttributeProcessResult(
                 new ParsedAttribute(prefix, name, value),
-                trimmedLength + iofa0 + iofa1 + iofa2 + iofa3 + 4 - iindex
+                totalLength
                 );
         }
     }

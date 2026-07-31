@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Buffers;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using XmlSerDe.Common;
@@ -14,7 +15,7 @@ namespace XmlSerDe.Components.Exhauster
     {
         private static readonly byte[] _trueData = Encoding.UTF8.GetBytes("true");
         private static readonly byte[] _falseData = Encoding.UTF8.GetBytes("false");
-        
+
         private readonly string _dateTimeFormat;
 
         private const int CharCountBufferSize = 36; //36 = char count in Guid.ToString()
@@ -40,25 +41,59 @@ namespace XmlSerDe.Components.Exhauster
         /// </summary>
         protected abstract void Write(byte[] data, int length);
 
+        /// <summary>
+        /// Writes UTF-8 bytes for the given chars, using the internal buffer
+        /// when it fits, otherwise falling back to a rented buffer (mirrors
+        /// the fallback strategy of <see cref="Append(string?)"/>).
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(DateTime value)
+        private void WriteChars(ReadOnlySpan<char> chars)
         {
-            var svalue = value.ToString(_dateTimeFormat); //todo: want to "stringificate" to existing Span<char>
-
-            var valueLength = svalue.Length;
-            if (valueLength <= CharCountBufferSize)
+            var byteCount = Encoding.UTF8.GetByteCount(chars);
+            if (byteCount <= _internalBuffer.Length)
             {
-                //use internal buffer
-                var byteCount = Encoding.UTF8.GetBytes(svalue, 0, valueLength, _internalBuffer, 0);
-                Write(_internalBuffer, byteCount);
+                var written = Encoding.UTF8.GetBytes(chars, _internalBuffer);
+                Write(_internalBuffer, written);
             }
             else
             {
-                //rent the buffer
-                var rented = ArrayPool<byte>.Shared.Rent(valueLength * 2);
-                var byteCount = Encoding.UTF8.GetBytes(svalue, 0, valueLength, rented, 0);
-                Write(rented, byteCount);
+                var rented = ArrayPool<byte>.Shared.Rent(byteCount);
+                var written = Encoding.UTF8.GetBytes(chars, rented);
+                Write(rented, written);
                 ArrayPool<byte>.Shared.Return(rented); //nothing catastrophic happens if there will be an exception before this line; please read the doc of renting
+            }
+        }
+
+        /// <summary>
+        /// Formats a value using an XSD-compatible, culture-invariant lexical
+        /// representation (decimal point, ASCII digits) regardless of the
+        /// current thread's culture, then writes it as UTF-8 bytes.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void WriteInvariant<T>(T value) where T : ISpanFormattable
+        {
+            Span<char> charBuffer = stackalloc char[40];
+            if (value.TryFormat(charBuffer, out var charsWritten, default, CultureInfo.InvariantCulture))
+            {
+                WriteChars(charBuffer.Slice(0, charsWritten));
+            }
+            else
+            {
+                WriteChars(value.ToString(null, CultureInfo.InvariantCulture).AsSpan());
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(DateTime value)
+        {
+            Span<char> charBuffer = stackalloc char[64];
+            if (value.TryFormat(charBuffer, out var charsWritten, _dateTimeFormat.AsSpan(), CultureInfo.InvariantCulture))
+            {
+                WriteChars(charBuffer.Slice(0, charsWritten));
+            }
+            else
+            {
+                WriteChars(value.ToString(_dateTimeFormat, CultureInfo.InvariantCulture).AsSpan());
             }
         }
 
@@ -119,9 +154,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(sbyte value)
         {
-            var svalue = value.ToString(); //todo: want to "stringificate" to existing Span<char>
-            var byteCount = Encoding.UTF8.GetBytes(svalue, 0, svalue.Length, _internalBuffer, 0);
-            Write(_internalBuffer, byteCount);
+            WriteInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -138,9 +171,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(byte value)
         {
-            var svalue = value.ToString(); //todo: want to "stringificate" to existing Span<char>
-            var byteCount = Encoding.UTF8.GetBytes(svalue, 0, svalue.Length, _internalBuffer, 0);
-            Write(_internalBuffer, byteCount);
+            WriteInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -157,9 +188,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(ushort value)
         {
-            var svalue = value.ToString(); //todo: want to "stringificate" to existing Span<char>
-            var byteCount = Encoding.UTF8.GetBytes(svalue, 0, svalue.Length, _internalBuffer, 0);
-            Write(_internalBuffer, byteCount);
+            WriteInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -176,9 +205,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(short value)
         {
-            var svalue = value.ToString(); //todo: want to "stringificate" to existing Span<char>
-            var byteCount = Encoding.UTF8.GetBytes(svalue, 0, svalue.Length, _internalBuffer, 0);
-            Write(_internalBuffer, byteCount);
+            WriteInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -195,9 +222,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(uint value)
         {
-            var svalue = value.ToString(); //todo: want to "stringificate" to existing Span<char>
-            var byteCount = Encoding.UTF8.GetBytes(svalue, 0, svalue.Length, _internalBuffer, 0);
-            Write(_internalBuffer, byteCount);
+            WriteInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -214,9 +239,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(int value)
         {
-            var svalue = value.ToString(); //todo: want to "stringificate" to existing Span<char>
-            var byteCount = Encoding.UTF8.GetBytes(svalue, 0, svalue.Length, _internalBuffer, 0);
-            Write(_internalBuffer, byteCount);
+            WriteInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -233,9 +256,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(ulong value)
         {
-            var svalue = value.ToString(); //todo: want to "stringificate" to existing Span<char>
-            var byteCount = Encoding.UTF8.GetBytes(svalue, 0, svalue.Length, _internalBuffer, 0);
-            Write(_internalBuffer, byteCount);
+            WriteInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -252,9 +273,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(long value)
         {
-            var svalue = value.ToString(); //todo: want to "stringificate" to existing Span<char>
-            var byteCount = Encoding.UTF8.GetBytes(svalue, 0, svalue.Length, _internalBuffer, 0);
-            Write(_internalBuffer, byteCount);
+            WriteInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -271,9 +290,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(decimal value)
         {
-            var svalue = value.ToString(); //todo: want to "stringificate" to existing Span<char>
-            var byteCount = Encoding.UTF8.GetBytes(svalue, 0, svalue.Length, _internalBuffer, 0);
-            Write(_internalBuffer, byteCount);
+            WriteInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
