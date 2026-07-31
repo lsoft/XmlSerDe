@@ -154,6 +154,7 @@ For each supported builtin type, `IInjector` defines:
 
 - Validates the declared XSD element name, then delegates to `ParseBody`.
 - Uses standard `*.Parse` methods for numeric types, `DateTime.Parse`, `Guid.Parse`, etc.
+- **Culture-invariant:** every numeric and `DateTime` parse path uses `CultureInfo.InvariantCulture` explicitly, matching XSD's fixed lexical space regardless of the ambient thread culture.
 - **Strings:** supports CDATA blocks (concatenates multiple), then `WebUtility.HtmlDecode`.
 - **Booleans:** `"true"` / `"false"`.
 
@@ -177,6 +178,13 @@ The generator emits a `Deserialize(MyInjector inj, ReadOnlySpan<char> xml, out T
 
 `XmlNode2` in `XmlSerDe.Common` is a `ref struct` that walks XML without allocating DOM nodes. The root `Deserialize` overload builds `XmlDeserializeSettings` from heuristics (whether comments or CDATA blocks are likely present) and iterates child nodes via `XmlNode2.GetFirst`.
 
+Its attribute parser follows XML 1.0's actual grammar rather than a narrow subset:
+
+- **Quoting:** `AttValue` may be delimited by either `"` or `'` (the closing quote must match the opening one).
+- **Namespace prefix optional:** unprefixed attributes (e.g. `id="1"`) are recognized alongside prefixed ones (e.g. `p3:type="..."`).
+- **Whitespace:** the XML `S` production (`#x20 | #x9 | #xD | #xA`) is honored between the element name and its attributes, not just a literal space.
+- **Entity decoding:** attribute values containing `&` are decoded per XML 1.0 §3.3.3 attribute-value normalization (e.g. `&amp;`, `&#49;`), via the same `WebUtility.HtmlDecode` convention used for element text. Allocates only when `&` is actually present.
+
 ## Serialization
 
 ### Exhauster
@@ -184,9 +192,13 @@ The generator emits a `Deserialize(MyInjector inj, ReadOnlySpan<char> xml, out T
 An **exhauster** (`IExhauster`) is the output sink for serialized data. For each supported builtin type it provides `Append(T)` and `Append(T?)`, plus:
 
 - `Append(string? value)` — raw append.
-- `AppendEncoded(string? value)` — HTML-encodes then appends (used for `string` builtins).
+- `AppendEncoded(string? value)` — validates then HTML-encodes then appends (used for `string` builtins).
 
-Null nullable values are skipped during serialization.
+Null nullable values (including nullable value types like `int?`, `DateTime?`) are skipped entirely on serialize rather than emitting an empty tag.
+
+**Culture-invariant formatting:** numeric and `DateTime` values are formatted via `ISpanFormattable.TryFormat` into a stack buffer with `CultureInfo.InvariantCulture` (falling back to an invariant-culture `ToString` for larger values), so output matches XSD's fixed lexical space regardless of the ambient thread culture.
+
+**Well-formedness guard:** `AppendEncoded` calls `XmlCharGuard.EnsureValidXmlChars` before encoding. `WebUtility.HtmlEncode` escapes `<`, `>`, `&`, `"`, `'` but doesn't know about XML's `Char` production (XML 1.0 §2.2), which forbids most C0 control characters, unpaired surrogates, and `U+FFFE`/`U+FFFF` outright — there is no legal escape for these in XML. String content containing them throws `ArgumentException` instead of silently producing not-well-formed output. Legal whitespace (tab/CR/LF) is allowed through.
 
 ### Built-in exhausters
 
@@ -270,7 +282,7 @@ XML element names follow XSD conventions:
 ## Limitations
 
 - **No CDATA serialization** (CDATA deserialization for strings is partially supported in `DefaultInjector`).
-- **No malformed-XML protection** — do not use with untrusted input.
+- **No malformed-XML *input* protection** — the deserializer does not validate well-formedness of its input; do not use with untrusted input. (Serialization *output*, by contrast, is guarded: `AppendEncoded` rejects string content containing characters illegal per XML 1.0's `Char` production — see [`XmlCharGuard`](#exhauster).)
 - **Parameterless constructor required** unless `[XmlFactory]` is used.
 - Serialized types must be visible to the serializer partial class.
 - Members need accessible setters for deserialization.
@@ -449,7 +461,9 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | `XmlObject18_*` – `XmlObject22_*` | Enum and primitive arrays |
 | `XmlObject23_24_*` | Arrays of custom types |
 | `XmlObject25_26_27_*`, `XmlObject28_29_30_*` | Polymorphism on nested properties and in lists |
-| `ComplexFixture` | Full document with derived types, enums, `DateTime`, `XmlFactory` reuse |
+| `ComplexFixture` / `ComplexFixtureV2` | Full document with derived types, enums, `DateTime`, `XmlFactory` reuse |
+| `SerDeFixtureV2` | Same feature set as `SerDeFixture`, exercised through a second serializer declaration to catch cross-class code-gen issues |
+| `CoverageExpansionFixture` | All primitive types incl. `decimal`/`Guid` round-trips, nullable value-type omission on serialize, length-estimator accuracy, empty/null collections, CDATA strings (including concatenated blocks), HTML-entity-encoded string serialization |
 
 ## Alternatives
 
