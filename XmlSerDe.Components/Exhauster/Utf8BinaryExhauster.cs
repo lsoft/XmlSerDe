@@ -335,6 +335,7 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
+            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
             var encoded = global::System.Net.WebUtility.HtmlEncode(value);
             Append(encoded);
         }

@@ -281,6 +281,12 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AppendEncoded(string? value)
         {
+            if (value is null)
+            {
+                return;
+            }
+
+            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
             var encoded = global::System.Net.WebUtility.HtmlEncode(value);
             _sb.Append(encoded);
         }

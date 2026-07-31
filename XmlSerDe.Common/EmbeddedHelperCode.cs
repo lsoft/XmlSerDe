@@ -635,14 +635,30 @@ namespace XmlSerDe.Common
             //закрывающая кавычка должна совпадать по типу с открывающей
             var iofa3 = trimmed.IndexOf(quoteChar);
             //найден конец значения
-            var value = trimmed.Slice(0, iofa3);
+            var rawValue = trimmed.Slice(0, iofa3);
 
             var totalLength = (internalsOfHead.Length - trimmed.Length) + iofa3 + 1 - iindex;
 
             result = new AttributeProcessResult(
-                new ParsedAttribute(prefix, name, value),
+                new ParsedAttribute(prefix, name, DecodeAttributeValue(rawValue)),
                 totalLength
                 );
+        }
+
+        /// <summary>
+        /// XML 1.0 §3.3.3 requires attribute-value normalization to resolve
+        /// character and general entity references (e.g. &amp;amp; or &amp;#49;).
+        /// Only allocates when a reference might actually be present.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static roschar DecodeAttributeValue(roschar rawValue)
+        {
+            if (rawValue.IndexOf('&') < 0)
+            {
+                return rawValue;
+            }
+
+            return global::System.Net.WebUtility.HtmlDecode(rawValue.ToString()).AsSpan();
         }
     }
 
@@ -714,6 +730,60 @@ namespace XmlSerDe.Common
             Name = name;
             Value = value;
             IsEmpty = prefix.IsEmpty && name.IsEmpty && value.IsEmpty;
+        }
+    }
+
+    /// <summary>
+    /// Guards against writing text that would make the produced XML not
+    /// well-formed per the Char production of XML 1.0 §2.2:
+    /// Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+    /// There is no legal way to represent these characters in XML (even a
+    /// numeric character reference must resolve to a legal Char), so the
+    /// only spec-compliant option is to reject them outright.
+    /// </summary>
+    public static class XmlCharGuard
+    {
+        public static void EnsureValidXmlChars(roschar value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+
+                if (c == '\t' || c == '\n' || c == '\r')
+                {
+                    continue;
+                }
+
+                if (c < 0x20)
+                {
+                    ThrowIllegalChar(c, i);
+                }
+
+                if (c >= 0xD800 && c <= 0xDFFF)
+                {
+                    if (char.IsHighSurrogate(c) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+                    {
+                        //valid surrogate pair, represents U+10000-U+10FFFF
+                        i++;
+                        continue;
+                    }
+
+                    ThrowIllegalChar(c, i);
+                }
+
+                var codePoint = (int)c;
+                if (codePoint == 0xFFFE || codePoint == 0xFFFF)
+                {
+                    ThrowIllegalChar(c, i);
+                }
+            }
+        }
+
+        private static void ThrowIllegalChar(char c, int index)
+        {
+            throw new ArgumentException(
+                $"String contains character U+{(int)c:X4} at position {index}, which is not a legal XML 1.0 character (XML 1.0 §2.2)."
+                );
         }
     }
 
