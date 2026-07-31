@@ -111,9 +111,15 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(Guid value)
         {
-            var svalue = value.ToString(); //todo: want to "stringificate" to existing Span<char>
-            var byteCount = Encoding.UTF8.GetBytes(svalue, 0, svalue.Length, _internalBuffer, 0);
-            Write(_internalBuffer, byteCount);
+            Span<char> buffer = stackalloc char[36];
+            if (value.TryFormat(buffer, out var written))
+            {
+                WriteChars(buffer.Slice(0, written));
+            }
+            else
+            {
+                WriteChars(value.ToString().AsSpan());
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

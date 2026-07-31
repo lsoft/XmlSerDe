@@ -105,7 +105,7 @@ public class SerializeDeserializeFixture : ComplexFixture
 {
     //#region serialize
 
-    //[Benchmark(Description = "Serialize: System.Xml")]
+    //[Benchmark(Description = "Serialize: System.Xml", Baseline = true)]
     //public string Serialize_SystemXml_Test()
     //{
     //    return Serialize_SystemXml(DefaultObject);
@@ -144,7 +144,7 @@ public class SerializeDeserializeFixture : ComplexFixture
 
     #region deserialize
 
-    [Benchmark(Description = "Deserialize: System.Xml")]
+    [Benchmark(Description = "Deserialize: System.Xml", Baseline = true)]
     public InfoContainer Deserialize_SystemXml_Test()
     {
         return Deserialize_SystemXml(AuxXml);

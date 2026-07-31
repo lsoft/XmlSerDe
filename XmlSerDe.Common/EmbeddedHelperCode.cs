@@ -615,9 +615,7 @@ namespace XmlSerDe.Common
             //}
 
             //XML whitespace (S production, XML 1.0 §2.3) is #x20 | #x9 | #xD | #xA, not just space
-            var endOfNameIndex = trimmed.IndexOfAny(
-                "/> \t\r\n".AsSpan()
-                );
+            var endOfNameIndex = FindEndOfNodeName(trimmed);
             var nodeTypeLength = headSpaceCount + endOfNameIndex;
 
             //ищем конец головы: '>' может встретиться внутри значения атрибута
@@ -631,37 +629,68 @@ namespace XmlSerDe.Common
             nodeType = fullnode.Slice(headSpaceCount + 1, nodeTypeLength - headSpaceCount - 1);
         }
 
+        /// <summary>
+        /// Ищет конец имени ноды: первый символ XML S production
+        /// (#x20 | #x9 | #xD | #xA, XML 1.0 §2.3) либо '/' либо '>'.
+        /// Поиск всех шести символов одним IndexOfAny(roschar) уводит с
+        /// векторизованного пути: рантайм имеет SIMD-реализации только для
+        /// пяти значений и меньше, а дальше переключается на вероятностный
+        /// (bloom-filter) скан. Метод вызывается на каждую ноду документа,
+        /// поэтому здесь дешевле два векторизованных трёхсимвольных поиска:
+        /// сначала '/', '>' или обычный пробел (подавляющее большинство
+        /// случаев), затем таб/CR/LF - только в более коротком префиксе до
+        /// уже найденной позиции.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int FindEndOfNodeName(roschar trimmed)
+        {
+            var index = trimmed.IndexOfAny('/', '>', ' ');
+
+            var searchLimit = index >= 0 ? index : trimmed.Length;
+            var rareIndex = trimmed.Slice(0, searchLimit).IndexOfAny('\t', '\r', '\n');
+
+            return rareIndex >= 0 ? rareIndex : index;
+        }
+
+        /// <summary>
+        /// Ищет '>', закрывающий голову тега, пропуская те, что находятся внутри
+        /// значений атрибутов (XML 1.0 §2.4 требует экранирования только '&lt;', '&amp;'
+        /// и совпадающей кавычки внутри AttValue, так что '&gt;' там легален).
+        /// Посимвольный скан здесь был бы заметно дороже: метод вызывается на
+        /// каждую ноду документа. Вместо этого прыгаем по границам векторизованными
+        /// поисками - число итераций равно числу атрибутов, а не длине головы.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int FindUnquotedGt(roschar span)
         {
-            char quote = '\0';
+            var offset = 0;
 
-            for (var i = 0; i < span.Length; i++)
+            while (true)
             {
-                var c = span[i];
+                var sliced = span.Slice(offset);
 
-                if (quote != '\0')
+                var index = sliced.IndexOfAny('>', '"', '\'');
+                if (index < 0)
                 {
-                    if (c == quote)
-                    {
-                        quote = '\0';
-                    }
-                    continue;
+                    throw new InvalidOperationException("Closing '>' not found for element head.");
                 }
 
-                if (c == '"' || c == '\'')
-                {
-                    quote = c;
-                    continue;
-                }
-
+                var c = sliced[index];
                 if (c == '>')
                 {
-                    return i;
+                    return offset + index;
                 }
-            }
 
-            throw new InvalidOperationException("Closing '>' not found for element head.");
+                //это открывающая кавычка значения атрибута, ищем парную закрывающую
+                var rest = sliced.Slice(index + 1);
+                var closingIndex = rest.IndexOf(c);
+                if (closingIndex < 0)
+                {
+                    throw new InvalidOperationException("Closing quote not found for attribute value.");
+                }
+
+                offset += index + 1 + closingIndex + 1;
+            }
         }
 
         private static void ParseAttribute(
@@ -726,7 +755,7 @@ namespace XmlSerDe.Common
                 prefix = internalsOfHead.Slice(trimmedLength, iofa0);
                 trimmed = trimmed.Slice(iofa0 + 1);
 
-                var iofa1 = trimmed.IndexOfAny("=".AsSpan());
+                var iofa1 = trimmed.IndexOf('=');
                 name = trimmed.Slice(0, iofa1);
                 trimmed = trimmed.Slice(iofa1 + 1);
             }
@@ -739,7 +768,7 @@ namespace XmlSerDe.Common
             }
 
             //значение атрибута может быть в двойных или одинарных кавычках (XML 1.0 §2.3, AttValue)
-            var iofa2 = trimmed.IndexOfAny("\"'".AsSpan());
+            var iofa2 = trimmed.IndexOfAny('"', '\'');
             var quoteChar = trimmed[iofa2];
             //найдено начало значения
             trimmed = trimmed.Slice(iofa2 + 1);
@@ -769,6 +798,13 @@ namespace XmlSerDe.Common
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static roschar DecodeAttributeValue(roschar rawValue)
         {
+            //один векторизованный проход отсекает подавляющее большинство значений,
+            //которым нормализация не нужна вообще, и только потом выясняем детали
+            if (rawValue.IndexOfAny("&\t\r\n".AsSpan()) < 0)
+            {
+                return rawValue;
+            }
+
             var hasEntity = rawValue.IndexOf('&') >= 0;
             var hasLiteralWhitespace = ContainsLiteralTabOrNewline(rawValue);
 
@@ -789,16 +825,7 @@ namespace XmlSerDe.Common
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool ContainsLiteralTabOrNewline(roschar value)
         {
-            for (var i = 0; i < value.Length; i++)
-            {
-                var c = value[i];
-                if (c == '\t' || c == '\r' || c == '\n')
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return value.IndexOfAny('\t', '\r', '\n') >= 0;
         }
 
         private static string NormalizeLiteralWhitespace(roschar value)

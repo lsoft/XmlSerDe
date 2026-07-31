@@ -88,7 +88,15 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(Guid value)
         {
-            _sb.Append(value);
+            Span<char> buffer = stackalloc char[36];
+            if (value.TryFormat(buffer, out var written))
+            {
+                _sb.Append(buffer.Slice(0, written));
+            }
+            else
+            {
+                _sb.Append(value.ToString());
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -99,7 +107,7 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            _sb.Append(value.Value);
+            Append(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

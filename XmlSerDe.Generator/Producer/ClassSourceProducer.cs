@@ -302,7 +302,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
             else if (memberType.IsEnum)
             {
-                var gses = GenerateSerializeEnum(member.Name, member.Name);
+                var gses = GenerateSerializeEnum((INamedTypeSymbol)memberType.Symbol, member.Name, member.Name);
                 _sb.AppendLine(gses);
             }
             //TODO other collections?
@@ -373,6 +373,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 var indexVarName = "index";
 
                 var gses = GenerateSerializeEnum(
+                    listItemType,
                     listItemType.Name,
                     $"{member.Name}[{indexVarName}]"
                     );
@@ -385,13 +386,58 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
         }
 
-        private readonly string GenerateSerializeEnum(string enumTypeName, string enumPropertyName)
+        /// <summary>
+        /// Emits a serialize snippet for an enum-typed value. Uses a switch over
+        /// the declared members (each mapped to its literal name) instead of
+        /// obj.Prop.ToString(), which avoids Enum.ToString()'s reflection lookup
+        /// and always-allocates-a-new-string behavior. Falls back to ToString()
+        /// in the switch's default arm for values with no matching declared
+        /// member (undefined numeric values, [Flags] combinations), which keeps
+        /// output identical to before for those cases.
+        /// </summary>
+        private readonly string GenerateSerializeEnum(
+            INamedTypeSymbol enumType,
+            string tagName,
+            string enumPropertyExpression
+            )
         {
+            var switchArms = GenerateEnumToStringSwitchArms(enumType);
+
             return $$"""
-                exh.{{nameof(IExhauster.Append)}}("<{{enumTypeName}}>");
-                exh.{{nameof(IExhauster.Append)}}(obj.{{enumPropertyName}}.ToString());
-                exh.{{nameof(IExhauster.Append)}}("</{{enumTypeName}}>");
+                {
+                    var enumValueToAppend = obj.{{enumPropertyExpression}};
+                    exh.{{nameof(IExhauster.Append)}}("<{{tagName}}>");
+                    exh.{{nameof(IExhauster.Append)}}(enumValueToAppend switch
+                    {
+{{switchArms}}                        _ => enumValueToAppend.ToString(),
+                    });
+                    exh.{{nameof(IExhauster.Append)}}("</{{tagName}}>");
+                }
 """;
+        }
+
+        private readonly string GenerateEnumToStringSwitchArms(INamedTypeSymbol enumType)
+        {
+            var enumGlobalName = enumType.ToGlobalDisplayString();
+            var seenValues = new HashSet<object>();
+            var sb = new StringBuilder();
+
+            foreach (var field in enumType.GetMembers().OfType<IFieldSymbol>())
+            {
+                if (!field.HasConstantValue || field.ConstantValue is null)
+                {
+                    continue;
+                }
+                if (!seenValues.Add(field.ConstantValue))
+                {
+                    //another member already declared with the same underlying value; skip to avoid a duplicate switch arm
+                    continue;
+                }
+
+                sb.AppendLine($"""                        {enumGlobalName}.{field.Name} => "{field.Name}",""");
+            }
+
+            return sb.ToString();
         }
 
 
@@ -851,16 +897,53 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
         }
 
+        /// <summary>
+        /// Emits a parse expression for an enum-typed value. Uses a chain of
+        /// span SequenceEqual comparisons against each declared member's literal
+        /// name instead of (T)Enum.Parse(typeof(T), span): Enum.Parse returns
+        /// object, so the parsed value is boxed on every single call, whereas
+        /// comparing against literal names and returning the enum constant
+        /// directly never boxes. Falls back to Enum.Parse for anything that
+        /// doesn't match a declared name (keeps error behavior identical for
+        /// malformed/unknown input).
+        /// </summary>
         private readonly string GenerateEnumParseStatement(
             TypeSymbol memberType,
             string varName
             )
         {
-            var fullParserInvocation =
-                $@"({memberType.ToGlobalDisplayString()})Enum.Parse(typeof({memberType.ToGlobalDisplayString()}), {varName})"
-                ;
+            var enumType = (INamedTypeSymbol)memberType.Symbol;
+            var enumGlobalName = memberType.ToGlobalDisplayString();
 
-            return fullParserInvocation;
+            var sb = new StringBuilder();
+            sb.Append('(');
+
+            foreach (var field in enumType.GetMembers().OfType<IFieldSymbol>())
+            {
+                if (!field.HasConstantValue)
+                {
+                    continue;
+                }
+
+                sb.Append(varName);
+                sb.Append(".SequenceEqual(\"");
+                sb.Append(field.Name);
+                sb.Append("\".AsSpan()) ? ");
+                sb.Append(enumGlobalName);
+                sb.Append('.');
+                sb.Append(field.Name);
+                sb.Append(" : ");
+            }
+
+            sb.Append('(');
+            sb.Append(enumGlobalName);
+            sb.Append(")Enum.Parse(typeof(");
+            sb.Append(enumGlobalName);
+            sb.Append("), ");
+            sb.Append(varName);
+            sb.Append("))");
+
+            return sb.ToString();
         }
 
         #endregion

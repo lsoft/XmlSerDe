@@ -201,7 +201,7 @@ An **exhauster** (`IExhauster`) is the output sink for serialized data. For each
 
 Null nullable values (including nullable value types like `int?`, `DateTime?`) are skipped entirely on serialize rather than emitting an empty tag.
 
-**Culture-invariant formatting:** numeric and `DateTime` values are formatted via `ISpanFormattable.TryFormat` into a stack buffer with `CultureInfo.InvariantCulture` (falling back to an invariant-culture `ToString` for larger values), so output matches XSD's fixed lexical space regardless of the ambient thread culture.
+**Culture-invariant formatting:** numeric and `DateTime` values are formatted via `ISpanFormattable.TryFormat` into a stack buffer with `CultureInfo.InvariantCulture` (falling back to an invariant-culture `ToString` for larger values), so output matches XSD's fixed lexical space regardless of the ambient thread culture. `Guid` uses the same stack-buffer `TryFormat` path — note that `StringBuilder` has no `Append(Guid)` overload, so appending one directly would silently bind to `Append(object?)` and box.
 
 **Well-formedness guard:** `AppendEncoded` calls `XmlCharGuard.EnsureValidXmlChars` before encoding. `WebUtility.HtmlEncode` escapes `<`, `>`, `&`, `"`, `'` but doesn't know about XML's `Char` production (XML 1.0 §2.2), which forbids most C0 control characters, unpaired surrogates, and `U+FFFE`/`U+FFFF` outright — there is no legal escape for these in XML. String content containing them throws `ArgumentException` instead of silently producing not-well-formed output. Legal whitespace (tab/CR/LF) is allowed through.
 
@@ -273,7 +273,7 @@ XML element names follow XSD conventions:
 ### Complex types
 
 - Classes registered with `[XmlSubject]`
-- **Enums** — serialized as `<EnumTypeName>value</EnumTypeName>`, parsed via `Enum.Parse`
+- **Enums** — serialized as `<EnumTypeName>value</EnumTypeName>`. The generator knows every declared member at compile time, so it emits a `switch` over them on serialize and a chain of span `SequenceEqual` comparisons on deserialize, rather than `Enum.ToString()` / `Enum.Parse` — both of which go through reflection, and `Enum.Parse` additionally boxes its `object` return on every call. `Enum.ToString()` / `Enum.Parse` remain as the fallback arm for values that match no declared member (undefined numeric values, `[Flags]` combinations), so behavior is unchanged for those.
 - **Inheritance** — via `[XmlDerivedSubject]` and `xsi:type`
 - **Collections** — `List<T>` and `T[]` only
 
@@ -394,6 +394,26 @@ Notes on the benchmark variants:
 2. **`(stream)`** — serializes to UTF-8 binary via `Utf8BinaryExhauster` (discards output in the benchmark). Low allocations thanks to `ArrayPool<byte>.Rent`.
 3. **Deserialize** — XmlSerDe is faster and allocates roughly 5% of the memory compared to `System.Xml.Serialization`.
 
+### Later deserialize run (.NET 8.0)
+
+The deserialize benchmark now marks `System.Xml` as the BenchmarkDotNet baseline, so the table also reports `Ratio` and `Alloc Ratio`. Prefer those over the absolute `Mean`: the numbers below were measured on a different runtime, SDK and OS build than the run above, and `System.Xml` — code neither project controls — moved from 7.265 us to 9.185 us between them. Comparing absolute microseconds across runs mostly measures the machine, not the library.
+
+```
+| Method                    | Mean     | Error     | StdDev    | Ratio | RatioSD | Gen0   | Gen1   | Allocated | Alloc Ratio |
+|-------------------------- |---------:|----------:|----------:|------:|--------:|-------:|-------:|----------:|------------:|
+| 'Deserialize: System.Xml' | 9.185 us | 0.1770 us | 0.2108 us |  1.00 |    0.00 | 1.3428 | 0.0610 |  16.49 KB |        1.00 |
+| 'Deserialize: XmlSerDe'   | 8.165 us | 0.0490 us | 0.0459 us |  0.88 |    0.02 | 0.0763 |      - |   1.12 KB |        0.07 |
+```
+
+The XML 1.0 spec-compliance work (quote-aware tag-head scanning, the full `S` production for whitespace, attribute-value normalization) initially cost more than intended, because two of its search primitives left the vectorized path:
+
+- `IndexOfAny('/', '>', ' ')` became `IndexOfAny("/> \t\r\n".AsSpan())`. The runtime only has SIMD implementations of `IndexOfAny(ReadOnlySpan<T>)` for **up to five** values and falls back to a probabilistic (bloom-filter) scan beyond that — and `"/> \t\r\n"` is exactly six characters.
+- `IndexOf('>')` became a character-by-character quote-aware loop.
+
+Both run for every element in the document. They were restored to vectorized equivalents that keep the spec-compliant behavior: the six-character search is split into two SIMD three-character searches (the rarer tab/CR/LF one bounded to the shorter prefix), and the quote-aware scan now jumps between boundaries via `IndexOfAny('>', '"', '\'')` plus `IndexOf(quote)`, so its iteration count tracks the number of attributes rather than the length of the tag head.
+
+`Alloc Ratio` of 0.07 reflects the enum and `Guid` fixes described above.
+
 Example serializer declaration and usage from the benchmark fixture:
 
 ```csharp
@@ -451,6 +471,8 @@ Run benchmarks:
 ```bash
 dotnet run -c Release --project XmlSerDe.PerformanceTests
 ```
+
+`Program.Main` runs `SerializeDeserializeFixture`; the other fixtures are listed there commented out, to be swapped in as needed. Among them, `AllocationHotspotsFixture` isolates the individual allocation sources that the enum and `Guid` fixes addressed (`Enum.ToString()`, `Enum.Parse` boxing, `StringBuilder.Append(object?)` boxing of `Guid`), measuring each on its own and in small batches so the per-call cost is visible in `Allocated` rather than lost in the noise of a full document parse.
 
 ## Building and testing
 
