@@ -2,9 +2,11 @@
 
 Allocation-free XML serializer/deserializer based on C# incremental source generators (ISG). Because generation happens at compile time, there is no runtime reflection cost and no performance degradation as the number of serialized types grows.
 
+XmlSerDe's purpose is **POCO ↔ XML data binding**: mapping plain C# classes to XML and back, format-compatible with `System.Xml.Serialization` for the primitives, collections, and `xsi:type` polymorphism it supports. It targets that data-binding scenario specifically rather than being a general-purpose XML processor — see [Out of scope by design](#out-of-scope-by-design) for what that excludes and why.
+
 ## Status
 
-**Prototype.** The API and behavior may change.
+The API and behavior may still change between releases.
 
 ## Solution structure
 
@@ -286,8 +288,6 @@ XML element names follow XSD conventions:
 
 - **No CDATA serialization** (CDATA deserialization for strings is partially supported in `DefaultInjector`).
 - **No malformed-XML *input* protection** — the deserializer does not validate well-formedness of its input; do not use with untrusted input. (Serialization *output*, by contrast, is guarded: `AppendEncoded` rejects string content containing characters illegal per XML 1.0's `Char` production — see [`XmlCharGuard`](#exhauster).)
-- **No DTD support** — a `<!DOCTYPE ...>` in the prolog is skipped over (not parsed), so custom general entities it declares are not resolved; only the five predefined XML entities plus numeric character references (and, leniently, HTML5 named entities via `WebUtility.HtmlDecode`) are understood.
-- **No general XML Namespaces support** — element/attribute names are compared as literal text including any prefix; only the `xmlns:xsi` / `xsi:type` pair used for polymorphism is special-cased.
 - **Parameterless constructor required** unless `[XmlFactory]` is used.
 - Serialized types must be visible to the serializer partial class.
 - Members need accessible setters for deserialization.
@@ -295,6 +295,20 @@ XML element names follow XSD conventions:
 - The serializer class must be `partial`.
 - Unknown member types cause a compile-time generator error.
 - Multi-argument generics (e.g. `Dictionary<K,V>`) are not supported.
+
+See also [Out of scope by design](#out-of-scope-by-design) for XML 1.0 features that aren't limitations to be lifted later, but deliberate consequences of targeting the POCO ↔ XML data-binding scenario.
+
+## Out of scope by design
+
+XmlSerDe targets POCO ↔ XML data binding, not general-purpose XML processing. The following XML 1.0 / XML Namespaces features are consequences of that scope, not oversights — each is unlikely to matter for typical data-transfer XML (including everything `System.Xml.Serialization` itself produces for the primitives, collections, and polymorphism XmlSerDe supports), but matters for interop with documents from other kinds of XML producers.
+
+- **No DTD support.** A `<!DOCTYPE ...>` in the prolog is skipped over, not parsed — so any custom general entities it declares are not resolved. Only the five predefined XML entities (`&amp;`, `&lt;`, `&gt;`, `&apos;`, `&quot;`) plus numeric character references (`&#49;`, `&#x31;`) are understood (and, leniently, HTML5 named entities like `&nbsp;` via `WebUtility.HtmlDecode`, which technically aren't legal in bare XML without a DTD declaring them). There's also no DTD-based content validation and no fetching of external DTDs.
+- **No general XML Namespaces support.** Only one namespace is special-cased: `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"` for `xsi:type` polymorphism (the prefix itself is flexible — deserialize resolves whichever prefix is actually bound to that URI). Beyond that, element and attribute names are compared as literal text, prefix included; there's no general prefix-to-URI resolution or default-namespace (`xmlns="uri"`) handling.
+- **No XML-attribute data binding.** Every serialized member becomes a child element; there's no equivalent of `System.Xml.Serialization`'s `[XmlAttribute]` or `[XmlText]`. (`[XmlIgnore]` is the exception — XmlSerDe recognizes `System.Xml.Serialization.XmlIgnoreAttribute` directly, so it can be reused as-is.)
+- **`xml:space`, `xml:lang`, `xml:base` are not interpreted.** In practice this rarely matters for `xml:space`: text content is always preserved verbatim regardless (matching the XML default, `xml:space="preserve"`) — but `xml:space="default"`, which would opt back into whitespace collapsing, has no effect either.
+- **No mixed content.** An element is parsed as either plain text or a list of child elements, never an interleaving of both — text appearing between child elements is discarded rather than bound to any member.
+- **No duplicate-attribute detection.** XML 1.0 forbids two attributes with the same name on one element; XmlSerDe doesn't check for this and silently takes the first match.
+- **`encoding` / `standalone` in the XML declaration are ignored** on both serialize and deserialize. XmlSerDe operates on an already-decoded `ReadOnlySpan<char>`, not raw bytes, so byte-level decoding happens before the library sees the input — a mismatch between a document's declared `encoding` and how the caller actually decoded it is not detected.
 
 ## How the generator works
 
