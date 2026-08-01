@@ -1,4 +1,5 @@
 ﻿using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
 using System;
 using System.Buffers;
@@ -12,6 +13,8 @@ using XmlSerDe.Common;
 using XmlSerDe.Components.Exhauster;
 using XmlSerDe.Tests.Complex;
 using XmlSerDe.Tests.Complex.Subject;
+using XmlSerDe.Tests.Deep;
+using XmlSerDe.Tests.Deep.Subject;
 using roschar = System.ReadOnlySpan<char>;
 
 namespace XmlSerDe.PerformanceTests;
@@ -101,8 +104,21 @@ Job=.NET 8.0  Runtime=.NET 8.0
 //[SimpleJob(RuntimeMoniker.Net70)]
 [SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]
+[CategoriesColumn]
+[GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 public class SerializeDeserializeFixture : ComplexFixture
 {
+    /// <summary>
+    /// ComplexFixture.AuxXml: 26 elements, max depth 6, indented.
+    /// </summary>
+    private const string RegularCategory = "REGULAR";
+
+    /// <summary>
+    /// DeepFixture.DeepXml: a single chain 100 elements deep, one string at the
+    /// bottom, no indentation. Isolates the cost of nesting depth.
+    /// </summary>
+    private const string DeepCategory = "DEEP";
+
     //#region serialize
 
     //[Benchmark(Description = "Serialize: System.Xml", Baseline = true)]
@@ -144,17 +160,34 @@ public class SerializeDeserializeFixture : ComplexFixture
 
     #region deserialize
 
-    [Benchmark(Description = "Deserialize: System.Xml", Baseline = true)]
-    public InfoContainer Deserialize_SystemXml_Test()
+    [BenchmarkCategory(RegularCategory)]
+    [Benchmark(Description = "Deserialize: REGULAR: System.Xml", Baseline = true)]
+    public InfoContainer Deserialize_Regular_SystemXml_Test()
     {
         return Deserialize_SystemXml(AuxXml);
     }
 
-    [Benchmark(Description = "Deserialize: XmlSerDe")]
-    public InfoContainer Deserialize_XmlSerDe_Test()
+    [BenchmarkCategory(RegularCategory)]
+    [Benchmark(Description = "Deserialize: REGULAR: XmlSerDe")]
+    public InfoContainer Deserialize_Regular_XmlSerDe_Test()
     {
         var auxspan = AuxXml.AsSpan();
         return Deserialize_XmlSerDe(auxspan);
+    }
+
+    [BenchmarkCategory(DeepCategory)]
+    [Benchmark(Description = "Deserialize: DEEP: System.Xml", Baseline = true)]
+    public DeepNode Deserialize_Deep_SystemXml_Test()
+    {
+        return DeepFixture.Deserialize_SystemXml(DeepFixture.DeepXml);
+    }
+
+    [BenchmarkCategory(DeepCategory)]
+    [Benchmark(Description = "Deserialize: DEEP: XmlSerDe")]
+    public DeepNode Deserialize_Deep_XmlSerDe_Test()
+    {
+        var deepspan = DeepFixture.DeepXml.AsSpan();
+        return DeepFixture.Deserialize_XmlSerDe(deepspan);
     }
 
     #endregion

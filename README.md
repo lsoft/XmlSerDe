@@ -286,6 +286,7 @@ XML element names follow XSD conventions:
 
 ## Limitations
 
+- **Deserialization is quadratic in nesting depth.** Each node's extent is measured by re-parsing its whole subtree before the node is handed to the generated code, so a subtree is re-walked once per ancestor. Shallow documents barely notice; at depth 100 XmlSerDe is 9.4× slower than `System.Xml.Serialization` — see [Performance](#performance). Being fixed; tracked in [docs/perf-single-pass-parser.md](docs/perf-single-pass-parser.md).
 - **No CDATA serialization** (CDATA deserialization for strings is partially supported in `DefaultInjector`).
 - **No malformed-XML *input* protection** — the deserializer does not validate well-formedness of its input; do not use with untrusted input. (Serialization *output*, by contrast, is guarded: `AppendEncoded` rejects string content containing characters illegal per XML 1.0's `Char` production — see [`XmlCharGuard`](#exhauster).)
 - **Parameterless constructor required** unless `[XmlFactory]` is used.
@@ -416,21 +417,37 @@ Both run for every element in the document. They were restored to vectorized equ
 
 ### Current deserialize run (.NET 8.0)
 
+The deserialize benchmark now covers two document shapes, each with its own `System.Xml` baseline:
+
+- **REGULAR** — the document shown above: 26 elements, maximum nesting depth 6, indented.
+- **DEEP** — one element inside another, 100 levels down, a single string at the bottom, no indentation (`DeepFixture` in `XmlSerDe.Tests/Deep`). Same work, different shape: wide-and-shallow becomes narrow-and-deep.
+
 ```
-| Method                    | Mean     | Error     | StdDev    | Ratio | Gen0   | Gen1   | Allocated | Alloc Ratio |
-|-------------------------- |---------:|----------:|----------:|------:|-------:|-------:|----------:|------------:|
-| 'Deserialize: System.Xml' | 8.515 us | 0.1355 us | 0.1201 us |  1.00 | 1.3428 | 0.0610 |  16.49 KB |        1.00 |
-| 'Deserialize: XmlSerDe'   | 6.554 us | 0.0820 us | 0.0767 us |  0.77 | 0.0839 |      - |   1.12 KB |        0.07 |
+| Method                             | Categories | Mean       | Error     | StdDev    | Ratio | RatioSD | Gen0   | Gen1   | Allocated | Alloc Ratio |
+|----------------------------------- |----------- |-----------:|----------:|----------:|------:|--------:|-------:|-------:|----------:|------------:|
+| 'Deserialize: DEEP: System.Xml'    | DEEP       |  15.232 us | 0.2103 us | 0.1756 us |  1.00 |    0.00 | 2.3804 | 0.2136 |  29.18 KB |        1.00 |
+| 'Deserialize: DEEP: XmlSerDe'      | DEEP       | 142.771 us | 2.4712 us | 2.3115 us |  9.39 |    0.13 | 0.2441 |      - |    3.20 KB |        0.11 |
+|                                    |            |            |           |           |       |         |        |        |           |             |
+| 'Deserialize: REGULAR: System.Xml' | REGULAR    |   8.483 us | 0.1648 us | 0.2310 us |  1.00 |    0.00 | 1.3428 | 0.0610 |  16.49 KB |        1.00 |
+| 'Deserialize: REGULAR: XmlSerDe'   | REGULAR    |   6.284 us | 0.1145 us | 0.1071 us |  0.74 |    0.03 | 0.0839 |      - |   1.12 KB |        0.07 |
 ```
 
-Ratio 0.88 → 0.77 from two changes, found by A/B-measuring each candidate in its own BenchmarkDotNet job rather than by reasoning about complexity:
+**Deserialization is quadratic in nesting depth.** On REGULAR, XmlSerDe is 26% faster than `System.Xml`; on DEEP it is **9.4× slower**. The allocation advantage holds in both (`Alloc Ratio` 0.07 and 0.11), so this is purely CPU.
+
+The cause is structural, not a missing micro-optimization. To hand back a node, `XmlNode2.GetFirst` must first know where that node ends, and it finds out by recursively parsing the node's entire subtree and discarding the result. The subtree of a node at depth *d* is therefore re-walked once per ancestor, so total scanning work grows as *O(size × depth)* — on a 1550-character document nested 100 deep, roughly 2.5 million character visits. The REGULAR document (depth 6) pays a ~5× multiplier, small enough to stay hidden behind the allocation win; DEEP makes it unmissable.
+
+Fixing this means the parse must report how much input it consumed instead of measuring each node in advance — a change to the contract between the generated code and `XmlNode2`. The analysis, the measured character-traffic counters, and the proposed design are in [docs/perf-single-pass-parser.md](docs/perf-single-pass-parser.md); the earlier investigation that first identified the multiplier is in [docs/perf-redundant-head-scans.md](docs/perf-redundant-head-scans.md).
+
+Until that lands, prefer `System.Xml.Serialization` for deeply nested documents. The REGULAR-shaped result below is what the rest of this section describes.
+
+Ratio 0.88 → 0.77 (REGULAR) from two changes, found by A/B-measuring each candidate in its own BenchmarkDotNet job rather than by reasoning about complexity:
 
 - **The tag head is scanned once, not twice.** `GetFirstLength` already determines where a node's head ends, its name, and whether it is bodyless — then threw that away and let the `XmlNode2` constructor rediscover all of it. It now passes those values through. Worth more than everything else here combined, because the scans it eliminates are the expensive ones (heads of materialized nodes).
 - **Finding the end of the name and the end of the head is one pass.** A node whose name runs straight into `>` has no attributes, therefore no quotes, so the quote-aware search is skipped entirely; otherwise it starts at the end of the name instead of at zero. The tab/CR/LF check over the short prefix is scalar — those characters are all below `' '`, a legal name character is always above it, and a literal space cannot appear in the prefix by construction, so the test is equivalent to a second vectorized search but cheaper than setting one up.
 
 Allocations are untouched by both (1.12 KB, `Alloc Ratio` 0.07) — this was purely CPU.
 
-Instrumentation counted **135** head scans per deserialize of a **26**-element document, and the cost is linear in nesting depth. The changes above remove the constant term; the remaining factor is analyzed in [docs/perf-redundant-head-scans.md](docs/perf-redundant-head-scans.md), which also documents the benchmarking methodology — including why an A/B switch must be a `static readonly` field read from an environment variable (a plain mutable `static bool` breaks inlining and distorted an entire run by ~1 us).
+Instrumentation counted **135** head scans per deserialize of a **26**-element document, and the cost is linear in nesting depth. The changes above remove the constant term; the remaining factor is what the DEEP benchmark exposes. Both documents are analyzed in [docs/perf-redundant-head-scans.md](docs/perf-redundant-head-scans.md) and [docs/perf-single-pass-parser.md](docs/perf-single-pass-parser.md), which also document the benchmarking methodology — including why an A/B switch must be a `static readonly` field read from an environment variable (a plain mutable `static bool` breaks inlining and distorted an entire run by ~1 us).
 
 Example serializer declaration and usage from the benchmark fixture:
 
@@ -521,6 +538,7 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | `XmlObject23_24_*` | Arrays of custom types |
 | `XmlObject25_26_27_*`, `XmlObject28_29_30_*` | Polymorphism on nested properties and in lists |
 | `ComplexFixture` / `ComplexFixtureV2` | Full document with derived types, enums, `DateTime`, `XmlFactory` reuse |
+| `DeepFixture` | Self-referencing type nested 100 levels deep; guards the DEEP benchmark by asserting the whole chain is walked and matches `System.Xml` |
 | `SerDeFixtureV2` | Same feature set as `SerDeFixture`, exercised through a second serializer declaration to catch cross-class code-gen issues |
 | `CoverageExpansionFixture` | All primitive types incl. `decimal`/`Guid` round-trips, nullable value-type omission on serialize, length-estimator accuracy, empty/null collections, CDATA strings (including concatenated blocks), HTML-entity-encoded string serialization |
 | `SpecComplianceFixture` | XML 1.0 edge cases: unescaped `>` in attribute values (including a foreign-producer-style extra attribute during polymorphic deserialize), prolog processing instructions / `DOCTYPE` (incl. internal subset) being skipped, attribute-value whitespace normalization vs. character references |
