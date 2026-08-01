@@ -444,20 +444,20 @@ Ratio 0.88 → 0.74 (REGULAR) came from two earlier changes, found by A/B-measur
 ```
 | Method                             | Categories | Mean      | StdDev    | Ratio | Allocated | Alloc Ratio |
 |----------------------------------- |----------- |----------:|----------:|------:|----------:|------------:|
-| 'Deserialize: DEEP: System.Xml'    | DEEP       | 16.025 us | 0.3092 us |  1.00 |  29.18 KB |        1.00 |
-| 'Deserialize: DEEP: XmlSerDe'      | DEEP       |  2.693 us | 0.0610 us |  0.17 |   3.20 KB |        0.11 |
-| 'Deserialize: REGULAR: System.Xml' | REGULAR    |  8.084 us | 0.1037 us |  1.00 |  16.49 KB |        1.00 |
-| 'Deserialize: REGULAR: XmlSerDe'   | REGULAR    |  2.521 us | 0.0129 us |  0.31 |   1.12 KB |        0.07 |
+| 'Deserialize: DEEP: System.Xml'    | DEEP       | 14.983 us | 0.0696 us |  1.00 |   29880 B |        1.00 |
+| 'Deserialize: DEEP: XmlSerDe'      | DEEP       |  2.580 us | 0.0369 us |  0.17 |    3272 B |        0.11 |
+| 'Deserialize: REGULAR: System.Xml' | REGULAR    |  7.683 us | 0.0892 us |  1.00 |   16888 B |        1.00 |
+| 'Deserialize: REGULAR: XmlSerDe'   | REGULAR    |  2.460 us | 0.0370 us |  0.32 |     808 B |        0.05 |
 ```
 
-| Category | Ratio before | Ratio after | Mean before | Mean after |
-|----------|-------------:|------------:|------------:|-----------:|
-| DEEP     | 9.39         | **0.17**    | 142.771 us  | 2.693 us   |
-| REGULAR  | 0.74         | **0.31**    | 6.284 us    | 2.521 us   |
+| Category | Ratio before | Ratio after | Mean before | Mean after | Allocated before | Allocated after |
+|----------|-------------:|------------:|------------:|-----------:|-----------------:|----------------:|
+| DEEP     | 9.39         | **0.17**    | 142.771 us  | 2.580 us   | 3.20 KB          | 3272 B          |
+| REGULAR  | 0.74         | **0.32**    | 6.284 us    | 2.460 us   | 1.12 KB          | **808 B**       |
 
-Both runs are from the same machine, and the `System.Xml` baselines agree to within 5% (16.025 vs. 15.232 and 8.084 vs. 8.483), so the ratios are comparable.
+All runs are from the same machine. The `System.Xml` baselines are not identical across them — DEEP holds to within 2% (14.983 vs. 15.232), but REGULAR drifted 9% low (7.683 vs. 8.483). That drift works against XmlSerDe rather than for it: a faster baseline is a smaller denominator, so it inflates the ratio. Measured against the original baseline the REGULAR ratio would read 0.29 rather than 0.32, which is to say the figure in the table is the conservative one.
 
-Allocations were byte-for-byte unchanged by this change (3.20 KB and 1.12 KB) — it was purely CPU. They came down separately, see [Allocations](#allocations) below.
+The CPU work and the allocations came down in separate changes. Single-pass deserialization was purely CPU and left allocations untouched at 3.20 KB and 1.12 KB; the drop to 3272 B and 808 B came afterwards, see [Allocations](#allocations) below. Deserializing the REGULAR document now costs **5% of what `System.Xml` allocates** and a third of its time.
 
 **The fix was to stop measuring nodes before parsing them.** A node's length was only ever needed for one thing, and only *after* the node had been parsed: advancing the cursor to the next sibling. Meanwhile the parse itself already reaches the closing tag — a child loop stops precisely at `</Child>` — so the length was being computed twice, once by a throwaway pre-walk and once by the parse that discarded it.
 
@@ -477,7 +477,7 @@ Instrumentation counted **110** head scans per deserialize of a **26**-element d
 
 ### Allocations
 
-Deserialization now allocates the resulting object graph and nothing else. Two separate sources of waste were removed after the run above; both were found by decomposing an allocation figure rather than by reading code, and the numbers here are `GC.GetAllocatedBytesForCurrentThread` deltas around a single warmed-up call.
+Deserialization now allocates the resulting object graph and nothing else. Two separate sources of waste were removed; both were found by decomposing an allocation figure rather than by reading code, and the numbers here are `GC.GetAllocatedBytesForCurrentThread` deltas around a single warmed-up call. Where the two overlap, BenchmarkDotNet agrees to the byte: the run above reports exactly the 808 B and 3272 B measured this way.
 
 **Text decoding no longer allocates.** `WebUtility.HtmlDecode` takes a `string`, so every text body containing a reference had to be materialized just to be handed over and thrown away, and consecutive CDATA sections were concatenated through one intermediate string each. On the REGULAR document that was 336 of 1144 bytes — 29% — that never reached the result. `XmlTextDecoder` expands references and CDATA straight out of the `ReadOnlySpan<char>` into a buffer (stack below 256 chars, `ArrayPool` above) and materializes exactly once:
 
