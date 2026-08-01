@@ -109,10 +109,6 @@ namespace XmlSerDe.Common
 
     public readonly ref struct XmlNode2
     {
-        private readonly roschar _xmlnsSpan = "xmlns".AsSpan();
-        private readonly roschar _xmlnsHttpSpan = "http://www.w3.org/2001/XMLSchema-instance".AsSpan();
-        private readonly roschar _typeSpan = "type".AsSpan();
-
         public static readonly string CDataHead = "<![CDATA[";
         public static readonly string CDataTail = "]]>";
 
@@ -258,12 +254,12 @@ namespace XmlSerDe.Common
         private readonly roschar GetXmlnsAttributeName()
         {
             //ищем xmlns
-            ParseAttribute(
+            XmlScan.ParseAttribute(
                 FullHead,
                 FullHeadPrefixLength + DeclaredNodeType.Length + 1,
-                _xmlnsSpan,
+                XmlScan.XmlnsSpan,
                 roschar.Empty,
-                _xmlnsHttpSpan,
+                XmlScan.XmlnsHttpSpan,
                 out var parsedAttribute
                 );
 
@@ -287,11 +283,11 @@ namespace XmlSerDe.Common
             }
 
             //ищем точный тип
-            ParseAttribute(
+            XmlScan.ParseAttribute(
                 FullHead,
                 FullHeadPrefixLength + DeclaredNodeType.Length + 1,
                 XmlnsAttributeName,
-                _typeSpan,
+                XmlScan.TypeSpan,
                 roschar.Empty,
                 out var parsedAttribute
                 );
@@ -684,7 +680,7 @@ namespace XmlSerDe.Common
             //    goto repeatCData;
             //}
 
-            ScanHead(trimmed, out var endOfNameIndex, out var endOfHeadIndex);
+            XmlScan.ScanHead(trimmed, out var endOfNameIndex, out var endOfHeadIndex);
 
             var nodeTypeLength = headSpaceCount + endOfNameIndex;
             var chm1 = trimmed[endOfHeadIndex - 1];
@@ -694,250 +690,6 @@ namespace XmlSerDe.Common
             nodeType = fullnode.Slice(headSpaceCount + 1, nodeTypeLength - headSpaceCount - 1);
         }
 
-        /// <summary>
-        /// Находит за один проход и конец имени ноды, и конец её головы.
-        ///
-        /// Конец имени - это первый символ XML S production (#x20 | #x9 | #xD | #xA,
-        /// XML 1.0 §2.3) либо '/' либо '>'. Искать все шесть символов одним
-        /// IndexOfAny(roschar) нельзя: рантайм имеет SIMD-реализации только для пяти
-        /// значений и меньше, а дальше переключается на вероятностный (bloom-filter)
-        /// скан. Поэтому векторизованно ищется только тройка '/', '>', ' ' (это
-        /// подавляющее большинство случаев), а оставшиеся символы S production
-        /// добираются скалярной проверкой c &lt; ' ' по короткому префиксу до уже
-        /// найденной позиции: #x9, #xA и #xD все меньше пробела, легальный символ
-        /// имени всегда больше, а обычного пробела в префиксе нет по построению,
-        /// так что проверка эквивалентна. Префикс короткий (в среднем 11 символов),
-        /// и цикл по нему дешевле ещё одного вызова с настройкой вектора.
-        ///
-        /// Конец головы в общем случае ищет <see cref="FindUnquotedGt"/>, но два
-        /// частых случая до него не доходят:
-        /// 1) имя упёрлось прямо в '&gt;' - значит атрибутов нет, а значит нет и
-        ///    кавычек, и конец головы это уже найденный индекс;
-        /// 2) иначе поиск стартует не с нуля, а с конца имени: раньше него кавычка
-        ///    встретиться не может.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void ScanHead(
-            roschar trimmed,
-            out int endOfName,
-            out int endOfHead
-            )
-        {
-            var index = trimmed.IndexOfAny('/', '>', ' ');
-            var searchLimit = index >= 0 ? index : trimmed.Length;
-
-            for (var i = 0; i < searchLimit; i++)
-            {
-                if (trimmed[i] < ' ')
-                {
-                    //имя закончилось табом/CR/LF раньше, чем найденным терминатором,
-                    //поэтому голову приходится искать с учётом кавычек
-                    endOfName = i;
-                    endOfHead = FindUnquotedGt(trimmed, i);
-                    return;
-                }
-            }
-
-            endOfName = index;
-
-            if (index >= 0 && trimmed[index] == '>')
-            {
-                endOfHead = index;
-                return;
-            }
-
-            endOfHead = FindUnquotedGt(trimmed, searchLimit);
-        }
-
-        /// <summary>
-        /// Ищет '>', закрывающий голову тега, пропуская те, что находятся внутри
-        /// значений атрибутов (XML 1.0 §2.4 требует экранирования только '&lt;', '&amp;'
-        /// и совпадающей кавычки внутри AttValue, так что '&gt;' там легален).
-        /// Посимвольный скан здесь был бы заметно дороже: метод вызывается на
-        /// каждую ноду документа. Вместо этого прыгаем по границам векторизованными
-        /// поисками - число итераций равно числу атрибутов, а не длине головы.
-        ///
-        /// Скан начинается с позиции start; вызывающая сторона обязана гарантировать,
-        /// что до неё кавычек нет.
-        /// </summary>
-        private static int FindUnquotedGt(roschar span, int start)
-        {
-            var offset = start < 0 ? 0 : start;
-
-            while (true)
-            {
-                var sliced = span.Slice(offset);
-
-                var index = sliced.IndexOfAny('>', '"', '\'');
-                if (index < 0)
-                {
-                    throw new InvalidOperationException("Closing '>' not found for element head.");
-                }
-
-                var c = sliced[index];
-                if (c == '>')
-                {
-                    return offset + index;
-                }
-
-                //это открывающая кавычка значения атрибута, ищем парную закрывающую
-                var rest = sliced.Slice(index + 1);
-                var closingIndex = rest.IndexOf(c);
-                if (closingIndex < 0)
-                {
-                    throw new InvalidOperationException("Closing quote not found for attribute value.");
-                }
-
-                offset += index + 1 + closingIndex + 1;
-            }
-        }
-
-        private static void ParseAttribute(
-            roschar internalsOfHead,
-            int index,
-            roschar requiredPrefix,
-            roschar requiredName,
-            roschar requiredValue,
-            out ParsedAttribute result
-            )
-        {
-            while (true)
-            {
-                ParseFirstFoundAttribute(internalsOfHead, index, out var apr);
-                if (apr.Attribute.IsEmpty)
-                {
-                    result = apr.Attribute;
-                    return;
-                }
-
-                if (requiredPrefix.IsEmpty || requiredPrefix.SequenceEqual(apr.Attribute.Prefix))
-                {
-                    if (requiredName.IsEmpty || requiredName.SequenceEqual(apr.Attribute.Name))
-                    {
-                        if (requiredValue.IsEmpty || requiredValue.SequenceEqual(apr.Attribute.Value))
-                        {
-                            //нашли что нужно
-                            result = apr.Attribute;
-                            return;
-                        }
-                    }
-                }
-
-                index += apr.TotalLength;
-            }
-        }
-
-        private static void ParseFirstFoundAttribute(
-            roschar internalsOfHead,
-            int iindex,
-            out AttributeProcessResult result
-            )
-        {
-            var trimmed = internalsOfHead.Slice(iindex).TrimStart();
-            var trimmedLength = internalsOfHead.Length - trimmed.Length;
-
-            //ищем ":" (префиксованное имя) или "=" (имя без префикса) - смотря что встретится раньше
-            var iofa0 = trimmed.IndexOfAny("=/>:".AsSpan());
-            var c = trimmed[iofa0];
-            if (c == '/' || c == '>')
-            {
-                //нода закрылась, атрибутов нету
-                result = new AttributeProcessResult();
-                return;
-            }
-
-            roschar prefix;
-            roschar name;
-            if (c == ':')
-            {
-                //префиксованный атрибут (например p3:type)
-                prefix = internalsOfHead.Slice(trimmedLength, iofa0);
-                trimmed = trimmed.Slice(iofa0 + 1);
-
-                var iofa1 = trimmed.IndexOf('=');
-                name = trimmed.Slice(0, iofa1);
-                trimmed = trimmed.Slice(iofa1 + 1);
-            }
-            else
-            {
-                //атрибут без префикса (без двоеточия в имени), например id="1"
-                prefix = roschar.Empty;
-                name = internalsOfHead.Slice(trimmedLength, iofa0);
-                trimmed = trimmed.Slice(iofa0 + 1);
-            }
-
-            //значение атрибута может быть в двойных или одинарных кавычках (XML 1.0 §2.3, AttValue)
-            var iofa2 = trimmed.IndexOfAny('"', '\'');
-            var quoteChar = trimmed[iofa2];
-            //найдено начало значения
-            trimmed = trimmed.Slice(iofa2 + 1);
-
-            //закрывающая кавычка должна совпадать по типу с открывающей
-            var iofa3 = trimmed.IndexOf(quoteChar);
-            //найден конец значения
-            var rawValue = trimmed.Slice(0, iofa3);
-
-            var totalLength = (internalsOfHead.Length - trimmed.Length) + iofa3 + 1 - iindex;
-
-            result = new AttributeProcessResult(
-                new ParsedAttribute(prefix, name, DecodeAttributeValue(rawValue)),
-                totalLength
-                );
-        }
-
-        /// <summary>
-        /// XML 1.0 §3.3.3 attribute-value normalization: (1) each literal tab, CR or
-        /// LF character is replaced by a single space, and (2) character/general
-        /// entity references (e.g. &amp;amp; or &amp;#49;) are resolved. A character
-        /// reference that expands to whitespace (e.g. &amp;#10;) is inserted verbatim
-        /// and must NOT be collapsed to a space - only *literal* whitespace in the
-        /// source is - so step (1) runs on the raw text before entities are expanded.
-        /// Only allocates when a literal tab/CR/LF or a reference might actually be present.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static roschar DecodeAttributeValue(roschar rawValue)
-        {
-            //один векторизованный проход отсекает подавляющее большинство значений,
-            //которым нормализация не нужна вообще, и только потом выясняем детали
-            if (rawValue.IndexOfAny("&\t\r\n".AsSpan()) < 0)
-            {
-                return rawValue;
-            }
-
-            var hasEntity = rawValue.IndexOf('&') >= 0;
-            var hasLiteralWhitespace = ContainsLiteralTabOrNewline(rawValue);
-
-            if (!hasEntity && !hasLiteralWhitespace)
-            {
-                return rawValue;
-            }
-
-            var normalized = hasLiteralWhitespace
-                ? NormalizeLiteralWhitespace(rawValue)
-                : rawValue.ToString();
-
-            return hasEntity
-                ? global::System.Net.WebUtility.HtmlDecode(normalized).AsSpan()
-                : normalized.AsSpan();
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool ContainsLiteralTabOrNewline(roschar value)
-        {
-            return value.IndexOfAny('\t', '\r', '\n') >= 0;
-        }
-
-        private static string NormalizeLiteralWhitespace(roschar value)
-        {
-            var chars = new char[value.Length];
-            for (var i = 0; i < value.Length; i++)
-            {
-                var c = value[i];
-                chars[i] = (c == '\t' || c == '\r' || c == '\n') ? ' ' : c;
-            }
-
-            return new string(chars);
-        }
     }
 
     /// <summary>
