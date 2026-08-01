@@ -457,7 +457,7 @@ Ratio 0.88 → 0.74 (REGULAR) came from two earlier changes, found by A/B-measur
 
 Both runs are from the same machine, and the `System.Xml` baselines agree to within 5% (16.025 vs. 15.232 and 8.084 vs. 8.483), so the ratios are comparable.
 
-Allocations are byte-for-byte unchanged (3.20 KB and 1.12 KB) — this was purely CPU.
+Allocations were byte-for-byte unchanged by this change (3.20 KB and 1.12 KB) — it was purely CPU. They came down separately, see [Allocations](#allocations) below.
 
 **The fix was to stop measuring nodes before parsing them.** A node's length was only ever needed for one thing, and only *after* the node had been parsed: advancing the cursor to the next sibling. Meanwhile the parse itself already reaches the closing tag — a child loop stops precisely at `</Child>` — so the length was being computed twice, once by a throwaway pre-walk and once by the parse that discarded it.
 
@@ -474,6 +474,31 @@ Two behaviours changed as a side effect, both strictly less lossy than before:
 - **A polymorphic member is dispatched by member name first, then by `xsi:type`.** The old codegen emitted a variable declaration between `if` and `else if`, so a polymorphic member that was not the first member produced code that did not compile; it also matched any child carrying an `xsi:type` regardless of the member's name.
 
 Instrumentation counted **110** head scans per deserialize of a **26**-element document before this change, of which 78 existed only to skip over subtrees, and total character traffic was 3.4× the document length. The analysis, the counters, and the design are in [docs/perf-single-pass-parser.md](docs/perf-single-pass-parser.md); the earlier investigation that first identified the multiplier is in [docs/perf-redundant-head-scans.md](docs/perf-redundant-head-scans.md). Both also document the benchmarking methodology — including why an A/B switch must be a `static readonly` field read from an environment variable (a plain mutable `static bool` breaks inlining and distorted an entire run by ~1 us).
+
+### Allocations
+
+Deserialization now allocates the resulting object graph and nothing else. Two separate sources of waste were removed after the run above; both were found by decomposing an allocation figure rather than by reading code, and the numbers here are `GC.GetAllocatedBytesForCurrentThread` deltas around a single warmed-up call.
+
+**Text decoding no longer allocates.** `WebUtility.HtmlDecode` takes a `string`, so every text body containing a reference had to be materialized just to be handed over and thrown away, and consecutive CDATA sections were concatenated through one intermediate string each. On the REGULAR document that was 336 of 1144 bytes — 29% — that never reached the result. `XmlTextDecoder` expands references and CDATA straight out of the `ReadOnlySpan<char>` into a buffer (stack below 256 chars, `ArrayPool` above) and materializes exactly once:
+
+| | Before | After |
+|---|---:|---:|
+| A member with entity references | 232 B | **104 B** |
+| A member with two CDATA sections | 384 B | **176 B** |
+| REGULAR document, whole deserialize | 1144 B | **808 B** |
+
+808 B is precisely the object graph — the same property DEEP already had, where all 3272 B are the 100 nodes plus their payload string.
+
+**Array members no longer allocate a `List<T>` to throw away.** `T[]` was accumulated in a `List<T>` and then copied out with `ToArray()`, so a single member cost the list object, its backing array, another array per doubling, and finally the result. `PooledArrayBuilder<T>` takes the intermediate buffers from `ArrayPool<T>` instead:
+
+| Member | Before | After | The result itself |
+|---|---:|---:|---:|
+| `int[1]` | 128 B | **56 B** | 32 B + 24 B for the POCO |
+| `int[10]` | 304 B | **88 B** | 64 B + 24 B |
+| `int[100]` | 1632 B | **448 B** | 424 B + 24 B |
+| `int[1000]` | 12472 B | **4048 B** | 4024 B + 24 B |
+
+The "after" column is exactly the array plus the object holding it: the overhead is not reduced but gone. Note that neither benchmark document has an array member, so this does not show up in the table above — it was measured directly.
 
 Example serializer declaration and usage from the benchmark fixture:
 
@@ -567,6 +592,7 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | `DeepFixture` | Self-referencing type nested 100 levels deep; guards the DEEP benchmark by asserting the whole chain is walked and matches `System.Xml` |
 | `SinglePassParserFixture` | Consequences of single-pass deserialization: unknown elements skipped by tag balance (incl. `>` inside attribute values, CDATA, nested children), self-closing children not ending the sibling loop, mismatched/truncated closing tags rejected, compact vs. indented parity |
 | `XmlTextDecoderFixture` | Reference expansion per XML 1.0 §4.1: the five predefined entities, decimal/hex character references incl. above-BMP surrogate pairs, CDATA in any position, attribute-value normalization vs. references, and every reference form XML rejects (undeclared, unterminated, empty, uppercase `X`, illegal or out-of-range code point) |
+| `PooledArrayBuilderFixture` | Array members across the pooled builder's growth steps (every other array test uses 3 elements and never reaches one), for primitive, struct and reference element types; empty-array and builder-reuse semantics |
 | `SerDeFixtureV2` | Same feature set as `SerDeFixture`, exercised through a second serializer declaration to catch cross-class code-gen issues |
 | `CoverageExpansionFixture` | All primitive types incl. `decimal`/`Guid` round-trips, nullable value-type omission on serialize, length-estimator accuracy, empty/null collections, CDATA strings (including concatenated blocks), HTML-entity-encoded string serialization |
 | `SpecComplianceFixture` | XML 1.0 edge cases: unescaped `>` in attribute values (including a foreign-producer-style extra attribute during polymorphic deserialize), prolog processing instructions / `DOCTYPE` (incl. internal subset) being skipped, attribute-value whitespace normalization vs. character references |

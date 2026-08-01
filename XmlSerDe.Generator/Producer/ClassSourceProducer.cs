@@ -449,6 +449,11 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         private static readonly string XmlHeadFullName = typeof(XmlHead).FullName;
         private static readonly string XmlScanFullName = typeof(XmlScan).FullName;
 
+        //FullName у открытого обобщённого типа несёт хвост арности
+        //("...PooledArrayBuilder`1"), которого в исходном коде быть не должно
+        private static readonly string PooledArrayBuilderFullName =
+            typeof(PooledArrayBuilder<>).FullName.Split('`')[0];
+
         private readonly void GenerateDeserializeMethods(
             INamedTypeSymbol injectorType
             )
@@ -764,11 +769,17 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     poolVarName
                     );
 
+                var poolDeclarationStatement = GeneratePoolDeclarationStatement(
+                    memberType,
+                    listItemType,
+                    poolVarName
+                    );
+
                 _sb.AppendLine($$"""
                     //List<T>
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
-                        var {{poolVarName}} = new global::System.Collections.Generic.List<{{listItemType.ToGlobalDisplayString()}}>();
+                        {{poolDeclarationStatement}}
 
                         var itemCursor = childBody;
                         var itemConsumed = 0;
@@ -898,6 +909,31 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 + $"out {consumedVarName});";
         }
 
+        /// <summary>
+        /// Член типа <c>List&lt;T&gt;</c> отдаётся вызывающему как есть, поэтому
+        /// накапливать его больше не во что - список и есть результат.
+        /// А вот <c>T[]</c> всё равно придётся копировать в массив точного
+        /// размера, так что промежуточный список - чистые потери: его буферы
+        /// берутся из пула (см. <see cref="PooledArrayBuilder{T}"/>).
+        /// </summary>
+        private readonly string GeneratePoolDeclarationStatement(
+            TypeSymbol memberType,
+            TypeSymbol listItemType,
+            string poolVarName
+            )
+        {
+            if (memberType.IsList(out _))
+            {
+                return $"var {poolVarName} = new global::System.Collections.Generic.List<{listItemType.ToGlobalDisplayString()}>();";
+            }
+            else if (memberType.IsArray(out _))
+            {
+                return $"var {poolVarName} = new {PooledArrayBuilderFullName}<{listItemType.ToGlobalDisplayString()}>();";
+            }
+
+            throw new InvalidOperationException($"Unknown type {memberType.ToGlobalDisplayString()}");
+        }
+
         private readonly string GenerateAssignStatement(
             TypeSymbol memberType,
             string memberName,
@@ -910,7 +946,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
             else if (memberType.IsArray(out _))
             {
-                return $"result.{memberName} = {poolVarName}.ToArray();";
+                return $"result.{memberName} = {poolVarName}.{nameof(PooledArrayBuilder<int>.ToArrayAndRelease)}();";
             }
 
             throw new InvalidOperationException($"Unknown type {memberType.ToGlobalDisplayString()}");
