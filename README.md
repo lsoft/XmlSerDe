@@ -444,16 +444,18 @@ Ratio 0.88 → 0.74 (REGULAR) came from two earlier changes, found by A/B-measur
 ```
 | Method                             | Categories | Mean      | StdDev    | Ratio | Allocated | Alloc Ratio |
 |----------------------------------- |----------- |----------:|----------:|------:|----------:|------------:|
-| 'Deserialize: DEEP: System.Xml'    | DEEP       | 16.004 us | 0.2968 us |  1.00 |  29.18 KB |        1.00 |
-| 'Deserialize: DEEP: XmlSerDe'      | DEEP       |  2.839 us | 0.0270 us |  0.18 |   3.20 KB |        0.11 |
-| 'Deserialize: REGULAR: System.Xml' | REGULAR    |  8.757 us | 0.1307 us |  1.00 |  16.49 KB |        1.00 |
-| 'Deserialize: REGULAR: XmlSerDe'   | REGULAR    |  2.654 us | 0.0380 us |  0.30 |   1.12 KB |        0.07 |
+| 'Deserialize: DEEP: System.Xml'    | DEEP       | 16.025 us | 0.3092 us |  1.00 |  29.18 KB |        1.00 |
+| 'Deserialize: DEEP: XmlSerDe'      | DEEP       |  2.693 us | 0.0610 us |  0.17 |   3.20 KB |        0.11 |
+| 'Deserialize: REGULAR: System.Xml' | REGULAR    |  8.084 us | 0.1037 us |  1.00 |  16.49 KB |        1.00 |
+| 'Deserialize: REGULAR: XmlSerDe'   | REGULAR    |  2.521 us | 0.0129 us |  0.31 |   1.12 KB |        0.07 |
 ```
 
 | Category | Ratio before | Ratio after | Mean before | Mean after |
 |----------|-------------:|------------:|------------:|-----------:|
-| DEEP     | 9.39         | **0.18**    | 142.771 us  | 2.839 us   |
-| REGULAR  | 0.74         | **0.30**    | 6.284 us    | 2.654 us   |
+| DEEP     | 9.39         | **0.17**    | 142.771 us  | 2.693 us   |
+| REGULAR  | 0.74         | **0.31**    | 6.284 us    | 2.521 us   |
+
+Both runs are from the same machine, and the `System.Xml` baselines agree to within 5% (16.025 vs. 15.232 and 8.084 vs. 8.483), so the ratios are comparable.
 
 Allocations are byte-for-byte unchanged (3.20 KB and 1.12 KB) — this was purely CPU.
 
