@@ -220,6 +220,40 @@ namespace XmlSerDe.Common
             }
         }
 
+        /// <summary>
+        /// Конструктор для случая, когда голова ноды уже разобрана вызывающей стороной
+        /// (см. <see cref="GetFirstLength"/>). Разбирать её повторно незачем: результат
+        /// заведомо тот же, потому что fullNode - это префикс того же самого спана,
+        /// а голова целиком помещается внутри этого префикса.
+        /// </summary>
+        private XmlNode2(
+            XmlDeserializeSettings settings,
+            roschar fullNode,
+            roschar xmlnsAttributeName,
+            int fullHeadPrefixLength,
+            int fullHeadLength,
+            int declaredNodeTypeLength,
+            bool isBodyless
+            )
+        {
+            IsEmpty = false;
+            FullNode = fullNode;
+            FullHeadPrefixLength = fullHeadPrefixLength;
+            FullHead = fullNode.Slice(0, fullHeadLength);
+            DeclaredNodeType = fullNode.Slice(fullHeadPrefixLength + 1, declaredNodeTypeLength);
+            IsBodyless = isBodyless;
+            Internals = GetInternalsOf(settings.ContainsXmlComments);
+
+            if (xmlnsAttributeName.IsEmpty)
+            {
+                XmlnsAttributeName = GetXmlnsAttributeName();
+            }
+            else
+            {
+                XmlnsAttributeName = xmlnsAttributeName;
+            }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private readonly roschar GetXmlnsAttributeName()
         {
@@ -274,22 +308,57 @@ namespace XmlSerDe.Common
             ref XmlNode2 result
             )
         {
-            var length = GetFirstLength(ref settings, nodes);
+            var length = GetFirstLength(
+                ref settings,
+                nodes,
+                out var fullHeadPrefixLength,
+                out var fullHeadLength,
+                out var nodeTypeLength,
+                out var isBodyLess
+                );
             if (length == 0)
             {
                 result = new XmlNode2();
                 return;
             }
 
-            result = new XmlNode2(settings, nodes.Slice(0, length), xmlnsAttributeName);
+            result = new XmlNode2(
+                settings,
+                nodes.Slice(0, length),
+                xmlnsAttributeName,
+                fullHeadPrefixLength,
+                fullHeadLength,
+                nodeTypeLength,
+                isBodyLess
+                );
         }
 
+        /// <summary>
+        /// Возвращает длину первой ноды в переданном спане и заодно отдаёт наружу всё,
+        /// что о её голове удалось узнать по дороге: без этого вызывающая сторона
+        /// разбирала бы ту же голову второй раз уже в конструкторе.
+        /// Рекурсивным вызовам для дочерних нод эти сведения не нужны, они их отбрасывают.
+        ///
+        /// Имя ноды отдаётся длиной, а не спаном, намеренно: спан, полученный через out
+        /// из метода с параметром ref, компилятор обязан считать потенциально ссылающимся
+        /// на этот ref, и сохранить такой спан в поле ref struct уже нельзя (CS8352).
+        /// Начало имени вызывающей стороне и так известно - это fullHeadPrefixLength + 1.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int GetFirstLength(
             ref XmlDeserializeSettings settings,
-            roschar nodes
+            roschar nodes,
+            out int fullHeadPrefixLength,
+            out int fullHeadLength,
+            out int nodeTypeLength,
+            out bool isBodyLess
             )
         {
+            fullHeadPrefixLength = 0;
+            fullHeadLength = 0;
+            nodeTypeLength = 0;
+            isBodyLess = true;
+
             if (nodes.IsEmpty)
             {
                 return 0;
@@ -299,7 +368,8 @@ namespace XmlSerDe.Common
             {
                 return 0;
             }
-            ScanHead_Core(nodes, trimmed, out var fullHeadLength, out var nodeType, out var isBodyLess);
+            fullHeadPrefixLength = nodes.Length - trimmed.Length;
+            ScanHead_Core(nodes, trimmed, out fullHeadLength, out var nodeType, out isBodyLess);
             if (fullHeadLength == 0)
             {
                 return 0;
@@ -309,7 +379,7 @@ namespace XmlSerDe.Common
                 return 0;
             }
 
-            var nodeTypeLength = nodeType.Length;
+            nodeTypeLength = nodeType.Length;
 
             //теперь сканируем до закрывающего тега
             var index = fullHeadLength;
@@ -368,7 +438,7 @@ namespace XmlSerDe.Common
                         innerNodes = innerNodes.Slice(lcl);
                     }
 
-                    var childLength = GetFirstLength(ref settings, innerNodes);
+                    var childLength = GetFirstLength(ref settings, innerNodes, out _, out _, out _, out _);
                     //получили дочернюю ноду, пропускаем ее
                     index += lcl + childLength;
                 }
@@ -614,14 +684,9 @@ namespace XmlSerDe.Common
             //    goto repeatCData;
             //}
 
-            //XML whitespace (S production, XML 1.0 §2.3) is #x20 | #x9 | #xD | #xA, not just space
-            var endOfNameIndex = FindEndOfNodeName(trimmed);
-            var nodeTypeLength = headSpaceCount + endOfNameIndex;
+            ScanHead(trimmed, out var endOfNameIndex, out var endOfHeadIndex);
 
-            //ищем конец головы: '>' может встретиться внутри значения атрибута
-            //без экранирования (XML 1.0 §2.4 требует экранирования только '<', '&'
-            //и совпадающей кавычки внутри AttValue), поэтому сканируем с учётом кавычек
-            var endOfHeadIndex = FindUnquotedGt(trimmed);
+            var nodeTypeLength = headSpaceCount + endOfNameIndex;
             var chm1 = trimmed[endOfHeadIndex - 1];
             isBodyLess = chm1 == '/';
 
@@ -630,26 +695,58 @@ namespace XmlSerDe.Common
         }
 
         /// <summary>
-        /// Ищет конец имени ноды: первый символ XML S production
-        /// (#x20 | #x9 | #xD | #xA, XML 1.0 §2.3) либо '/' либо '>'.
-        /// Поиск всех шести символов одним IndexOfAny(roschar) уводит с
-        /// векторизованного пути: рантайм имеет SIMD-реализации только для
-        /// пяти значений и меньше, а дальше переключается на вероятностный
-        /// (bloom-filter) скан. Метод вызывается на каждую ноду документа,
-        /// поэтому здесь дешевле два векторизованных трёхсимвольных поиска:
-        /// сначала '/', '>' или обычный пробел (подавляющее большинство
-        /// случаев), затем таб/CR/LF - только в более коротком префиксе до
-        /// уже найденной позиции.
+        /// Находит за один проход и конец имени ноды, и конец её головы.
+        ///
+        /// Конец имени - это первый символ XML S production (#x20 | #x9 | #xD | #xA,
+        /// XML 1.0 §2.3) либо '/' либо '>'. Искать все шесть символов одним
+        /// IndexOfAny(roschar) нельзя: рантайм имеет SIMD-реализации только для пяти
+        /// значений и меньше, а дальше переключается на вероятностный (bloom-filter)
+        /// скан. Поэтому векторизованно ищется только тройка '/', '>', ' ' (это
+        /// подавляющее большинство случаев), а оставшиеся символы S production
+        /// добираются скалярной проверкой c &lt; ' ' по короткому префиксу до уже
+        /// найденной позиции: #x9, #xA и #xD все меньше пробела, легальный символ
+        /// имени всегда больше, а обычного пробела в префиксе нет по построению,
+        /// так что проверка эквивалентна. Префикс короткий (в среднем 11 символов),
+        /// и цикл по нему дешевле ещё одного вызова с настройкой вектора.
+        ///
+        /// Конец головы в общем случае ищет <see cref="FindUnquotedGt"/>, но два
+        /// частых случая до него не доходят:
+        /// 1) имя упёрлось прямо в '&gt;' - значит атрибутов нет, а значит нет и
+        ///    кавычек, и конец головы это уже найденный индекс;
+        /// 2) иначе поиск стартует не с нуля, а с конца имени: раньше него кавычка
+        ///    встретиться не может.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int FindEndOfNodeName(roschar trimmed)
+        private static void ScanHead(
+            roschar trimmed,
+            out int endOfName,
+            out int endOfHead
+            )
         {
             var index = trimmed.IndexOfAny('/', '>', ' ');
-
             var searchLimit = index >= 0 ? index : trimmed.Length;
-            var rareIndex = trimmed.Slice(0, searchLimit).IndexOfAny('\t', '\r', '\n');
 
-            return rareIndex >= 0 ? rareIndex : index;
+            for (var i = 0; i < searchLimit; i++)
+            {
+                if (trimmed[i] < ' ')
+                {
+                    //имя закончилось табом/CR/LF раньше, чем найденным терминатором,
+                    //поэтому голову приходится искать с учётом кавычек
+                    endOfName = i;
+                    endOfHead = FindUnquotedGt(trimmed, i);
+                    return;
+                }
+            }
+
+            endOfName = index;
+
+            if (index >= 0 && trimmed[index] == '>')
+            {
+                endOfHead = index;
+                return;
+            }
+
+            endOfHead = FindUnquotedGt(trimmed, searchLimit);
         }
 
         /// <summary>
@@ -659,11 +756,13 @@ namespace XmlSerDe.Common
         /// Посимвольный скан здесь был бы заметно дороже: метод вызывается на
         /// каждую ноду документа. Вместо этого прыгаем по границам векторизованными
         /// поисками - число итераций равно числу атрибутов, а не длине головы.
+        ///
+        /// Скан начинается с позиции start; вызывающая сторона обязана гарантировать,
+        /// что до неё кавычек нет.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int FindUnquotedGt(roschar span)
+        private static int FindUnquotedGt(roschar span, int start)
         {
-            var offset = 0;
+            var offset = start < 0 ? 0 : start;
 
             while (true)
             {

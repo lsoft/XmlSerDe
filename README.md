@@ -414,6 +414,24 @@ Both run for every element in the document. They were restored to vectorized equ
 
 `Alloc Ratio` of 0.07 reflects the enum and `Guid` fixes described above.
 
+### Current deserialize run (.NET 8.0)
+
+```
+| Method                    | Mean     | Error     | StdDev    | Ratio | Gen0   | Gen1   | Allocated | Alloc Ratio |
+|-------------------------- |---------:|----------:|----------:|------:|-------:|-------:|----------:|------------:|
+| 'Deserialize: System.Xml' | 8.515 us | 0.1355 us | 0.1201 us |  1.00 | 1.3428 | 0.0610 |  16.49 KB |        1.00 |
+| 'Deserialize: XmlSerDe'   | 6.554 us | 0.0820 us | 0.0767 us |  0.77 | 0.0839 |      - |   1.12 KB |        0.07 |
+```
+
+Ratio 0.88 → 0.77 from two changes, found by A/B-measuring each candidate in its own BenchmarkDotNet job rather than by reasoning about complexity:
+
+- **The tag head is scanned once, not twice.** `GetFirstLength` already determines where a node's head ends, its name, and whether it is bodyless — then threw that away and let the `XmlNode2` constructor rediscover all of it. It now passes those values through. Worth more than everything else here combined, because the scans it eliminates are the expensive ones (heads of materialized nodes).
+- **Finding the end of the name and the end of the head is one pass.** A node whose name runs straight into `>` has no attributes, therefore no quotes, so the quote-aware search is skipped entirely; otherwise it starts at the end of the name instead of at zero. The tab/CR/LF check over the short prefix is scalar — those characters are all below `' '`, a legal name character is always above it, and a literal space cannot appear in the prefix by construction, so the test is equivalent to a second vectorized search but cheaper than setting one up.
+
+Allocations are untouched by both (1.12 KB, `Alloc Ratio` 0.07) — this was purely CPU.
+
+Instrumentation counted **135** head scans per deserialize of a **26**-element document, and the cost is linear in nesting depth. The changes above remove the constant term; the remaining factor is analyzed in [docs/perf-redundant-head-scans.md](docs/perf-redundant-head-scans.md), which also documents the benchmarking methodology — including why an A/B switch must be a `static readonly` field read from an environment variable (a plain mutable `static bool` breaks inlining and distorted an entire run by ~1 us).
+
 Example serializer declaration and usage from the benchmark fixture:
 
 ```csharp
