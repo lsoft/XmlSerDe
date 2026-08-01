@@ -141,12 +141,58 @@ namespace XmlSerDe.Tests.Deep
             AssertChain(byXmlSerDe);
         }
 
+        /// <summary>
+        /// Each serializer's output is read back by the *other* one, so a shared
+        /// misunderstanding of the format cannot hide behind a round trip that
+        /// never leaves the implementation. Mirrors
+        /// ComplexFixture.Serialize_CheckForEquality for the DEEP document.
+        /// </summary>
+        [Fact]
+        public void Serialize_CrossRoundTrip_CheckForEquality()
+        {
+            var bySystemXml = Serialize_SystemXml(DefaultObject);
+            var byXmlSerDe = Serialize_XmlSerDe(DefaultObject);
+
+            AssertChain(
+                Deserialize_SystemXml(byXmlSerDe)
+                );
+            AssertChain(
+                Deserialize_XmlSerDe(
+                    global::XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                        bySystemXml.AsSpan()
+                        )
+                    )
+                );
+        }
+
         private static void AssertChain(DeepNode root)
+        {
+            DeepAssert.WholeChain(root);
+        }
+
+        #endregion
+    }
+
+    /// <summary>
+    /// Lives outside <see cref="DeepFixture"/> so that it can be public without
+    /// xunit mistaking it for a test. The benchmark verifies its own results
+    /// with it: DEEP is driven through static methods, so nothing else would
+    /// notice a deserializer that returned early - and BenchmarkDotNet would
+    /// report an excellent number for doing almost nothing.
+    /// </summary>
+    public static class DeepAssert
+    {
+        /// <summary>
+        /// Walks all <see cref="DeepFixture.Depth"/> levels and fails if any of
+        /// them is missing, carries a payload it should not, or if the bottom
+        /// one is not the bottom.
+        /// </summary>
+        public static void WholeChain(DeepNode root)
         {
             Assert.NotNull(root);
 
             var node = root;
-            for (var level = 1; level < Depth; level++)
+            for (var level = 1; level < DeepFixture.Depth; level++)
             {
                 Assert.Null(node.Payload);
                 Assert.NotNull(node.Child);
@@ -154,9 +200,7 @@ namespace XmlSerDe.Tests.Deep
             }
 
             Assert.Null(node.Child);
-            Assert.Equal(PayloadString, node.Payload);
+            Assert.Equal(DeepFixture.PayloadString, node.Payload);
         }
-
-        #endregion
     }
 }

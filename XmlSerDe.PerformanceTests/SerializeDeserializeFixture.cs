@@ -119,6 +119,20 @@ public class SerializeDeserializeFixture : ComplexFixture
     /// </summary>
     private const string DeepCategory = "DEEP";
 
+    /// <summary>
+    /// ComplexFixture's constructor heats up and verifies the REGULAR path, so
+    /// that benchmark checks itself before it measures anything. DEEP is driven
+    /// through DeepFixture's static methods, which leaves its results unchecked
+    /// here - a deserializer that stopped after the first level would still
+    /// report a splendid number. So verify exactly what is measured: the return
+    /// values of the two DEEP benchmark methods themselves.
+    /// </summary>
+    public SerializeDeserializeFixture()
+    {
+        DeepAssert.WholeChain(Deserialize_Deep_SystemXml_Test());
+        DeepAssert.WholeChain(Deserialize_Deep_XmlSerDe_Test());
+    }
+
     //#region serialize
 
     //[Benchmark(Description = "Serialize: System.Xml", Baseline = true)]
