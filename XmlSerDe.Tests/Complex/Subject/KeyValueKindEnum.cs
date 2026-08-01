@@ -19,12 +19,12 @@ namespace XmlSerDe.Tests.Complex.Subject
 
     public static class KeyValueKindParser
     {
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
         public static KeyValueKindEnum Parse(
             ReadOnlySpan<char> stringRepresentation
             )
         {
-            return (KeyValueKindEnum)Enum.Parse(typeof(KeyValueKindEnum), stringRepresentation);
+            return (KeyValueKindEnum)Enum.Parse(typeof(KeyValueKindEnum), stringRepresentation.ToString());
             //return EnumsNET.Enums.Parse<KeyValueKindEnum>(stringRepresentation);
         }
     }

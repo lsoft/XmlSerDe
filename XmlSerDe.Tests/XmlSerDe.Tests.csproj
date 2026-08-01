@@ -1,7 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net7.0</TargetFrameworks>
+    <!--
+      net472 здесь не ради .NET Framework как такового, а ради netstandard2.0:
+      запустить ns2.0 напрямую нельзя, но net472 потребляет именно его ассеты,
+      поэтому только под этим таргетом исполняются #else-ветки Common/Components.
+      Без него весь ns2.0-код был бы лишь скомпилирован, но ни разу не проверен.
+    -->
+    <TargetFrameworks>net472;net8.0;net10.0</TargetFrameworks>
     <LangVersion>Latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -32,7 +38,15 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.6.0" PrivateAssets="all" />
 
     <ProjectReference Include="..\XmlSerDe.Generator\XmlSerDe.Generator.csproj" SetTargetFramework="TargetFramework=netstandard2.0" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" SetTargetFramework="TargetFramework=netstandard2.0" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    <!--
+      У XmlSerDe.Common две несвязанные роли, и таргеты у них разные.
+      1) Зависимость генератора: её грузит компилятор, поэтому она обязана быть
+         netstandard2.0 - и в ссылки самого проекта не попадает.
+      2) Обычная библиотека времени выполнения: здесь нужен лучший таргет под TFM
+         проекта (net8.0/net10.0), иначе горячий код так и остался бы ns2.0-веткой.
+    -->
+    <ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" SetTargetFramework="TargetFramework=netstandard2.0" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" />
     <ProjectReference Include="..\XmlSerDe.Components\XmlSerDe.Components.csproj" />
   </ItemGroup>
 

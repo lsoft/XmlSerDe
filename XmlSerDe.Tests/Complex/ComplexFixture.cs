@@ -286,7 +286,7 @@ namespace XmlSerDe.Tests.Complex
 
 
 
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
         public static string Serialize_XmlSerDe(
             InfoContainer infoContainer
             )
@@ -297,19 +297,19 @@ namespace XmlSerDe.Tests.Complex
             return xml;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
         public static string Serialize_SystemXml(
             InfoContainer infoContainer
             )
         {
             using var ms = new MemoryStream();
             SystemXmlSerializer.Serialize(ms, infoContainer);
-            var xml = Encoding.UTF8.GetString(ms.GetBuffer().AsSpan(0, (int)ms.Length));
+            var xml = Encoding.UTF8.GetString(ms.GetBuffer(), 0, (int)ms.Length);
             return xml;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
         public static InfoContainer Deserialize_SystemXml(string xml)
         {
             using (var reader = new StringReader(xml))
@@ -319,7 +319,7 @@ namespace XmlSerDe.Tests.Complex
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
         public static InfoContainer Deserialize_XmlSerDe(ReadOnlySpan<char> xml)
         {
             XmlSerializerDeserializer.Deserialize(DefaultInjector.Instance, xml, out InfoContainer r);

@@ -81,7 +81,7 @@ namespace XmlSerDe.Tests.Deep
             return node;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
         public static DeepNode Deserialize_SystemXml(string xml)
         {
             using (var reader = new StringReader(xml))
@@ -91,23 +91,23 @@ namespace XmlSerDe.Tests.Deep
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
         public static DeepNode Deserialize_XmlSerDe(ReadOnlySpan<char> xml)
         {
             DeepXmlSerializerDeserializer.Deserialize(DefaultInjector.Instance, xml, out DeepNode r);
             return r;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
         public static string Serialize_SystemXml(DeepNode node)
         {
             using var ms = new MemoryStream();
             SystemXmlSerializer.Serialize(ms, node);
-            var xml = Encoding.UTF8.GetString(ms.GetBuffer().AsSpan(0, (int)ms.Length));
+            var xml = Encoding.UTF8.GetString(ms.GetBuffer(), 0, (int)ms.Length);
             return xml;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
         public static string Serialize_XmlSerDe(DeepNode node)
         {
             var exhauster = new DefaultStringBuilderExhauster();

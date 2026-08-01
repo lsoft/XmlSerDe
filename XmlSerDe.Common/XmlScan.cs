@@ -1,4 +1,7 @@
 using System;
+#if NET8_0_OR_GREATER
+using System.Buffers;
+#endif
 using System.Runtime.CompilerServices;
 using roschar = System.ReadOnlySpan<char>;
 
@@ -195,6 +198,35 @@ namespace XmlSerDe.Common
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => "?>".AsSpan();
         }
+
+#if NET8_0_OR_GREATER
+        /// <summary>
+        /// Конец имени ноды или атрибута: любой символ XML S production
+        /// (#x20 | #x9 | #xD | #xA, XML 1.0 §2.3) либо '/' либо '&gt;'.
+        ///
+        /// Именно этот набор из шести значений <see cref="ScanHead"/> не мог искать
+        /// одним вызовом на старых рантаймах: IndexOfAny(roschar) векторизован
+        /// только до пяти значений, дальше идёт вероятностный (bloom-filter) скан.
+        /// SearchValues строит ASCII-битмап один раз на весь процесс, и ограничение
+        /// снимается - вместе с ним уходит и скалярный добор по префиксу.
+        /// </summary>
+        private static readonly SearchValues<char> NameEndValues =
+            SearchValues.Create("/> \t\r\n");
+
+        /// <summary>
+        /// Что может закончить имя атрибута: ':' (префиксованное имя), '=' (имя
+        /// без префикса) либо '/' и '&gt;' (нода закрылась, атрибутов больше нет).
+        /// </summary>
+        private static readonly SearchValues<char> AttributeNameEndValues =
+            SearchValues.Create("=/>:");
+
+        /// <summary>
+        /// Значению атрибута нужна нормализация по §3.3.3, только если в нём есть
+        /// ссылка либо литеральный TAB/CR/LF.
+        /// </summary>
+        private static readonly SearchValues<char> AttributeValueSpecials =
+            SearchValues.Create("&\t\r\n");
+#endif
 
         #region однопроходный разбор
 
@@ -582,10 +614,13 @@ namespace XmlSerDe.Common
         /// Находит за один проход и конец имени ноды, и конец её головы.
         ///
         /// Конец имени - это первый символ XML S production (#x20 | #x9 | #xD | #xA,
-        /// XML 1.0 2.3) либо '/' либо '&gt;'. Искать все шесть символов одним
+        /// XML 1.0 2.3) либо '/' либо '&gt;'. На net8.0+ все шесть значений ищутся
+        /// одним проходом через <see cref="NameEndValues"/>.
+        ///
+        /// На netstandard2.0 SearchValues нет, а искать все шесть символов одним
         /// IndexOfAny(roschar) нельзя: рантайм имеет SIMD-реализации только для пяти
         /// значений и меньше, а дальше переключается на вероятностный (bloom-filter)
-        /// скан. Поэтому векторизованно ищется только тройка '/', '&gt;', ' ' (это
+        /// скан. Поэтому там векторизованно ищется только тройка '/', '&gt;', ' ' (это
         /// подавляющее большинство случаев), а оставшиеся символы S production
         /// добираются скалярной проверкой c &lt; ' ' по короткому префиксу до уже
         /// найденной позиции: #x9, #xA и #xD все меньше пробела, легальный символ
@@ -607,6 +642,10 @@ namespace XmlSerDe.Common
             out int endOfHead
             )
         {
+#if NET8_0_OR_GREATER
+            var index = trimmed.IndexOfAny(NameEndValues);
+            var searchLimit = index >= 0 ? index : trimmed.Length;
+#else
             var index = trimmed.IndexOfAny('/', '>', ' ');
             var searchLimit = index >= 0 ? index : trimmed.Length;
 
@@ -621,6 +660,7 @@ namespace XmlSerDe.Common
                     return;
                 }
             }
+#endif
 
             endOfName = index;
 
@@ -721,7 +761,11 @@ namespace XmlSerDe.Common
             var trimmedLength = internalsOfHead.Length - trimmed.Length;
 
             //ищем ":" (префиксованное имя) или "=" (имя без префикса) - смотря что встретится раньше
+#if NET8_0_OR_GREATER
+            var iofa0 = trimmed.IndexOfAny(AttributeNameEndValues);
+#else
             var iofa0 = trimmed.IndexOfAny("=/>:".AsSpan());
+#endif
             var c = trimmed[iofa0];
             if (c == '/' || c == '>')
             {
@@ -784,7 +828,11 @@ namespace XmlSerDe.Common
             //один векторизованный проход отсекает подавляющее большинство значений,
             //которым нормализация не нужна вообще: ни ссылок, ни литеральных
             //TAB/CR/LF - значит спан можно вернуть как есть, без аллокации
+#if NET8_0_OR_GREATER
+            if (rawValue.IndexOfAny(AttributeValueSpecials) < 0)
+#else
             if (rawValue.IndexOfAny("&\t\r\n".AsSpan()) < 0)
+#endif
             {
                 return rawValue;
             }

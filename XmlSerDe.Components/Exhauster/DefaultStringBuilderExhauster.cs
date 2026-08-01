@@ -46,6 +46,7 @@ namespace XmlSerDe.Components.Exhauster
         /// representation (decimal point, ASCII digits) regardless of the
         /// current thread's culture.
         /// </summary>
+#if NET8_0_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void AppendInvariant<T>(T value) where T : ISpanFormattable
         {
@@ -59,10 +60,22 @@ namespace XmlSerDe.Components.Exhauster
                 _sb.Append(value.ToString(null, CultureInfo.InvariantCulture));
             }
         }
+#else
+        /// <remarks>
+        /// netstandard2.0 не знает ни ISpanFormattable, ни StringBuilder.Append(roschar),
+        /// поэтому здесь остаётся форматирование через промежуточную строку.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void AppendInvariant<T>(T value) where T : IFormattable
+        {
+            _sb.Append(value.ToString(null, CultureInfo.InvariantCulture));
+        }
+#endif
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(DateTime value)
         {
+#if NET8_0_OR_GREATER
             Span<char> buffer = stackalloc char[64];
             if (value.TryFormat(buffer, out var written, _dateTimeFormat.AsSpan(), CultureInfo.InvariantCulture))
             {
@@ -72,6 +85,9 @@ namespace XmlSerDe.Components.Exhauster
             {
                 _sb.Append(value.ToString(_dateTimeFormat, CultureInfo.InvariantCulture));
             }
+#else
+            _sb.Append(value.ToString(_dateTimeFormat, CultureInfo.InvariantCulture));
+#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -88,6 +104,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(Guid value)
         {
+#if NET8_0_OR_GREATER
             Span<char> buffer = stackalloc char[36];
             if (value.TryFormat(buffer, out var written))
             {
@@ -97,6 +114,9 @@ namespace XmlSerDe.Components.Exhauster
             {
                 _sb.Append(value.ToString());
             }
+#else
+            _sb.Append(value.ToString());
+#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

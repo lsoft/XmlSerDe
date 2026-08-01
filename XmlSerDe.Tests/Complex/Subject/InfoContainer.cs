@@ -27,7 +27,7 @@ namespace XmlSerDe.Tests.Complex.Subject
     {
         public static readonly InfoContainer InfoContainerInstance = new InfoContainer();
 
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
         public static InfoContainer Reuse()
         {
             InfoContainerInstance.Reset();

@@ -21,7 +21,7 @@ namespace XmlSerDe.PerformanceTests;
 */
 
 
-[SimpleJob(RuntimeMoniker.Net60)]
+[SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]
 public class XmlDecodeStringFixture
 {

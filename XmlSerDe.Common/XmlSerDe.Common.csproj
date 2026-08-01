@@ -2,12 +2,16 @@
 
   <PropertyGroup>
     <LangVersion>Latest</LangVersion>
-    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <WarningsAsErrors>nullable;CS8766;CS8767</WarningsAsErrors>
   </PropertyGroup>
 
-  <ItemGroup>
+  <!--
+    Span/ArrayPool на netstandard2.0 живут в отдельных пакетах; на net8.0+ они
+    в самом рантайме, и ссылка на пакеты там только мешает.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <PackageReference Include="System.Buffers" Version="4.5.1" />
     <PackageReference Include="System.Memory" Version="4.5.5" />
   </ItemGroup>

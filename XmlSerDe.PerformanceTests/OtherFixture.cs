@@ -28,7 +28,7 @@ namespace XmlSerDe.PerformanceTests;
 
 
 
-[SimpleJob(RuntimeMoniker.Net60)]
+[SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]
 //[Config(typeof(DontForceGcCollectionsConfig))] // we don't want to interfere with GC, we want to include it's impact
 public class OtherFixture

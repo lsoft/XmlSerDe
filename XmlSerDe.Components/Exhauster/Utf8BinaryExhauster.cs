@@ -46,6 +46,7 @@ namespace XmlSerDe.Components.Exhauster
         /// when it fits, otherwise falling back to a rented buffer (mirrors
         /// the fallback strategy of <see cref="Append(string?)"/>).
         /// </summary>
+#if NET8_0_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void WriteChars(ReadOnlySpan<char> chars)
         {
@@ -63,12 +64,48 @@ namespace XmlSerDe.Components.Exhauster
                 ArrayPool<byte>.Shared.Return(rented); //nothing catastrophic happens if there will be an exception before this line; please read the doc of renting
             }
         }
+#else
+        /// <remarks>
+        /// netstandard2.0 не имеет span-перегрузок Encoding, поэтому вход
+        /// перекладывается в буфер из пула: аллокаций всё равно нет, но проход
+        /// по символам получается лишний.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void WriteChars(ReadOnlySpan<char> chars)
+        {
+            if (chars.IsEmpty)
+            {
+                Write(_internalBuffer, 0);
+                return;
+            }
+
+            var charBuffer = ArrayPool<char>.Shared.Rent(chars.Length);
+            chars.CopyTo(charBuffer);
+
+            var byteCount = Encoding.UTF8.GetByteCount(charBuffer, 0, chars.Length);
+            if (byteCount <= _internalBuffer.Length)
+            {
+                var written = Encoding.UTF8.GetBytes(charBuffer, 0, chars.Length, _internalBuffer, 0);
+                Write(_internalBuffer, written);
+            }
+            else
+            {
+                var rented = ArrayPool<byte>.Shared.Rent(byteCount);
+                var written = Encoding.UTF8.GetBytes(charBuffer, 0, chars.Length, rented, 0);
+                Write(rented, written);
+                ArrayPool<byte>.Shared.Return(rented); //nothing catastrophic happens if there will be an exception before this line; please read the doc of renting
+            }
+
+            ArrayPool<char>.Shared.Return(charBuffer);
+        }
+#endif
 
         /// <summary>
         /// Formats a value using an XSD-compatible, culture-invariant lexical
         /// representation (decimal point, ASCII digits) regardless of the
         /// current thread's culture, then writes it as UTF-8 bytes.
         /// </summary>
+#if NET8_0_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void WriteInvariant<T>(T value) where T : ISpanFormattable
         {
@@ -82,10 +119,22 @@ namespace XmlSerDe.Components.Exhauster
                 WriteChars(value.ToString(null, CultureInfo.InvariantCulture).AsSpan());
             }
         }
+#else
+        /// <remarks>
+        /// netstandard2.0 не знает ISpanFormattable, поэтому здесь остаётся
+        /// форматирование через промежуточную строку.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void WriteInvariant<T>(T value) where T : IFormattable
+        {
+            WriteChars(value.ToString(null, CultureInfo.InvariantCulture).AsSpan());
+        }
+#endif
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(DateTime value)
         {
+#if NET8_0_OR_GREATER
             Span<char> charBuffer = stackalloc char[64];
             if (value.TryFormat(charBuffer, out var charsWritten, _dateTimeFormat.AsSpan(), CultureInfo.InvariantCulture))
             {
@@ -95,6 +144,9 @@ namespace XmlSerDe.Components.Exhauster
             {
                 WriteChars(value.ToString(_dateTimeFormat, CultureInfo.InvariantCulture).AsSpan());
             }
+#else
+            WriteChars(value.ToString(_dateTimeFormat, CultureInfo.InvariantCulture).AsSpan());
+#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -111,6 +163,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(Guid value)
         {
+#if NET8_0_OR_GREATER
             Span<char> buffer = stackalloc char[36];
             if (value.TryFormat(buffer, out var written))
             {
@@ -120,6 +173,9 @@ namespace XmlSerDe.Components.Exhauster
             {
                 WriteChars(value.ToString().AsSpan());
             }
+#else
+            WriteChars(value.ToString().AsSpan());
+#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

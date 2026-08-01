@@ -992,6 +992,13 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         /// directly never boxes. Falls back to Enum.Parse for anything that
         /// doesn't match a declared name (keeps error behavior identical for
         /// malformed/unknown input).
+        ///
+        /// The fallback materializes the span into a string, because
+        /// Enum.Parse(Type, ReadOnlySpan&lt;char&gt;) does not exist on
+        /// netstandard2.0 and the generated code has to compile under every
+        /// target framework the consumer may pick. The extra allocation is
+        /// confined to a path that already boxes and that any declared name
+        /// never reaches.
         /// </summary>
         private readonly string GenerateEnumParseStatement(
             TypeSymbol memberType,
@@ -1027,7 +1034,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             sb.Append(enumGlobalName);
             sb.Append("), ");
             sb.Append(varName);
-            sb.Append("))");
+            sb.Append(".ToString()))");
 
             return sb.ToString();
         }

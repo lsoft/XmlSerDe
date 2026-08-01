@@ -101,12 +101,76 @@ Job=.NET 8.0  Runtime=.NET 8.0
 
 */
 
-//[SimpleJob(RuntimeMoniker.Net70)]
+/*
+
+Почему два класса, а не один.
+
+Джоб в BenchmarkDotNet назначается на класс целиком - на отдельный [Benchmark]
+рантайм не навесить. А наборы здесь нужны разные:
+
+  - сериализация меряется только под net10.0. Она не трогает XmlScan/XmlTextDecoder
+    и потому ничего не говорит о разнице между ns2.0- и net8+-ветками; гонять её
+    трижды значит только втрое удлинить прогон;
+
+  - десериализация (DEEP + REGULAR) меряется под всеми тремя таргетами - именно
+    здесь живут #if-ветки, и net472 показывает netstandard2.0-код в работе.
+
+*/
+
+/// <summary>
+/// Сериализация. Только net10.0 - см. комментарий выше.
+/// </summary>
+[SimpleJob(RuntimeMoniker.Net10_0)]
+[MemoryDiagnoser]
+public class SerializeFixture : ComplexFixture
+{
+    [Benchmark(Description = "Serialize: System.Xml", Baseline = true)]
+    public string Serialize_SystemXml_Test()
+    {
+        return Serialize_SystemXml(DefaultObject);
+    }
+
+    [Benchmark(Description = "Serialize: XmlSerDe")]
+    public string Serialize_XmlSerDe_Test()
+    {
+        return Serialize_XmlSerDe(DefaultObject);
+    }
+
+    [Benchmark(Description = "Serialize: XmlSerDe (est)")]
+    public string Serialize_XmlSerDe_Estimated_Test()
+    {
+        var dlee = new DefaultLengthEstimatorExhauster();
+        XmlSerializerDeserializer.Serialize(dlee, DefaultObject, false);
+        var estimateXmlLength = dlee.EstimatedTotalLength;
+
+        var dsbe = new DefaultStringBuilderExhauster(
+            new StringBuilder(estimateXmlLength)
+            );
+        XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
+        var xml = dsbe.ToString();
+        return xml;
+    }
+
+    [Benchmark(Description = "Serialize: XmlSerDe (stream)")]
+    public void Serialize_XmlSerDe_ToStream_Test()
+    {
+        var be = new Utf8BinaryExhausterEmpty(
+            );
+        XmlSerializerDeserializer.Serialize(be, DefaultObject, false);
+    }
+}
+
+/// <summary>
+/// Десериализация под всеми тремя таргетами. net472 здесь - это netstandard2.0-сборки
+/// Common/Components в работе, ровно тот же приём, что и в XmlSerDe.Tests.
+/// </summary>
+[SimpleJob(RuntimeMoniker.Net472)]
 [SimpleJob(RuntimeMoniker.Net80)]
+[SimpleJob(RuntimeMoniker.Net10_0)]
 [MemoryDiagnoser]
 [CategoriesColumn]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
-public class SerializeDeserializeFixture : ComplexFixture
+public class DeserializeFixture : ComplexFixture
 {
     /// <summary>
     /// ComplexFixture.AuxXml: 26 elements, max depth 6, indented.
@@ -127,52 +191,11 @@ public class SerializeDeserializeFixture : ComplexFixture
     /// report a splendid number. So verify exactly what is measured: the return
     /// values of the two DEEP benchmark methods themselves.
     /// </summary>
-    public SerializeDeserializeFixture()
+    public DeserializeFixture()
     {
         DeepAssert.WholeChain(Deserialize_Deep_SystemXml_Test());
         DeepAssert.WholeChain(Deserialize_Deep_XmlSerDe_Test());
     }
-
-    //#region serialize
-
-    //[Benchmark(Description = "Serialize: System.Xml", Baseline = true)]
-    //public string Serialize_SystemXml_Test()
-    //{
-    //    return Serialize_SystemXml(DefaultObject);
-    //}
-
-    //[Benchmark(Description = "Serialize: XmlSerDe")]
-    //public string Serialize_XmlSerDe_Test()
-    //{
-    //    return Serialize_XmlSerDe(DefaultObject);
-    //}
-
-    //[Benchmark(Description = "Serialize: XmlSerDe (est)")]
-    //public string Serialize_XmlSerDe_Estimated_Test()
-    //{
-    //    var dlee = new DefaultLengthEstimatorExhauster();
-    //    XmlSerializerDeserializer.Serialize(dlee, DefaultObject, false);
-    //    var estimateXmlLength = dlee.EstimatedTotalLength;
-
-    //    var dsbe = new DefaultStringBuilderExhauster(
-    //        new StringBuilder(estimateXmlLength)
-    //        );
-    //    XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
-    //    var xml = dsbe.ToString();
-    //    return xml;
-    //}
-
-    //[Benchmark(Description = "Serialize: XmlSerDe (stream)")]
-    //public void Serialize_XmlSerDe_ToStream_Test()
-    //{
-    //    var be = new Utf8BinaryExhausterEmpty(
-    //        );
-    //    XmlSerializerDeserializer.Serialize(be, DefaultObject, false);
-    //}
-
-    //#endregion
-
-    #region deserialize
 
     [BenchmarkCategory(RegularCategory)]
     [Benchmark(Description = "Deserialize: REGULAR: System.Xml", Baseline = true)]
@@ -203,7 +226,4 @@ public class SerializeDeserializeFixture : ComplexFixture
         var deepspan = DeepFixture.DeepXml.AsSpan();
         return DeepFixture.Deserialize_XmlSerDe(deepspan);
     }
-
-    #endregion
-
 }

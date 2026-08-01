@@ -8,15 +8,241 @@ XmlSerDe's purpose is **POCO ↔ XML data binding**: mapping plain C# classes to
 
 The API and behavior may still change between releases.
 
+## Performance
+
+Serialization code is generated at compile time, so there is no runtime reflection, no first-call warm-up, and no degradation as the number of serialized types grows. Deserialization reads the document as a `ReadOnlySpan<char>` and never materializes an intermediate node tree. Measured against `System.Xml.Serialization` on the same documents and the same machine, that buys four things:
+
+- **Deserialization allocates the resulting object graph and nothing else** — 808 B against 16 898 B on the REGULAR document, under 5% of the baseline, and none of it survives to gen1 while every `System.Xml` run promotes something. Entity references and CDATA are expanded straight out of the span; array members are accumulated through `ArrayPool<T>` rather than a throwaway `List<T>`.
+- **Deserialization is single-pass.** Each element's tag head is scanned exactly once, so cost is linear in document size and independent of nesting depth: **3.8×** faster than `System.Xml` on a shallow document, **5.7×** on one nested 100 levels deep.
+- **Serialization offers three modes with different allocation profiles**, down to **384 B** — 3% of the baseline — when writing UTF-8 straight to a stream, at the same speed as the other two.
+- **The hot paths are multi-targeted.** `SearchValues<char>`, span `TryFormat` and span `Parse` overloads are used on net8.0+; the netstandard2.0 fallbacks are still 1.4–1.9× faster than `System.Xml` on the runtime that consumes them.
+
+### What is measured
+
+Two document shapes, each with its own `System.Xml` baseline:
+
+- **REGULAR** — 26 elements, maximum nesting depth 6, indented, with derived types dispatched by `xsi:type`, an enum, a `DateTime`, entity-encoded text and CDATA. This is `ComplexFixture.AuxXml`, reproduced [at the end of this section](#the-regular-document).
+- **DEEP** — one element inside another, 100 levels down, a single string at the bottom, no indentation (`DeepFixture` in `XmlSerDe.Tests/Deep`). The same work in a different shape: wide-and-shallow becomes narrow-and-deep, which is what makes any per-ancestor re-walking visible.
+
+BenchmarkDotNet v0.15.2, Windows 11, 13th Gen Intel Core i7-13700H, .NET SDK 10.0.302. Reproduce with `run-benchmarks.bat`.
+
+### Deserialization
+
+Run under all three target frameworks. `.NET Framework 4.7.2` is not there for .NET Framework's own sake — it is the only way to *execute* the netstandard2.0 assemblies, so that row is the `#else` branches being measured.
+
+```
+| Method                             | Runtime              | Categories | Mean      | Ratio | Gen0   | Gen1   | Allocated | Alloc Ratio |
+|----------------------------------- |--------------------- |----------- |----------:|------:|-------:|-------:|----------:|------------:|
+| 'Deserialize: DEEP: System.Xml'    | .NET 10.0            | DEEP       | 15.922 us |  1.00 | 2.3193 | 0.1221 |   29824 B |        1.00 |
+| 'Deserialize: DEEP: XmlSerDe'      | .NET 10.0            | DEEP       |  2.817 us |  0.18 | 0.2594 |      - |    3272 B |        0.11 |
+|----------------------------------- |--------------------- |----------- |----------:|------:|-------:|-------:|----------:|------------:|
+| 'Deserialize: DEEP: System.Xml'    | .NET 8.0             | DEEP       | 16.971 us |  1.00 | 2.3193 | 0.1221 |   29880 B |        1.00 |
+| 'Deserialize: DEEP: XmlSerDe'      | .NET 8.0             | DEEP       |  2.703 us |  0.16 | 0.2594 |      - |    3272 B |        0.11 |
+|----------------------------------- |--------------------- |----------- |----------:|------:|-------:|-------:|----------:|------------:|
+| 'Deserialize: DEEP: System.Xml'    | .NET Framework 4.7.2 | DEEP       | 21.761 us |  1.00 | 5.2795 | 0.4578 |   33250 B |        1.00 |
+| 'Deserialize: DEEP: XmlSerDe'      | .NET Framework 4.7.2 | DEEP       | 11.460 us |  0.53 | 0.5188 |      - |    3290 B |        0.10 |
+|----------------------------------- |--------------------- |----------- |----------:|------:|-------:|-------:|----------:|------------:|
+|----------------------------------- |--------------------- |----------- |----------:|------:|-------:|-------:|----------:|------------:|
+| 'Deserialize: REGULAR: System.Xml' | .NET 10.0            | REGULAR    |  7.951 us |  1.00 | 1.3428 | 0.0610 |   16898 B |        1.00 |
+| 'Deserialize: REGULAR: XmlSerDe'   | .NET 10.0            | REGULAR    |  2.071 us |  0.26 | 0.0610 |      - |     808 B |        0.05 |
+|----------------------------------- |--------------------- |----------- |----------:|------:|-------:|-------:|----------:|------------:|
+| 'Deserialize: REGULAR: System.Xml' | .NET 8.0             | REGULAR    |  8.620 us |  1.00 | 1.3428 | 0.0610 |   16888 B |        1.00 |
+| 'Deserialize: REGULAR: XmlSerDe'   | .NET 8.0             | REGULAR    |  2.510 us |  0.29 | 0.0610 |      - |     808 B |        0.05 |
+|----------------------------------- |--------------------- |----------- |----------:|------:|-------:|-------:|----------:|------------:|
+| 'Deserialize: REGULAR: System.Xml' | .NET Framework 4.7.2 | REGULAR    | 11.306 us |  1.00 | 2.7161 | 0.1221 |   17114 B |        1.00 |
+| 'Deserialize: REGULAR: XmlSerDe'   | .NET Framework 4.7.2 | REGULAR    |  8.218 us |  0.73 | 0.1984 |      - |    1292 B |        0.08 |
+```
+
+`Gen0` and `Gen1` are collections per 1000 operations, and they are the part of the memory story `Allocated` cannot tell. XmlSerDe triggers no gen1 collection in any of the six pairs; `System.Xml` triggers one in all six, because its intermediate reader state outlives the gen0 collection that its own allocation rate provokes. Nothing XmlSerDe allocates survives long enough to be promoted — what is left is the object graph, and the caller is still holding that. The gen0 rate falls 22× on REGULAR under .NET 10 and 10× on DEEP under .NET Framework, where the baseline is heaviest.
+
+### Serialization
+
+Measured on net10.0 only: serialization touches neither `XmlScan` nor `XmlTextDecoder`, so it says nothing about the difference between the netstandard2.0 and net8.0+ branches.
+
+```
+| Method                         | Mean     | Ratio | Gen0   | Gen1   | Allocated | Alloc Ratio |
+|------------------------------- |---------:|------:|-------:|-------:|----------:|------------:|
+| 'Serialize: System.Xml'        | 3.751 us |  1.00 | 1.0681 | 0.0381 |   13456 B |        1.00 |
+| 'Serialize: XmlSerDe'          | 1.134 us |  0.30 | 0.5512 | 0.0057 |    6928 B |        0.51 |
+| 'Serialize: XmlSerDe (est)'    | 1.047 us |  0.28 | 0.4025 | 0.0019 |    5072 B |        0.38 |
+| 'Serialize: XmlSerDe (stream)' | 1.140 us |  0.30 | 0.0305 |      - |     384 B |        0.03 |
+```
+
+The three XmlSerDe rows are three exhausters, not three implementations:
+
+1. **plain** — appends into a `StringBuilder` that grows as needed.
+2. **`(est)`** — runs a length-estimation pass first, then serializes into a pre-sized `StringBuilder`. One extra walk of the object graph buys the removal of every intermediate buffer: same time, 27% fewer bytes.
+3. **`(stream)`** — writes UTF-8 binary through `Utf8BinaryExhauster` into an `ArrayPool<byte>` buffer (the benchmark discards the output). No string is ever built, which is where the 384 B comes from.
+
+### How to read these tables
+
+- **Read `Ratio`, not `Mean`.** Every absolute figure here is specific to one machine, one SDK and one OS build. `System.Xml` is code neither project controls, and across earlier runs of this same benchmark its REGULAR baseline has moved between 7.3 and 9.2 us. Comparing microseconds across runs mostly measures the machine; comparing a benchmark to the baseline captured beside it does not.
+- **Each runtime is its own comparison.** .NET Framework's `System.Xml` is ~40% slower than .NET 10's to begin with, so its rows must be read against its own 1.00 and never against .NET 10's. Doing that, XmlSerDe wins by 1.9× on DEEP and 1.4× on REGULAR there, versus 5.7× and 3.8× on .NET 10.
+- **`Alloc Ratio` is the more stable of the two.** Allocation is deterministic — it does not drift with CPU frequency, background load or JIT tiering — so 0.05 on REGULAR is a firmer claim than any timing on this page.
+- **DEEP is a stress shape, not a realistic document.** It exists to make an *O(size × depth)* algorithm impossible to miss; see below.
+
+### What the numbers mean
+
+**Deserialization allocates the object graph, and only the object graph.** 808 B on REGULAR is exactly the resulting objects — the same property DEEP has, where all 3272 B are the 100 nodes plus their payload string. Two separate sources of waste were removed to get there, both found by decomposing an allocation figure rather than by reading code (`GC.GetAllocatedBytesForCurrentThread` deltas around a single warmed-up call, which agree with BenchmarkDotNet to the byte):
+
+| | Before | After |
+|---|---:|---:|
+| A member with entity references | 232 B | **104 B** |
+| A member with two CDATA sections | 384 B | **176 B** |
+| REGULAR document, whole deserialize | 1144 B | **808 B** |
+
+`WebUtility.HtmlDecode` takes a `string`, so every text body containing a reference had to be materialized just to be handed over and thrown away — 336 of 1144 bytes on REGULAR, 29%, that never reached the result. `XmlTextDecoder` expands references and CDATA straight out of the span into a buffer (stack below 256 chars, `ArrayPool` above) and materializes exactly once.
+
+Array members were accumulated in a `List<T>` and copied out with `ToArray()`, costing the list object, its backing array, another array per doubling, and finally the result. `PooledArrayBuilder<T>` takes the intermediate buffers from `ArrayPool<T>`:
+
+| Member | Before | After | The result itself |
+|---|---:|---:|---:|
+| `int[1]` | 128 B | **56 B** | 32 B + 24 B for the POCO |
+| `int[10]` | 304 B | **88 B** | 64 B + 24 B |
+| `int[100]` | 1632 B | **448 B** | 424 B + 24 B |
+| `int[1000]` | 12472 B | **4048 B** | 4024 B + 24 B |
+
+The "after" column is exactly the array plus the object holding it: the overhead is not reduced but gone. Neither benchmark document has an array member, so this does not appear in the tables above — it was measured directly.
+
+**DEEP is in the suite because it once read 9.39.** Deserialization used to be quadratic in nesting depth: 26% faster than `System.Xml` at depth 6, **9.4× slower** at depth 100. To hand back a node, `XmlNode2.GetFirst` first had to know where that node ended, and it found out by recursively parsing the node's entire subtree and discarding the result — so the subtree of a node at depth *d* was re-walked once per ancestor. Instrumentation counted 110 head scans per deserialize of a 26-element document, of which 78 existed only to skip over subtrees, with total character traffic 3.4× the document length.
+
+| Category | Ratio before | Ratio now |
+|----------|-------------:|----------:|
+| DEEP     | 9.39         | **0.18**  |
+| REGULAR  | 0.74         | **0.26**  |
+
+The fix was to stop measuring nodes before parsing them: generated `DeserializeBody` methods now report how much input they consumed, `XmlScan.ReadHead` reads one tag head and never descends, and an unbound element is skipped by a cheap quote-aware tag-balance count instead of being fully parsed. `XmlNode2` remains as the public node-oriented API but is off the hot path. The analysis, the counters and the design are in [docs/perf-single-pass-parser.md](docs/perf-single-pass-parser.md); the earlier investigation that first identified the multiplier is in [docs/perf-redundant-head-scans.md](docs/perf-redundant-head-scans.md). Both also document the benchmarking methodology — including why an A/B switch must be a `static readonly` field read from an environment variable (a plain mutable `static bool` breaks inlining and distorted an entire run by ~1 us).
+
+Two behaviours changed as a side effect, both strictly less lossy than before: a self-closing child no longer ends the sibling loop (`GetFirstLength` returned length 0 for a bodyless node, which the generated loop read as "no more children", silently dropping everything after `<Foo/>`), and a polymorphic member is now dispatched by member name first and `xsi:type` second.
+
+**Spec compliance is not paid for in the hot loop.** Quote-aware tag-head scanning, the full `S` production for whitespace, and attribute-value normalization initially cost more than intended, because `IndexOfAny("/> \t\r\n")` is six characters and the runtime only vectorizes `IndexOfAny(ReadOnlySpan<T>)` for up to five, falling back to a probabilistic scan beyond that. On net8.0+ that search is now a `SearchValues<char>`, which builds an ASCII bitmap once per process and has no such limit. The netstandard2.0 branch keeps the original workaround: one vectorized `IndexOfAny('/', '>', ' ')` plus a scalar sweep of the short prefix for tab/CR/LF — those are all below `' '` and a legal name character is always above it, so the test is equivalent to a second vectorized search but cheaper than setting one up.
+
+**The netstandard2.0 gap is visible and explainable.** REGULAR allocates 1292 B there against 808 B elsewhere: net8.0+ passes the `ReadOnlySpan<char>` straight into `int.Parse`/`DateTime.Parse`, while netstandard2.0 has no span overloads and must materialize a string per parsed value. DEEP does no parsing at all — one string member at the bottom of the chain — so it stays essentially flat, 3290 B against 3272 B.
+
+**net10.0 and net8.0 are within noise of each other**, in both directions across the two categories. That is the expected result rather than a surprise: every fast path is gated on `NET8_0_OR_GREATER` and nothing is gated on net9 or net10, so the two builds compile the same source. The third target is there to keep that claim honest, and to be where a net9/net10-only API — say `SearchValues.Create(ReadOnlySpan<string>)` for entity names — would land if one were added.
+
+### Running the benchmarks
+
+```bash
+run-benchmarks.bat
+```
+
+The batch file builds in `Release` and prints only the result tables; `dotnet build` output and BenchmarkDotNet's own progress log go to `benchmarks.log`.
+
+`Program.Main` runs two fixtures. They are split because BenchmarkDotNet assigns a job to a whole class — a single `[Benchmark]` cannot pick its own runtime:
+
+| Fixture | Runtimes | What it covers |
+|---------|----------|----------------|
+| `SerializeFixture` | net10.0 | `Serialize:` — plain, length-estimated, and stream variants |
+| `DeserializeFixture` | net472, net8.0, net10.0 | `Deserialize:` — `DEEP` and `REGULAR` categories |
+
+The other fixtures are listed in `Program.Main` commented out, to be swapped in as needed. Among them, `AllocationHotspotsFixture` isolates the individual allocation sources that the enum and `Guid` fixes addressed (`Enum.ToString()`, `Enum.Parse` boxing, `StringBuilder.Append(object?)` boxing of `Guid`), measuring each on its own and in small batches so the per-call cost shows up in `Allocated` rather than being lost in the noise of a full document parse. It and `XmlDecodeStringFixture` measure APIs that do not exist on netstandard2.0 (`Enum.Parse(Type, ReadOnlySpan<char>)`, `Encoding.GetBytes(string, Span<byte>)`), so they are excluded from the `net472` compile rather than rewritten into measuring something else.
+
+#### The REGULAR document
+
+```xml
+<InfoContainer>
+    <InfoCollection>
+        <BaseInfo xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="Derived3Info">
+            <Email>example@example.com</Email>
+        </BaseInfo>
+        <BaseInfo xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="Derived1Info">
+            <BasePersonificationInfo>my string !@#$%^&amp;*()_+|-=\&#39;;[]{},./&lt;&gt;?</BasePersonificationInfo>
+        </BaseInfo>
+        <BaseInfo xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="Derived2Info">
+            <HotKeyUsed>false</HotKeyUsed>
+            <StepsCounter>1</StepsCounter>
+            <EventsTime>
+                <SerializeKeyValue>
+                    <Key>Three</Key>
+                    <Value>
+                        <StartTime>2022-09-28T14:51:39.2438815+03:00</StartTime>
+                        <SecondsSpan>3</SecondsSpan>
+                    </Value>
+                </SerializeKeyValue>
+                <SerializeKeyValue>
+                    <Key>One</Key>
+                    <Value>
+                        <StartTime>2022-09-28T14:28:00.5009069+03:00</StartTime>
+                        <SecondsSpan>0</SecondsSpan>
+                    </Value>
+                </SerializeKeyValue>
+                <SerializeKeyValue>
+                    <Key>Two</Key>
+                    <Value>
+                        <StartTime>2022-09-28T14:28:02.3089553+03:00</StartTime>
+                        <SecondsSpan>1</SecondsSpan>
+                    </Value>
+                </SerializeKeyValue>
+            </EventsTime>
+        </BaseInfo>
+    </InfoCollection>
+</InfoContainer>
+```
+
+The serializer declaration it is bound to, and the four benchmarked entry points:
+
+```csharp
+public InfoContainer Deserialize(ReadOnlySpan<char> xml)
+{
+    XmlSerializerDeserializer.Deserialize(DefaultInjector.Instance, xml, out InfoContainer r);
+    return r;
+}
+
+public string Serialize()
+{
+    var dsbe = new DefaultStringBuilderExhauster();
+    XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
+    return dsbe.ToString();
+}
+
+public string Serialize_Est()
+{
+    var dlee = new DefaultLengthEstimatorExhauster();
+    XmlSerializerDeserializer.Serialize(dlee, DefaultObject, false);
+    var estimateXmlLength = dlee.EstimatedTotalLength;
+
+    var dsbe = new DefaultStringBuilderExhauster(new StringBuilder(estimateXmlLength));
+    XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
+    return dsbe.ToString();
+}
+
+public void Serialize_ToStream_Test()
+{
+    var be = new Utf8BinaryExhausterEmpty();
+    XmlSerializerDeserializer.Serialize(be, DefaultObject, false);
+}
+
+[XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
+[XmlExhauster(typeof(DefaultStringBuilderExhauster))]
+[XmlExhauster(typeof(Utf8BinaryExhausterEmpty))]
+[XmlSubject(typeof(SerializeKeyValue), false)]
+[XmlSubject(typeof(PerformanceTime), false)]
+[XmlSubject(typeof(InfoContainer), true)]
+[XmlSubject(typeof(BaseInfo), false)]
+[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived1Info))]
+[XmlSubject(typeof(Derived1Info), false)]
+[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived2Info))]
+[XmlSubject(typeof(Derived2Info), false)]
+[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived3Info))]
+[XmlSubject(typeof(Derived3Info), false)]
+[XmlFactory(typeof(InfoContainer), "global::" + "XmlSerDe.Tests.Complex.Subject" + "." + nameof(CachedInfoContainer) + "." + nameof(CachedInfoContainer.Reuse) + "()")]
+public partial class XmlSerializerDeserializer
+{
+}
+```
+
 ## Solution structure
 
 | Project | Target | Role |
 |---------|--------|------|
-| **XmlSerDe.Common** | netstandard2.0 | Attributes, `IInjector` / `IExhauster` contracts, and `XmlNode2` — a low-allocation XML node parser over `ReadOnlySpan<char>`. |
-| **XmlSerDe.Components** | net7.0 | Default runtime implementations: injectors and exhausters. |
+| **XmlSerDe.Common** | netstandard2.0; net8.0; net10.0 | Attributes, `IInjector` / `IExhauster` contracts, `XmlScan`/`XmlTextDecoder`, and `XmlNode2` — a low-allocation XML node parser over `ReadOnlySpan<char>`. |
+| **XmlSerDe.Components** | netstandard2.0; net8.0; net10.0 | Default runtime implementations: injectors and exhausters. |
 | **XmlSerDe.Generator** | netstandard2.0 (Roslyn analyzer) | Incremental source generator that emits serialization/deserialization code at compile time. |
-| **XmlSerDe.Tests** | net7.0 | Functional tests (xUnit). |
-| **XmlSerDe.PerformanceTests** | net7.0 | BenchmarkDotNet benchmarks vs `System.Xml.Serialization`. |
+| **XmlSerDe.Tests** | net472; net8.0; net10.0 | Functional tests (xUnit). |
+| **XmlSerDe.PerformanceTests** | net472; net8.0; net10.0 | BenchmarkDotNet benchmarks vs `System.Xml.Serialization`. |
+
+The two runtime libraries are multi-targeted so that a consumer on a modern runtime gets the fast paths — `SearchValues<char>`, span `TryFormat`, span `Parse` overloads — while a netstandard2.0 consumer still compiles and runs. Only method bodies differ between targets; the public surface is identical, because the generator itself is netstandard2.0 and compiles against that build. `net472` in the test and benchmark projects is not about .NET Framework: netstandard2.0 cannot be executed directly, and `net472` is what consumes those assets, so it is the only target under which the `#else` branches actually run. The cost of those fallbacks is measured, not assumed — see [What the numbers mean](#what-the-numbers-mean).
 
 **Dependency flow:** consumer app → `XmlSerDe.Common` + `XmlSerDe.Components` + `XmlSerDe.Generator` (analyzer).
 
@@ -328,244 +554,14 @@ For each serializer class it emits:
 
 **Deserialize:** walks child nodes, dispatches on element name (`SequenceEqual` on spans), resolves polymorphism via `xsi:type`, constructs objects with `new T()` or the `XmlFactory` expression.
 
-## Performance
-
-For the following XML document:
-
-```xml
-<InfoContainer>
-    <InfoCollection>
-        <BaseInfo xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="Derived3Info">
-            <Email>example@example.com</Email>
-        </BaseInfo>
-        <BaseInfo xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="Derived1Info">
-            <BasePersonificationInfo>my string !@#$%^&amp;*()_+|-=\&#39;;[]{},./&lt;&gt;?</BasePersonificationInfo>
-        </BaseInfo>
-        <BaseInfo xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="Derived2Info">
-            <HotKeyUsed>false</HotKeyUsed>
-            <StepsCounter>1</StepsCounter>
-            <EventsTime>
-                <SerializeKeyValue>
-                    <Key>Three</Key>
-                    <Value>
-                        <StartTime>2022-09-28T14:51:39.2438815+03:00</StartTime>
-                        <SecondsSpan>3</SecondsSpan>
-                    </Value>
-                </SerializeKeyValue>
-                <SerializeKeyValue>
-                    <Key>One</Key>
-                    <Value>
-                        <StartTime>2022-09-28T14:28:00.5009069+03:00</StartTime>
-                        <SecondsSpan>0</SecondsSpan>
-                    </Value>
-                </SerializeKeyValue>
-                <SerializeKeyValue>
-                    <Key>Two</Key>
-                    <Value>
-                        <StartTime>2022-09-28T14:28:02.3089553+03:00</StartTime>
-                        <SecondsSpan>1</SecondsSpan>
-                    </Value>
-                </SerializeKeyValue>
-            </EventsTime>
-        </BaseInfo>
-    </InfoCollection>
-</InfoContainer>
-```
-
-Benchmark results (.NET 7.0, Windows 11, Intel Core i7-13700H):
-
-```
-|                         Method |     Mean |     Error |    StdDev |   Gen0 |   Gen1 | Allocated |
-|------------------------------- |---------:|----------:|----------:|-------:|-------:|----------:|
-|        'Serialize: System.Xml' | 3.676 us | 0.0351 us | 0.0293 us | 1.0300 | 0.0343 |   12960 B |
-|          'Serialize: XmlSerDe' | 1.278 us | 0.0185 us | 0.0173 us | 0.5512 |      - |    6920 B |
-|    'Serialize: XmlSerDe (est)' | 1.207 us | 0.0095 us | 0.0084 us | 0.3910 | 0.0019 |    4928 B |
-| 'Serialize: XmlSerDe (stream)' | 1.289 us | 0.0026 us | 0.0022 us | 0.0458 |      - |     592 B |
-
-|                         Method |     Mean |     Error |    StdDev |   Gen0 |   Gen1 | Allocated |
-|------------------------------- |---------:|----------:|----------:|-------:|-------:|----------:|
-|      'Deserialize: System.Xml' | 7.265 us | 0.0404 us | 0.0359 us | 1.2741 | 0.0610 |   16072 B |
-|        'Deserialize: XmlSerDe' | 5.437 us | 0.0486 us | 0.0455 us | 0.0610 |      - |     824 B |
-```
-
-Notes on the benchmark variants:
-
-1. **`(est)`** — runs a length-estimation pass first, then serializes into a pre-sized `StringBuilder`. Slightly different timing, fewer allocations.
-2. **`(stream)`** — serializes to UTF-8 binary via `Utf8BinaryExhauster` (discards output in the benchmark). Low allocations thanks to `ArrayPool<byte>.Rent`.
-3. **Deserialize** — XmlSerDe is faster and allocates roughly 5% of the memory compared to `System.Xml.Serialization`.
-
-### Later deserialize run (.NET 8.0)
-
-The deserialize benchmark now marks `System.Xml` as the BenchmarkDotNet baseline, so the table also reports `Ratio` and `Alloc Ratio`. Prefer those over the absolute `Mean`: the numbers below were measured on a different runtime, SDK and OS build than the run above, and `System.Xml` — code neither project controls — moved from 7.265 us to 9.185 us between them. Comparing absolute microseconds across runs mostly measures the machine, not the library.
-
-```
-| Method                    | Mean     | Error     | StdDev    | Ratio | RatioSD | Gen0   | Gen1   | Allocated | Alloc Ratio |
-|-------------------------- |---------:|----------:|----------:|------:|--------:|-------:|-------:|----------:|------------:|
-| 'Deserialize: System.Xml' | 9.185 us | 0.1770 us | 0.2108 us |  1.00 |    0.00 | 1.3428 | 0.0610 |  16.49 KB |        1.00 |
-| 'Deserialize: XmlSerDe'   | 8.165 us | 0.0490 us | 0.0459 us |  0.88 |    0.02 | 0.0763 |      - |   1.12 KB |        0.07 |
-```
-
-The XML 1.0 spec-compliance work (quote-aware tag-head scanning, the full `S` production for whitespace, attribute-value normalization) initially cost more than intended, because two of its search primitives left the vectorized path:
-
-- `IndexOfAny('/', '>', ' ')` became `IndexOfAny("/> \t\r\n".AsSpan())`. The runtime only has SIMD implementations of `IndexOfAny(ReadOnlySpan<T>)` for **up to five** values and falls back to a probabilistic (bloom-filter) scan beyond that — and `"/> \t\r\n"` is exactly six characters.
-- `IndexOf('>')` became a character-by-character quote-aware loop.
-
-Both run for every element in the document. They were restored to vectorized equivalents that keep the spec-compliant behavior: the six-character search is split into two SIMD three-character searches (the rarer tab/CR/LF one bounded to the shorter prefix), and the quote-aware scan now jumps between boundaries via `IndexOfAny('>', '"', '\'')` plus `IndexOf(quote)`, so its iteration count tracks the number of attributes rather than the length of the tag head.
-
-`Alloc Ratio` of 0.07 reflects the enum and `Guid` fixes described above.
-
-### Previous deserialize run (.NET 8.0) — the quadratic-depth measurement
-
-Two document shapes are benchmarked, each with its own `System.Xml` baseline:
-
-- **REGULAR** — the document shown above: 26 elements, maximum nesting depth 6, indented.
-- **DEEP** — one element inside another, 100 levels down, a single string at the bottom, no indentation (`DeepFixture` in `XmlSerDe.Tests/Deep`). Same work, different shape: wide-and-shallow becomes narrow-and-deep.
-
-Adding DEEP is what exposed the problem the current run fixes:
-
-```
-| Method                             | Categories | Mean       | StdDev    | Ratio | Allocated | Alloc Ratio |
-|----------------------------------- |----------- |-----------:|----------:|------:|----------:|------------:|
-| 'Deserialize: DEEP: System.Xml'    | DEEP       |  15.232 us | 0.1756 us |  1.00 |  29.18 KB |        1.00 |
-| 'Deserialize: DEEP: XmlSerDe'      | DEEP       | 142.771 us | 2.3115 us |  9.39 |   3.20 KB |        0.11 |
-| 'Deserialize: REGULAR: System.Xml' | REGULAR    |   8.483 us | 0.2310 us |  1.00 |  16.49 KB |        1.00 |
-| 'Deserialize: REGULAR: XmlSerDe'   | REGULAR    |   6.284 us | 0.1071 us |  0.74 |   1.12 KB |        0.07 |
-```
-
-Deserialization was quadratic in nesting depth: 26% faster than `System.Xml` at depth 6, **9.4× slower** at depth 100. The cause was structural. To hand back a node, `XmlNode2.GetFirst` first had to know where that node ended, and it found out by recursively parsing the node's entire subtree and discarding the result. The subtree of a node at depth *d* was therefore re-walked once per ancestor, so scanning work grew as *O(size × depth)* — roughly 2.5 million character visits for a 1550-character document nested 100 deep. Depth 6 pays only a ~5× multiplier, small enough to hide behind the allocation win; DEEP made it unmissable.
-
-Ratio 0.88 → 0.74 (REGULAR) came from two earlier changes, found by A/B-measuring each candidate in its own BenchmarkDotNet job rather than by reasoning about complexity:
-
-- **The tag head is scanned once, not twice.** `GetFirstLength` already determined where a node's head ends, its name, and whether it is bodyless — then threw that away and let the `XmlNode2` constructor rediscover all of it. Worth more than everything else at the time, because the scans it eliminated were the expensive ones (heads of materialized nodes).
-- **Finding the end of the name and the end of the head is one pass.** A node whose name runs straight into `>` has no attributes, therefore no quotes, so the quote-aware search is skipped entirely; otherwise it starts at the end of the name instead of at zero. The tab/CR/LF check over the short prefix is scalar — those characters are all below `' '`, a legal name character is always above it, and a literal space cannot appear in the prefix by construction, so the test is equivalent to a second vectorized search but cheaper than setting one up.
-
-### Current deserialize run (.NET 8.0) — single-pass deserialization
-
-```
-| Method                             | Categories | Mean      | StdDev    | Ratio | Allocated | Alloc Ratio |
-|----------------------------------- |----------- |----------:|----------:|------:|----------:|------------:|
-| 'Deserialize: DEEP: System.Xml'    | DEEP       | 14.983 us | 0.0696 us |  1.00 |   29880 B |        1.00 |
-| 'Deserialize: DEEP: XmlSerDe'      | DEEP       |  2.580 us | 0.0369 us |  0.17 |    3272 B |        0.11 |
-| 'Deserialize: REGULAR: System.Xml' | REGULAR    |  7.683 us | 0.0892 us |  1.00 |   16888 B |        1.00 |
-| 'Deserialize: REGULAR: XmlSerDe'   | REGULAR    |  2.460 us | 0.0370 us |  0.32 |     808 B |        0.05 |
-```
-
-| Category | Ratio before | Ratio after | Mean before | Mean after | Allocated before | Allocated after |
-|----------|-------------:|------------:|------------:|-----------:|-----------------:|----------------:|
-| DEEP     | 9.39         | **0.17**    | 142.771 us  | 2.580 us   | 3.20 KB          | 3272 B          |
-| REGULAR  | 0.74         | **0.32**    | 6.284 us    | 2.460 us   | 1.12 KB          | **808 B**       |
-
-All runs are from the same machine. The `System.Xml` baselines are not identical across them — DEEP holds to within 2% (14.983 vs. 15.232), but REGULAR drifted 9% low (7.683 vs. 8.483). That drift works against XmlSerDe rather than for it: a faster baseline is a smaller denominator, so it inflates the ratio. Measured against the original baseline the REGULAR ratio would read 0.29 rather than 0.32, which is to say the figure in the table is the conservative one.
-
-The CPU work and the allocations came down in separate changes. Single-pass deserialization was purely CPU and left allocations untouched at 3.20 KB and 1.12 KB; the drop to 3272 B and 808 B came afterwards, see [Allocations](#allocations) below. Deserializing the REGULAR document now costs **5% of what `System.Xml` allocates** and a third of its time.
-
-**The fix was to stop measuring nodes before parsing them.** A node's length was only ever needed for one thing, and only *after* the node had been parsed: advancing the cursor to the next sibling. Meanwhile the parse itself already reaches the closing tag — a child loop stops precisely at `</Child>` — so the length was being computed twice, once by a throwaway pre-walk and once by the parse that discarded it.
-
-Generated `DeserializeBody` methods now report how much input they consumed, and the pre-walk is gone:
-
-- `XmlScan.ReadHead` reads exactly one tag head at the cursor and never descends into the subtree, so each element's head is scanned once instead of once per ancestor.
-- The body span is no longer clipped on the right; a body method runs until it meets its own end tag, which it verifies by name. That check is now the only thing bounding a nested parse, so mismatched and truncated documents are rejected there (`SinglePassParserFixture`).
-- `XmlScan.SkipBody` — a cheap quote-aware tag-balance count — handles elements with no matching member. Previously *every* element was fully parsed to find its end; now this runs only for elements the POCO doesn't bind, and not at all on a document that matches its POCO.
-- `XmlNode2` remains as the public node-oriented API (`DefaultInjector`, `SpecComplianceFixture`) but is no longer on the deserialization hot path.
-
-Two behaviours changed as a side effect, both strictly less lossy than before:
-
-- **A self-closing child no longer ends the sibling loop.** `GetFirstLength` returned length 0 for a bodyless node, which the generated loop read as "no more children" — everything after `<Foo/>` was silently dropped. Now only `<Foo/>` itself binds nothing.
-- **A polymorphic member is dispatched by member name first, then by `xsi:type`.** The old codegen emitted a variable declaration between `if` and `else if`, so a polymorphic member that was not the first member produced code that did not compile; it also matched any child carrying an `xsi:type` regardless of the member's name.
-
-Instrumentation counted **110** head scans per deserialize of a **26**-element document before this change, of which 78 existed only to skip over subtrees, and total character traffic was 3.4× the document length. The analysis, the counters, and the design are in [docs/perf-single-pass-parser.md](docs/perf-single-pass-parser.md); the earlier investigation that first identified the multiplier is in [docs/perf-redundant-head-scans.md](docs/perf-redundant-head-scans.md). Both also document the benchmarking methodology — including why an A/B switch must be a `static readonly` field read from an environment variable (a plain mutable `static bool` breaks inlining and distorted an entire run by ~1 us).
-
-### Allocations
-
-Deserialization now allocates the resulting object graph and nothing else. Two separate sources of waste were removed; both were found by decomposing an allocation figure rather than by reading code, and the numbers here are `GC.GetAllocatedBytesForCurrentThread` deltas around a single warmed-up call. Where the two overlap, BenchmarkDotNet agrees to the byte: the run above reports exactly the 808 B and 3272 B measured this way.
-
-**Text decoding no longer allocates.** `WebUtility.HtmlDecode` takes a `string`, so every text body containing a reference had to be materialized just to be handed over and thrown away, and consecutive CDATA sections were concatenated through one intermediate string each. On the REGULAR document that was 336 of 1144 bytes — 29% — that never reached the result. `XmlTextDecoder` expands references and CDATA straight out of the `ReadOnlySpan<char>` into a buffer (stack below 256 chars, `ArrayPool` above) and materializes exactly once:
-
-| | Before | After |
-|---|---:|---:|
-| A member with entity references | 232 B | **104 B** |
-| A member with two CDATA sections | 384 B | **176 B** |
-| REGULAR document, whole deserialize | 1144 B | **808 B** |
-
-808 B is precisely the object graph — the same property DEEP already had, where all 3272 B are the 100 nodes plus their payload string.
-
-**Array members no longer allocate a `List<T>` to throw away.** `T[]` was accumulated in a `List<T>` and then copied out with `ToArray()`, so a single member cost the list object, its backing array, another array per doubling, and finally the result. `PooledArrayBuilder<T>` takes the intermediate buffers from `ArrayPool<T>` instead:
-
-| Member | Before | After | The result itself |
-|---|---:|---:|---:|
-| `int[1]` | 128 B | **56 B** | 32 B + 24 B for the POCO |
-| `int[10]` | 304 B | **88 B** | 64 B + 24 B |
-| `int[100]` | 1632 B | **448 B** | 424 B + 24 B |
-| `int[1000]` | 12472 B | **4048 B** | 4024 B + 24 B |
-
-The "after" column is exactly the array plus the object holding it: the overhead is not reduced but gone. Note that neither benchmark document has an array member, so this does not show up in the table above — it was measured directly.
-
-Example serializer declaration and usage from the benchmark fixture:
-
-```csharp
-public InfoContainer Deserialize(ReadOnlySpan<char> xml)
-{
-    XmlSerializerDeserializer.Deserialize(DefaultInjector.Instance, xml, out InfoContainer r);
-    return r;
-}
-
-public string Serialize()
-{
-    var dsbe = new DefaultStringBuilderExhauster();
-    XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
-    return dsbe.ToString();
-}
-
-public string Serialize_Est()
-{
-    var dlee = new DefaultLengthEstimatorExhauster();
-    XmlSerializerDeserializer.Serialize(dlee, DefaultObject, false);
-    var estimateXmlLength = dlee.EstimatedTotalLength;
-
-    var dsbe = new DefaultStringBuilderExhauster(new StringBuilder(estimateXmlLength));
-    XmlSerializerDeserializer.Serialize(dsbe, DefaultObject, false);
-    return dsbe.ToString();
-}
-
-public void Serialize_ToStream_Test()
-{
-    var be = new Utf8BinaryExhausterEmpty();
-    XmlSerializerDeserializer.Serialize(be, DefaultObject, false);
-}
-
-[XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
-[XmlExhauster(typeof(DefaultStringBuilderExhauster))]
-[XmlExhauster(typeof(Utf8BinaryExhausterEmpty))]
-[XmlSubject(typeof(SerializeKeyValue), false)]
-[XmlSubject(typeof(PerformanceTime), false)]
-[XmlSubject(typeof(InfoContainer), true)]
-[XmlSubject(typeof(BaseInfo), false)]
-[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived1Info))]
-[XmlSubject(typeof(Derived1Info), false)]
-[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived2Info))]
-[XmlSubject(typeof(Derived2Info), false)]
-[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived3Info))]
-[XmlSubject(typeof(Derived3Info), false)]
-[XmlFactory(typeof(InfoContainer), "global::" + "XmlSerDe.Tests.Complex.Subject" + "." + nameof(CachedInfoContainer) + "." + nameof(CachedInfoContainer.Reuse) + "()")]
-public partial class XmlSerializerDeserializer
-{
-}
-```
-
-Run benchmarks:
-
-```bash
-dotnet run -c Release --project XmlSerDe.PerformanceTests
-```
-
-`Program.Main` runs `SerializeDeserializeFixture`; the other fixtures are listed there commented out, to be swapped in as needed. Among them, `AllocationHotspotsFixture` isolates the individual allocation sources that the enum and `Guid` fixes addressed (`Enum.ToString()`, `Enum.Parse` boxing, `StringBuilder.Append(object?)` boxing of `Guid`), measuring each on its own and in small batches so the per-call cost is visible in `Allocated` rather than lost in the noise of a full document parse.
-
 ## Building and testing
 
 ```bash
 dotnet build XmlSerDe.sln
 dotnet test XmlSerDe.Tests
 ```
+
+`dotnet test` runs the whole suite three times, once per target framework, so the netstandard2.0 code paths are executed rather than merely compiled.
 
 Generated source files are written to `obj/Generated/` when `EmitCompilerGeneratedFiles` is enabled (as in the test project).
 

@@ -2,7 +2,13 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net7.0</TargetFramework>
+    <!--
+      Те же три таргета, что и у XmlSerDe.Tests, и по той же причине: net472 -
+      единственный способ реально исполнить netstandard2.0-ассеты Common/Components.
+      Хост-процесс BenchmarkDotNet запускается под net10.0, а сборки под остальные
+      джобы он собирает сам - но только если проект эти таргеты поддерживает.
+    -->
+    <TargetFrameworks>net472;net8.0;net10.0</TargetFrameworks>
     <LangVersion>Latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -12,18 +18,38 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.13.8" />
+    <!--
+      0.13.8 не знает про RuntimeMoniker.Net10_0 (её enum заканчивается на Net80),
+      поэтому джоб под net10.0 на ней выразить нечем.
+    -->
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.2" />
     <PackageReference Include="Enums.NET" Version="4.0.1" />
-    <PackageReference Include="Microsoft.XmlSerializer.Generator" Version="7.0.0" />
+    <PackageReference Include="Microsoft.XmlSerializer.Generator" Version="10.0.10" />
   </ItemGroup>
 
    <ItemGroup>
-    <DotNetCliToolReference Include="Microsoft.XmlSerializer.Generator" Version="7.0.0" />
+    <DotNetCliToolReference Include="Microsoft.XmlSerializer.Generator" Version="10.0.10" />
+  </ItemGroup>
+
+  <!--
+    Эти два фикстура меряют ровно те API, которых на netstandard2.0/net472 нет:
+    Enum.Parse(Type, ReadOnlySpan<char>) и Encoding.GetBytes(string, Span<byte>).
+    Переписать их под net472 можно, но тогда они мерили бы уже не то, ради чего
+    написаны. В прогон они не входят (Program.Main держит их закомментированными),
+    поэтому под net472 просто не компилируются.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <Compile Remove="AllocationHotspotsFixture.cs" />
+    <Compile Remove="XmlDecodeStringFixture.cs" />
   </ItemGroup>
 
  <ItemGroup>
     <ProjectReference Include="..\XmlSerDe.Tests\XmlSerDe.Tests.csproj" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.6.0" />
+    <!--
+      Microsoft.CodeAnalysis.Common здесь раньше был закреплён на 4.6.0, хотя ни один
+      бенчмарк Roslyn не использует. BenchmarkDotNet 0.15.2 тянет 4.14.0, и явный пин
+      превращался в NU1605 (понижение версии). Версию выбирает восстановление пакетов.
+    -->
   </ItemGroup>
 
 </Project>

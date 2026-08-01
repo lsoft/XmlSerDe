@@ -12,6 +12,23 @@ namespace XmlSerDe.Components.Injector
     {
         public static readonly DefaultInjector Instance = new DefaultInjector();
 
+        /// <summary>
+        /// На современных таргетах отдаёт спан как есть, и перегрузка
+        /// <c>Parse(roschar, …)</c> выбирается без единой аллокации; на JIT это
+        /// no-op, который инлайнится в ничто.
+        ///
+        /// В netstandard2.0 span-перегрузок Parse не существует вовсе (их нет ни в
+        /// корлибе, ни в System.Memory), поэтому вход приходится материализовать в
+        /// строку. Это единственное место, где различие между таргетами и живёт:
+        /// все 24 вызова Parse ниже написаны одинаково.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#if NET8_0_OR_GREATER
+        private static roschar Parsable(roschar body) => body;
+#else
+        private static string Parsable(roschar body) => body.ToString();
+#endif
+
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out global::System.DateTime result)
         {
@@ -43,12 +60,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out global::System.DateTime result)
         {
-            result = DateTime.Parse(body, CultureInfo.InvariantCulture);
+            result = DateTime.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out global::System.DateTime? result)
         {
-            result = DateTime.Parse(body, CultureInfo.InvariantCulture);
+            result = DateTime.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
 
 
@@ -84,12 +101,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out global::System.Guid result)
         {
-            result = global::System.Guid.Parse(body);
+            result = global::System.Guid.Parse(Parsable(body));
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out global::System.Guid? result)
         {
-            result = global::System.Guid.Parse(body);
+            result = global::System.Guid.Parse(Parsable(body));
         }
 
 
@@ -124,12 +141,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out bool result)
         {
-            result = bool.Parse(body);
+            result = bool.Parse(Parsable(body));
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out bool? result)
         {
-            result = bool.Parse(body);
+            result = bool.Parse(Parsable(body));
         }
 
 
@@ -164,12 +181,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out sbyte result)
         {
-            result = sbyte.Parse(body, CultureInfo.InvariantCulture);
+            result = sbyte.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out sbyte? result)
         {
-            result = sbyte.Parse(body, CultureInfo.InvariantCulture);
+            result = sbyte.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
 
 
@@ -204,12 +221,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out byte result)
         {
-            result = byte.Parse(body, CultureInfo.InvariantCulture);
+            result = byte.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out byte? result)
         {
-            result = byte.Parse(body, CultureInfo.InvariantCulture);
+            result = byte.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
 
 
@@ -244,12 +261,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out ushort result)
         {
-            result = ushort.Parse(body, CultureInfo.InvariantCulture);
+            result = ushort.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out ushort? result)
         {
-            result = ushort.Parse(body, CultureInfo.InvariantCulture);
+            result = ushort.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
 
 
@@ -284,12 +301,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out short result)
         {
-            result = short.Parse(body, CultureInfo.InvariantCulture);
+            result = short.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out short? result)
         {
-            result = short.Parse(body, CultureInfo.InvariantCulture);
+            result = short.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
 
 
@@ -324,12 +341,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out uint result)
         {
-            result = uint.Parse(body, CultureInfo.InvariantCulture);
+            result = uint.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out uint? result)
         {
-            result = uint.Parse(body, CultureInfo.InvariantCulture);
+            result = uint.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
 
 
@@ -364,12 +381,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out int result)
         {
-            result = int.Parse(body, CultureInfo.InvariantCulture);
+            result = int.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out int? result)
         {
-            result = int.Parse(body, CultureInfo.InvariantCulture);
+            result = int.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
 
 
@@ -404,12 +421,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out ulong result)
         {
-            result = ulong.Parse(body, CultureInfo.InvariantCulture);
+            result = ulong.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out ulong? result)
         {
-            result = ulong.Parse(body, CultureInfo.InvariantCulture);
+            result = ulong.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
 
 
@@ -444,12 +461,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out long result)
         {
-            result = long.Parse(body, CultureInfo.InvariantCulture);
+            result = long.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out long? result)
         {
-            result = long.Parse(body, CultureInfo.InvariantCulture);
+            result = long.Parse(Parsable(body), CultureInfo.InvariantCulture);
         }
 
 
@@ -484,12 +501,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out decimal result)
         {
-            result = decimal.Parse(body, NumberStyles.Number, CultureInfo.InvariantCulture);
+            result = decimal.Parse(Parsable(body), NumberStyles.Number, CultureInfo.InvariantCulture);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out decimal? result)
         {
-            result = decimal.Parse(body, NumberStyles.Number, CultureInfo.InvariantCulture);
+            result = decimal.Parse(Parsable(body), NumberStyles.Number, CultureInfo.InvariantCulture);
         }
 
 
