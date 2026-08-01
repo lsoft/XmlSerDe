@@ -511,45 +511,7 @@ namespace XmlSerDe.Components.Injector
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out string result)
         {
-            string? tempResult = null;
-
-        repeat:
-            if (body.StartsWith(global::XmlSerDe.Common.XmlNode2.CDataHead.AsSpan()))
-            {
-                //мы в блоке CDATA, ищем его хвост
-                var headLength = global::XmlSerDe.Common.XmlNode2.CDataHead.Length;
-                var tailLength = global::XmlSerDe.Common.XmlNode2.CDataTail.Length;
-
-                var cdeIndex = body.IndexOf(global::XmlSerDe.Common.XmlNode2.CDataTail.AsSpan());
-                var cDataString = body.Slice(headLength, cdeIndex - headLength);
-                if (tempResult == null)
-                {
-                    tempResult = cDataString.ToString();
-                }
-                else
-                {
-                    tempResult = tempResult + cDataString.ToString();
-                }
-
-                body = body.Slice(cdeIndex + tailLength);
-                goto repeat;
-            }
-
-            if (body.Length == 0)
-            {
-                result = tempResult ?? string.Empty;
-                return;
-            }
-
-            var decoded = global::System.Net.WebUtility.HtmlDecode(body.ToString());
-            if (tempResult == null)
-            {
-                result = decoded;
-            }
-            else
-            {
-                result = tempResult + decoded;
-            }
+            result = global::XmlSerDe.Common.XmlTextDecoder.DecodeElementText(body);
         }
 
 

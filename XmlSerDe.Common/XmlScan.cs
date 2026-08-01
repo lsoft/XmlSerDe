@@ -782,45 +782,14 @@ namespace XmlSerDe.Common
         private static roschar DecodeAttributeValue(roschar rawValue)
         {
             //один векторизованный проход отсекает подавляющее большинство значений,
-            //которым нормализация не нужна вообще, и только потом выясняем детали
+            //которым нормализация не нужна вообще: ни ссылок, ни литеральных
+            //TAB/CR/LF - значит спан можно вернуть как есть, без аллокации
             if (rawValue.IndexOfAny("&\t\r\n".AsSpan()) < 0)
             {
                 return rawValue;
             }
 
-            var hasEntity = rawValue.IndexOf('&') >= 0;
-            var hasLiteralWhitespace = ContainsLiteralTabOrNewline(rawValue);
-
-            if (!hasEntity && !hasLiteralWhitespace)
-            {
-                return rawValue;
-            }
-
-            var normalized = hasLiteralWhitespace
-                ? NormalizeLiteralWhitespace(rawValue)
-                : rawValue.ToString();
-
-            return hasEntity
-                ? global::System.Net.WebUtility.HtmlDecode(normalized).AsSpan()
-                : normalized.AsSpan();
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool ContainsLiteralTabOrNewline(roschar value)
-        {
-            return value.IndexOfAny('\t', '\r', '\n') >= 0;
-        }
-
-        private static string NormalizeLiteralWhitespace(roschar value)
-        {
-            var chars = new char[value.Length];
-            for (var i = 0; i < value.Length; i++)
-            {
-                var c = value[i];
-                chars[i] = (c == '\t' || c == '\r' || c == '\n') ? ' ' : c;
-            }
-
-            return new string(chars);
+            return XmlTextDecoder.DecodeAttributeValue(rawValue).AsSpan();
         }
 
         #endregion

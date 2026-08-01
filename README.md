@@ -286,7 +286,7 @@ XML element names follow XSD conventions:
 
 ## Limitations
 
-- **No CDATA serialization** (CDATA deserialization for strings is partially supported in `DefaultInjector`).
+- **No CDATA serialization** — string content is always emitted entity-escaped, never wrapped in `<![CDATA[...]]>`. Deserialization does read CDATA sections, in any position within an element's text and any number of them.
 - **No malformed-XML *input* protection** — the deserializer does not validate well-formedness of its input; do not use with untrusted input. (Serialization *output*, by contrast, is guarded: `AppendEncoded` rejects string content containing characters illegal per XML 1.0's `Char` production — see [`XmlCharGuard`](#exhauster).)
 - **Parameterless constructor required** unless `[XmlFactory]` is used.
 - Serialized types must be visible to the serializer partial class.
@@ -302,7 +302,7 @@ See also [Out of scope by design](#out-of-scope-by-design) for XML 1.0 features 
 
 XmlSerDe targets POCO ↔ XML data binding, not general-purpose XML processing. The following XML 1.0 / XML Namespaces features are consequences of that scope, not oversights — each is unlikely to matter for typical data-transfer XML (including everything `System.Xml.Serialization` itself produces for the primitives, collections, and polymorphism XmlSerDe supports), but matters for interop with documents from other kinds of XML producers.
 
-- **No DTD support.** A `<!DOCTYPE ...>` in the prolog is skipped over, not parsed — so any custom general entities it declares are not resolved. Only the five predefined XML entities (`&amp;`, `&lt;`, `&gt;`, `&apos;`, `&quot;`) plus numeric character references (`&#49;`, `&#x31;`) are understood (and, leniently, HTML5 named entities like `&nbsp;` via `WebUtility.HtmlDecode`, which technically aren't legal in bare XML without a DTD declaring them). There's also no DTD-based content validation and no fetching of external DTDs.
+- **No DTD support.** A `<!DOCTYPE ...>` in the prolog is skipped over, not parsed — so any custom general entities it declares are not resolved. Only the five predefined XML entities (`&amp;`, `&lt;`, `&gt;`, `&apos;`, `&quot;`) plus character references (`&#49;`, `&#x31;`) are understood; a reference to anything else — including an HTML named entity such as `&nbsp;` — throws, because without a DTD declaring it that is a well-formedness error (XML 1.0 §4.1, WFC: Entity Declared) rather than text to pass through. There's also no DTD-based content validation and no fetching of external DTDs.
 - **No general XML Namespaces support.** Only one namespace is special-cased: `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"` for `xsi:type` polymorphism (the prefix itself is flexible — deserialize resolves whichever prefix is actually bound to that URI). Beyond that, element and attribute names are compared as literal text, prefix included; there's no general prefix-to-URI resolution or default-namespace (`xmlns="uri"`) handling.
 - **No XML-attribute data binding.** Every serialized member becomes a child element; there's no equivalent of `System.Xml.Serialization`'s `[XmlAttribute]` or `[XmlText]`. (`[XmlIgnore]` is the exception — XmlSerDe recognizes `System.Xml.Serialization.XmlIgnoreAttribute` directly, so it can be reused as-is.)
 - **`xml:space`, `xml:lang`, `xml:base` are not interpreted.** In practice this rarely matters for `xml:space`: text content is always preserved verbatim regardless (matching the XML default, `xml:space="preserve"`) — but `xml:space="default"`, which would opt back into whitespace collapsing, has no effect either.
@@ -551,7 +551,7 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | Tests | Feature |
 |-------|---------|
 | `XmlObject1_*` | Empty root, self-closing tags, `xsi:type`, XML comments, stream serialization |
-| `XmlObject2_*` | Primitives, HTML entity decoding, XML declaration stripping |
+| `XmlObject2_*` | Primitives, XML entity decoding, XML declaration stripping |
 | `XmlObject4_5_*` | Abstract polymorphism |
 | `XmlObject6_*` | `List<string>` |
 | `XmlObject7_8_*` | Public fields |
@@ -566,6 +566,7 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | `ComplexFixture` / `ComplexFixtureV2` | Full document with derived types, enums, `DateTime`, `XmlFactory` reuse |
 | `DeepFixture` | Self-referencing type nested 100 levels deep; guards the DEEP benchmark by asserting the whole chain is walked and matches `System.Xml` |
 | `SinglePassParserFixture` | Consequences of single-pass deserialization: unknown elements skipped by tag balance (incl. `>` inside attribute values, CDATA, nested children), self-closing children not ending the sibling loop, mismatched/truncated closing tags rejected, compact vs. indented parity |
+| `XmlTextDecoderFixture` | Reference expansion per XML 1.0 §4.1: the five predefined entities, decimal/hex character references incl. above-BMP surrogate pairs, CDATA in any position, attribute-value normalization vs. references, and every reference form XML rejects (undeclared, unterminated, empty, uppercase `X`, illegal or out-of-range code point) |
 | `SerDeFixtureV2` | Same feature set as `SerDeFixture`, exercised through a second serializer declaration to catch cross-class code-gen issues |
 | `CoverageExpansionFixture` | All primitive types incl. `decimal`/`Guid` round-trips, nullable value-type omission on serialize, length-estimator accuracy, empty/null collections, CDATA strings (including concatenated blocks), HTML-entity-encoded string serialization |
 | `SpecComplianceFixture` | XML 1.0 edge cases: unescaped `>` in attribute values (including a foreign-producer-style extra attribute during polymorphic deserialize), prolog processing instructions / `DOCTYPE` (incl. internal subset) being skipped, attribute-value whitespace normalization vs. character references |
