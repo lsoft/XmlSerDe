@@ -48,6 +48,7 @@
     <ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" SetTargetFramework="TargetFramework=netstandard2.0" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" />
     <ProjectReference Include="..\XmlSerDe.Components\XmlSerDe.Components.csproj" />
+    <ProjectReference Include="..\XmlSerDe.Compat\XmlSerDe.Compat.csproj" />
   </ItemGroup>
 
 </Project>
