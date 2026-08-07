@@ -194,16 +194,38 @@ namespace XmlSerDe.Tests.Interop
         [Fact]
         public void Specified_Test() => AssertInterop(
             InteropCorpus.Specified(),
-            canReadSystemXml: true, systemXmlCanReadOurs: false, sameShape: false,
-            because: "паттерн XxxSpecified не поддержан: член пишется всегда, тогда как BCL "
-                + "при ValueSpecified=false его опускает");
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XxxSpecified=false убирает член из документа на записи, а встреченный "
+                + "элемент взводит спутник на чтении");
 
+        #endregion
+
+        #region расхождение унаследовано от BCL, а не наше
+
+        /// <summary>
+        /// Единственная форма, где «НЕТ» в обоих направлениях чтения - не дефект
+        /// XmlSerDe: <see cref="System.ComponentModel.DefaultValueAttribute"/> лишает
+        /// документ значения, а на чтении BCL умолчание <b>не</b> восстанавливает.
+        /// Форма документа при этом совпадает точь-в-точь.
+        ///
+        /// Чтобы это не приняли за нашу потерю, тест отдельно показывает, что и BCL
+        /// не замыкает round-trip на собственном выводе.
+        /// </summary>
         [Fact]
-        public void DefaultValue_Test() => AssertInterop(
-            InteropCorpus.DefaultValue(),
-            canReadSystemXml: false, systemXmlCanReadOurs: true, sameShape: false,
-            because: "DefaultValue не поддержан: BCL опускает член, равный умолчанию, "
-                + "и на чтении такого документа XmlSerDe оставляет 0 вместо 42");
+        public void DefaultValue_Test()
+        {
+            AssertInterop(
+                InteropCorpus.DefaultValue(),
+                canReadSystemXml: false, systemXmlCanReadOurs: false, sameShape: true,
+                because: "член, равный DefaultValue, не пишет ни одна из сторон, а на чтении "
+                    + "умолчание не восстанавливает тоже ни одна: 42 превращается в 0 у обеих");
+
+            var original = new Subject.DefaultValueSubject { Value = 42, Other = 1 };
+            var bclXml = InteropRunner.SystemXmlSerialize(original);
+            var bclBack = InteropRunner.SystemXmlDeserialize<Subject.DefaultValueSubject>(bclXml);
+
+            Assert.Equal(0, bclBack.Value);
+        }
 
         #endregion
 

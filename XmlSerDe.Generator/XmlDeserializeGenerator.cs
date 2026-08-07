@@ -258,8 +258,36 @@ namespace XmlSerDe.Generator
 
                 Context.AddSource(
                     documentName,
-                    document
+                    SourceText.From(BlankOutWhitespaceOnlyLines(document.ToString()), Encoding.UTF8)
                     );
+            }
+
+            /// <summary>
+            /// Строка из одних пробелов превращается в пустую.
+            ///
+            /// Такие строки появляются там, где в шаблон подставляется условный
+            /// фрагмент, которого в этом конкретном случае нет: отступ вокруг него
+            /// в шаблоне записан, а подставлять в него нечего. Смысла у них никакого,
+            /// а читать сгенерированный код приходится - в него заходят отладчиком.
+            ///
+            /// Строка целиком из пробелов не может оказаться внутри строкового
+            /// литерала: генератор не порождает многострочных литералов вовсе.
+            /// </summary>
+            private static string BlankOutWhitespaceOnlyLines(string source)
+            {
+                var lines = source.Split('\n');
+                for (var i = 0; i < lines.Length; i++)
+                {
+                    var line = lines[i];
+                    var trimmed = line.TrimEnd();
+                    if (trimmed.Length == 0 && line.Length > 0)
+                    {
+                        //перенос строки, если он тут был, надо сохранить
+                        lines[i] = line.EndsWith("\r") ? "\r" : "";
+                    }
+                }
+
+                return string.Join("\n", lines);
             }
         }
 

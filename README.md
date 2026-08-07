@@ -503,7 +503,9 @@ XML element names follow XSD conventions:
 ### Members
 
 - Public fields and properties (including inherited) with accessible setters
-- `[XmlIgnore]` properties are skipped
+- `[XmlIgnore]` members (fields as well as properties) are skipped
+- `[DefaultValue(x)]` members are omitted when equal to `x`. Write side only — `System.Xml.Serialization` does not restore the default on read either, and doing so here would diverge from it
+- The `XxxSpecified` companion pattern is honored: a public `bool` named after the member plus `Specified` gates whether the member is written, and is set to `true` on read as soon as the element is seen
 - Private and protected members are skipped
 - XML names default to the C# type and member names, and are overridden by the `System.Xml.Serialization` naming attributes: `[XmlRoot]`, `[XmlType]`, `[XmlElement]`, `[XmlArray]`, `[XmlArrayItem]`, `[XmlEnum]`. `[XmlElement(Order = n)]` / `[XmlArray(Order = n)]` set the element order on write.
 

@@ -311,6 +311,15 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
             var elementName = GetMemberElementName(member);
 
+            var presenceGuard = GetPresenceGuard(member);
+            if (presenceGuard is not null)
+            {
+                _sb.AppendLine($$"""
+            if({{presenceGuard}})
+            {
+""");
+            }
+
             var canBeNull = !memberType.IsValueType || memberType.IsNullableValueType;
             if (canBeNull)
             {
@@ -414,6 +423,44 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
 
             GenerateSerializeNil(memberType, elementName);
+
+            if (presenceGuard is not null)
+            {
+                _sb.AppendLine($$"""
+            }
+""");
+            }
+        }
+
+        /// <summary>
+        /// Условие, при котором член вообще попадает в документ, - или null, если
+        /// член пишется всегда (тогда и в сгенерированном коде не появляется ничего:
+        /// тип без этих атрибутов получает ровно тот же код, что и раньше).
+        ///
+        /// Оба условия складываются через &amp;&amp;, потому что оба могут стоять на
+        /// одном члене и оба означают "не писать".
+        /// </summary>
+        private static string? GetPresenceGuard(ISymbol member)
+        {
+            var guards = new List<string>();
+
+            var specified = member.GetSpecifiedCompanion();
+            if (specified is not null)
+            {
+                guards.Add($"obj.{specified.Name}");
+            }
+
+            if (member.TryGetDefaultValue(out var defaultValue))
+            {
+                guards.Add($"obj.{member.Name} != {defaultValue.ToLiteral()}");
+            }
+
+            if (guards.Count == 0)
+            {
+                return null;
+            }
+
+            return string.Join(" && ", guards);
         }
 
         /// <summary>
@@ -863,6 +910,15 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
             var elseif = isFirstMember ? "" : "else ";
 
+            //спутник XxxSpecified взводится по факту встречи элемента, а не по итогу
+            //разбора его тела: смысл флага - "член в документе был", и BCL ставит его
+            //так же. Ветка, в которую он попадает, у каждого типа члена своя, поэтому
+            //он подставляется первой же строкой в тело - до любых её собственных условий
+            var specified = member.GetSpecifiedCompanion();
+            var specifiedAssignment = specified is null
+                ? ""
+                : $"result.{specified.Name} = true;";
+
             //пустое тело осмысленно не для всякого типа. У строки пустое лексическое
             //представление есть, и <Foo/> - это "", а не отсутствие значения. У числа,
             //Guid, DateTime и перечисления его нет: разбор пустоты закончился бы
@@ -880,6 +936,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     //{{memberType.ToGlobalDisplayString()}}  {{member.Name}}
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
+                        {{specifiedAssignment}}
                         if(child.{{nameof(XmlHead.IsBodyless)}} && child.{{nameof(XmlHead.IsNil)}}())
                         {
                             //<Foo xsi:nil="true"/> - значения нет, член остаётся null
@@ -902,6 +959,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     //{{memberType.ToGlobalDisplayString()}}  {{member.Name}}
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
+                        {{specifiedAssignment}}
                         if(child.{{nameof(XmlHead.IsBodyless)}})
                         {
                             childConsumed = 0;
@@ -927,6 +985,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     //Enum
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
+                        {{specifiedAssignment}}
                         if(child.{{nameof(XmlHead.IsBodyless)}})
                         {
                             childConsumed = 0;
@@ -975,6 +1034,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     //List<T>
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
+                        {{specifiedAssignment}}
                         if(child.{{nameof(XmlHead.IsBodyless)}} && child.{{nameof(XmlHead.IsNil)}}())
                         {
                             //<Foo xsi:nil="true"/> - коллекции нет вовсе, а не пустая коллекция
@@ -1040,6 +1100,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     //custom type (with custom types dispatching)
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
+                        {{specifiedAssignment}}
                         var childPreciseType = child.{{nameof(XmlHead.GetPreciseNodeType)}}();
 """);
 
@@ -1062,6 +1123,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     //custom type (no custom type dispatch)
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
+                        {{specifiedAssignment}}
                         {{classAndMethodName}}(ref settings, inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);
                         result.{{member.Name}} = iresult;
                     }
@@ -1284,19 +1346,22 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     {
                         continue;
                     }
-
-                    var propertyAttributes = property.GetAttributes();
-                    var ignoreAttribute = propertyAttributes.FirstOrDefault(a => a.AttributeClass != null && a.AttributeClass.ToFullDisplayString() == typeof(XmlIgnoreAttribute).FullName);
-                    if (ignoreAttribute != null)
-                    {
-                        continue;
-                    }
                 }
                 else if (member is IFieldSymbol fieldSymbol)
                 {
                     //nothing to do
                 }
                 else
+                {
+                    continue;
+                }
+
+                //XmlIgnore проверяется на любом члене, а не только на свойстве:
+                //System.Xml.Serialization читает его и на поле тоже
+                var ignoreAttribute = member.GetAttributes().FirstOrDefault(
+                    a => a.AttributeClass != null && a.AttributeClass.ToFullDisplayString() == typeof(XmlIgnoreAttribute).FullName
+                    );
+                if (ignoreAttribute != null)
                 {
                     continue;
                 }
