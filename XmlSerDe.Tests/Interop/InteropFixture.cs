@@ -163,16 +163,13 @@ namespace XmlSerDe.Tests.Interop
                 + "Kind'ах: незначащие нули дробной части не пишутся, а на ровной секунде "
                 + "пропадает и сама точка");
 
-        #endregion
-
-        #region формат расходится, обмен цел
-
         [Fact]
         public void Nullables_Test() => AssertInterop(
             InteropCorpus.Nullables(),
-            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: false,
-            because: "null-члена XmlSerDe не пишет вовсе, а BCL пишет <X xsi:nil=\"true\" />; "
-                + "на чтении обе формы дают null, так что страдает только формат");
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "null у Nullable<T> обе стороны пишут пустым элементом с xsi:nil=\"true\"; "
+                + "объявление xmlns:xsi у BCL стоит на корне, у XmlSerDe - на самом элементе, "
+                + "но это одно и то же имя в одном и том же URI");
 
         #endregion
 

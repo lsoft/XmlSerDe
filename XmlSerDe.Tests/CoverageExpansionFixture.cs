@@ -81,8 +81,13 @@ namespace XmlSerDe.Tests
             Assert.Equal(original.NullableGuid, result.NullableGuid);
         }
 
+        /// <summary>
+        /// Null-члена значащего типа больше не пропадает: он пишется пустым элементом
+        /// с xsi:nil="true". Отличать "члена не было" от "член был и равен default(T)"
+        /// иначе нечем, и System.Xml.Serialization поступает так же.
+        /// </summary>
         [Fact]
-        public void XmlObject31_NullablePrimitives_OmittedOnSerialize_Test()
+        public void XmlObject31_NullablePrimitives_WrittenAsNil_Test()
         {
             var obj = new XmlObject31
             {
@@ -94,11 +99,25 @@ namespace XmlSerDe.Tests
             XmlSerializerDeserializer31.Serialize(sb, obj, false);
             var xml = sb.ToString();
 
-            Assert.DoesNotContain("NullableBool", xml);
-            Assert.DoesNotContain("NullableInt", xml);
-            Assert.DoesNotContain("NullableDecimal", xml);
-            Assert.DoesNotContain("NullableDateTime", xml);
-            Assert.DoesNotContain("NullableGuid", xml);
+            const string Nil = @" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:nil=""true"" />";
+
+            Assert.Contains("<NullableBool" + Nil, xml);
+            Assert.Contains("<NullableInt" + Nil, xml);
+            Assert.Contains("<NullableDecimal" + Nil, xml);
+            Assert.Contains("<NullableDateTime" + Nil, xml);
+            Assert.Contains("<NullableGuid" + Nil, xml);
+
+            //и своё же читается обратно в null
+            XmlSerializerDeserializer31.Deserialize(
+                DefaultInjector.Instance,
+                xml.AsSpan(),
+                out XmlObject31 result);
+
+            Assert.Null(result.NullableBool);
+            Assert.Null(result.NullableInt);
+            Assert.Null(result.NullableDecimal);
+            Assert.Null(result.NullableDateTime);
+            Assert.Null(result.NullableGuid);
         }
 
         [Fact]

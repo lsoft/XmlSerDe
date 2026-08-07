@@ -309,6 +309,8 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             //{{memberType.ToGlobalDisplayString()}} {{member.Name}}
 """);
 
+            var elementName = GetMemberElementName(member);
+
             var canBeNull = !memberType.IsValueType || memberType.IsNullableValueType;
             if (canBeNull)
             {
@@ -324,8 +326,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
             }
 
-
-            var elementName = GetMemberElementName(member);
 
             if (BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType.Symbol, out _))
             {
@@ -413,6 +413,38 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
 """);
 
+            GenerateSerializeNil(memberType, elementName);
+        }
+
+        /// <summary>
+        /// Пустой элемент с <c>xsi:nil="true"</c> для члена, оказавшегося null.
+        ///
+        /// Пишется только для <see cref="Nullable{T}"/>, и это не упрощение, а
+        /// ровно то, что делает System.Xml.Serialization: null-строку, null-ссылку
+        /// на сложный тип и null-коллекцию он молча опускает, а nil ставит только
+        /// там, где иначе значение было бы неотличимо от default(T). Проверено
+        /// прогоном BCL по типу со всеми пятью видами null сразу.
+        ///
+        /// xmlns:xsi объявляется прямо на элементе - там же, где его объявляет
+        /// запись xsi:type: корня у безголового метода под рукой нет, а объявление
+        /// на самом элементе столь же законно и читается обеими сторонами.
+        /// </summary>
+        private readonly void GenerateSerializeNil(
+            TypeSymbol memberType,
+            string elementName
+            )
+        {
+            if (!memberType.IsNullableValueType)
+            {
+                return;
+            }
+
+            _sb.AppendLine($$"""
+            else
+            {
+                exh.{{nameof(IExhauster.Append)}}(@"<{{elementName}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:nil=""true"" />");
+            }
+""");
         }
 
         private readonly string GenerateSerializeCollectionMember(

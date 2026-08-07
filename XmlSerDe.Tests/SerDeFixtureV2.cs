@@ -259,8 +259,10 @@ namespace XmlSerDe.Tests
             XmlSerializerDeserializer14.Serialize(sb, original, false);
             var xml = sb.ToString();
 
-            Assert.DoesNotContain("NullableDateTime", xml);
-            Assert.DoesNotContain("NullableGuid", xml);
+            //null-член теперь не пропадает, а превращается в пустой элемент с
+            //xsi:nil="true" - ровно так же, как это делает System.Xml.Serialization
+            Assert.Contains(@"<NullableDateTime xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:nil=""true"" />", xml);
+            Assert.Contains(@"<NullableGuid xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:nil=""true"" />", xml);
 
             XmlSerializerDeserializer14.Deserialize(
                 DefaultInjector.Instance,
