@@ -352,7 +352,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
             }
 
-            var valueStatement = GenerateSimpleContentStatement(member, memberType, "                ");
+            var valueStatement = GenerateSimpleContentStatement(member, memberType, "                ", XmlPlacement.Text);
 
             if (!memberType.IsValueType)
             {
@@ -425,7 +425,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     ? $"            if({string.Join(" && ", guards)})\r\n            {{"
                     : "            {";
 
-                var valueStatement = GenerateSimpleContentStatement(member, memberType, "                ");
+                var valueStatement = GenerateSimpleContentStatement(member, memberType, "                ", XmlPlacement.Attribute);
 
                 _sb.AppendLine($$"""
 {{open}}
@@ -482,13 +482,23 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         /// Одна лексема без всякой разметки вокруг: так пишется и значение атрибута,
         /// и текст тела. Тегов здесь нет ни у того, ни у другого, поэтому обычный
         /// путь через <see cref="GenerateSerializeEnum"/> не годится.
+        ///
+        /// Экранирование у этих двух мест разное, и разойтись они могут только на
+        /// строке: у всех прочих builtin-типов лексическая форма - цифры, буквы и
+        /// знаки, которых нет ни среди разметки, ни среди пробельных.
         /// </summary>
         private readonly string GenerateSimpleContentStatement(
             ISymbol member,
             TypeSymbol memberType,
-            string indent
+            string indent,
+            XmlPlacement placement
             )
         {
+            if (placement == XmlPlacement.Attribute && memberType.Symbol.SpecialType == SpecialType.System_String)
+            {
+                return $"exh.{nameof(IExhauster.AppendAttributeEncoded)}(obj.{member.Name});";
+            }
+
             if (!memberType.IsEnum)
             {
                 return $"{BuiltinSerializeHeadlessFullMethodName}(exh, obj.{member.Name});";
@@ -1004,10 +1014,27 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 var memberType = ParseMember(member);
 
-                var assignment = memberType.IsEnum
-                    ? $"result.{member.Name} = {GenerateEnumParseStatement(memberType, $"{member.Name}Attribute.{nameof(ParsedAttribute.Value)}")};"
-                    : $"inj.{nameof(IInjector.ParseBody)}({member.Name}Attribute.{nameof(ParsedAttribute.Value)}, out {memberType.GlobalName} {member.Name}Parsed);\r\n"
-                      + $"                result.{member.Name} = {member.Name}Parsed;";
+                var valueExpression = $"{member.Name}Attribute.{nameof(ParsedAttribute.Value)}";
+
+                string assignment;
+                if (memberType.IsEnum)
+                {
+                    assignment = $"result.{member.Name} = {GenerateEnumParseStatement(memberType, valueExpression)};";
+                }
+                else if (memberType.Symbol.SpecialType == SpecialType.System_String)
+                {
+                    //разбирать уже нечего: ParseAttribute отдаёт значение после
+                    //нормализации §3.3.3 и раскрытия ссылок, а ParseBody - это
+                    //декодер текста тела, и второй проход по уже раскрытому
+                    //значению спотыкался бы о литеральный '<', пришедший из &lt;
+                    assignment = $"result.{member.Name} = {valueExpression}.ToString();";
+                }
+                else
+                {
+                    assignment =
+                        $"inj.{nameof(IInjector.ParseBody)}({valueExpression}, out {memberType.GlobalName} {member.Name}Parsed);\r\n"
+                        + $"                result.{member.Name} = {member.Name}Parsed;";
+                }
 
                 _sb.AppendLine($$"""
             //{{memberType.ToGlobalDisplayString()}} {{member.Name}}

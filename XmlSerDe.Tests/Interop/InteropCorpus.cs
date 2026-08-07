@@ -295,10 +295,19 @@ namespace XmlSerDe.Tests.Interop
                 Kind = Subject.RenamedEnum.One,
                 Flag = true,
                 Note = null,
+                NeedsEscaping = "a\r\nb c<d>e&f\"g'h",
                 Payload = "payload",
             },
             (e, o) => InteropSerializer.Serialize(e, o, false),
             (ReadOnlySpan<char> xml, out AttributeSubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
+
+        public static InteropResult AttributeTab() => Check(
+            new AttributeTabSubject
+            {
+                Tabbed = "a\tb",
+            },
+            (e, o) => InteropSerializer.Serialize(e, o, false),
+            (ReadOnlySpan<char> xml, out AttributeTabSubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
 
         public static InteropResult PolymorphicAttributes() => Check(
             new AttributeHolder
@@ -398,6 +407,7 @@ namespace XmlSerDe.Tests.Interop
             new InteropCase(nameof(Ignore), Ignore),
             new InteropCase(nameof(RenamedElement), RenamedElement),
             new InteropCase(nameof(XmlAttributeMember), XmlAttributeMember),
+            new InteropCase(nameof(AttributeTab), AttributeTab),
             new InteropCase(nameof(PolymorphicAttributes), PolymorphicAttributes),
             new InteropCase(nameof(RenamedRoot), RenamedRoot),
             new InteropCase(nameof(RenamedType), RenamedType),

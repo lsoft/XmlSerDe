@@ -206,7 +206,8 @@ namespace XmlSerDe.Tests.Interop
             canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
             because: "XmlAttribute уводит член в голову элемента: имя берётся из атрибута либо "
                 + "из имени члена, перечисление пишется теми же именами, что и в элементе, "
-                + "а null-строка не пишется вовсе - атрибута с отсутствующим значением не бывает");
+                + "а null-строка не пишется вовсе - атрибута с отсутствующим значением не бывает. "
+                + "CR и LF уезжают в числовые ссылки: иначе читатель заменил бы их пробелом");
 
         [Fact]
         public void PolymorphicAttributes_Test() => AssertInterop(
@@ -306,6 +307,42 @@ namespace XmlSerDe.Tests.Interop
                 canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
                 because: "длительность ISO-8601 совпадает посимвольно, включая PT0S у нуля "
                     + "и ведущий минус у отрицательной");
+#endif
+        }
+
+        /// <summary>
+        /// TAB в значении атрибута - второе место (после <see cref="Durations_Test"/>),
+        /// где результат зависит от таргета и где расходимся мы <b>в лучшую сторону</b>.
+        ///
+        /// Читатель обязан заменить литеральный TAB пробелом (XML 1.0 §3.3.3), и
+        /// единственный способ этого избежать - числовая ссылка на записи. На .NET
+        /// её пишет и BCL, а на .NET Framework старый XmlTextWriter оставляет символ
+        /// как есть и теряет его на собственном выводе; тест это показывает отдельно.
+        /// XmlSerDe пишет ссылку на всех таргетах.
+        /// </summary>
+        [Fact]
+        public void AttributeTab_Test()
+        {
+#if NETFRAMEWORK
+            AssertInterop(
+                InteropCorpus.AttributeTab(),
+                canReadSystemXml: false, systemXmlCanReadOurs: true, sameShape: false,
+                because: "на .NET Framework BCL оставляет TAB в значении атрибута литеральным, "
+                    + "и читатель заменяет его пробелом; XmlSerDe пишет &#x9; и довозит символ "
+                    + "до читателя целым");
+
+            var bclXml = InteropRunner.SystemXmlSerialize(
+                new Subject.AttributeTabSubject { Tabbed = "a\tb" }
+                );
+            var bclBack = InteropRunner.SystemXmlDeserialize<Subject.AttributeTabSubject>(bclXml);
+
+            //символ потерян самим BCL, ещё до всякого XmlSerDe
+            Assert.Equal("a b", bclBack.Tabbed);
+#else
+            AssertInterop(
+                InteropCorpus.AttributeTab(),
+                canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+                because: "на .NET обе стороны пишут &#x9;, и TAB переживает round-trip");
 #endif
         }
 

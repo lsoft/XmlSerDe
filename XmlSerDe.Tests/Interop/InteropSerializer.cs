@@ -59,6 +59,7 @@ namespace XmlSerDe.Tests.Interop
     [XmlSubject(typeof(IgnoreSubject), true)]
     [XmlSubject(typeof(RenamedElementSubject), true)]
     [XmlSubject(typeof(AttributeSubject), true)]
+    [XmlSubject(typeof(AttributeTabSubject), true)]
     [XmlSubject(typeof(AttributeBase), false)]
     [XmlSubject(typeof(AttributeHolder), true)]
     [XmlSubject(typeof(RootRenamedSubject), true)]

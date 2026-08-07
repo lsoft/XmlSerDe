@@ -357,6 +357,17 @@ namespace XmlSerDe.Components.Exhauster
             _totalLength += value!.Length + specialSymbolOverhead;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendAttributeEncoded(string? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            _totalLength += value.Length + XmlAttributeEncoder.EstimateOverhead(value);
+        }
+
         private static int CalculateOverheadFromXmlSpecialSymbol(string value)
         {
             const string XmlSpecialCharacters = "<>&`\"";

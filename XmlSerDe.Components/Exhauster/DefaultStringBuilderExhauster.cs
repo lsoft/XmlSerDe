@@ -443,5 +443,16 @@ namespace XmlSerDe.Components.Exhauster
             var encoded = global::System.Net.WebUtility.HtmlEncode(value);
             _sb.Append(encoded);
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendAttributeEncoded(string? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            _sb.Append(XmlAttributeEncoder.Encode(value));
+        }
     }
 }

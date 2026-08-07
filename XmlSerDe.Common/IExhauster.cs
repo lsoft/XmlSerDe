@@ -58,6 +58,17 @@ namespace XmlSerDe.Common
         void Append(TimeSpan? value);
 
         void Append(string? value);
+
+        /// <summary>
+        /// Текст тела элемента: экранируется разметка.
+        /// </summary>
         void AppendEncoded(string? value);
+
+        /// <summary>
+        /// Значение атрибута: сверх разметки экранируются ещё CR, LF и TAB, иначе
+        /// читатель заменит их пробелом и строка с переводом строки не переживёт
+        /// round-trip. См. <see cref="XmlAttributeEncoder"/>.
+        /// </summary>
+        void AppendAttributeEncoded(string? value);
     }
 }

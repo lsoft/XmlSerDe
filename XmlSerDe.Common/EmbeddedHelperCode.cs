@@ -793,4 +793,124 @@ namespace XmlSerDe.Common
         }
     }
 
+    /// <summary>
+    /// Экранирование значения атрибута. От экранирования текста тела оно отличается
+    /// ровно на CR, LF и TAB: в теле это обычные значащие символы, а в значении
+    /// атрибута читатель обязан заменить каждый из них пробелом - это нормализация
+    /// значения атрибута, XML 1.0 §3.3.3, и отменить её нельзя. Единственный способ
+    /// довезти перевод строки до читателя - числовая ссылка, и пишет её тот, кто
+    /// пишет документ. Ровно это делает System.Xml.Serialization.
+    ///
+    /// Кавычка экранируется, апостроф - нет: значение всегда идёт в двойных кавычках.
+    /// Тот же набор замен, что у XmlWriter, символ в символ.
+    /// </summary>
+    public static class XmlAttributeEncoder
+    {
+        /// <summary>
+        /// Возвращает тот же экземпляр, если экранировать нечего: у подавляющего
+        /// большинства значений специальных символов нет вовсе, и платить за них
+        /// копией строки незачем.
+        /// </summary>
+        public static string Encode(string value)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
+
+            var first = IndexOfEscapable(value);
+            if (first < 0)
+            {
+                return value;
+            }
+
+            var sb = new System.Text.StringBuilder(value.Length + EscapedLength);
+            sb.Append(value, 0, first);
+
+            for (var i = first; i < value.Length; i++)
+            {
+                var c = value[i];
+                var replacement = ReplacementOrNull(c);
+                if (replacement is null)
+                {
+                    sb.Append(c);
+                }
+                else
+                {
+                    sb.Append(replacement);
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Сколько символов сверх исходной длины может занять экранирование.
+        /// Оценка сверху: самая длинная замена - <c>&amp;quot;</c>, шесть символов
+        /// на месте одного.
+        /// </summary>
+        public static int EstimateOverhead(string value)
+        {
+            if (value is null)
+            {
+                return 0;
+            }
+
+            var overhead = 0;
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (ReplacementOrNull(value[i]) is not null)
+                {
+                    overhead += EscapedLength;
+                }
+            }
+
+            return overhead;
+        }
+
+        /// <summary>
+        /// Длина самой длинной замены минус сам заменяемый символ, который уже
+        /// посчитан в длине исходной строки.
+        /// </summary>
+        private const int EscapedLength = 5;
+
+        private static int IndexOfEscapable(string value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (ReplacementOrNull(value[i]) is not null)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private static string? ReplacementOrNull(char c)
+        {
+            switch (c)
+            {
+                case '<':
+                    return "&lt;";
+                case '>':
+                    return "&gt;";
+                case '&':
+                    return "&amp;";
+                case '"':
+                    return "&quot;";
+                case '\r':
+                    return "&#xD;";
+                case '\n':
+                    return "&#xA;";
+                case '\t':
+                    return "&#x9;";
+                default:
+                    return null;
+            }
+        }
+    }
+
 }

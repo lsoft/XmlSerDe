@@ -90,7 +90,30 @@ namespace XmlSerDe.Tests.Interop.Subject
         [XmlAttribute("note")]
         public string Note { get; set; }
 
+        /// <summary>
+        /// Значение атрибута нормализуется читателем: CR, LF и TAB он обязан
+        /// заменить пробелом (XML 1.0 §3.3.3). Единственный, кто может это
+        /// предотвратить, - пишущая сторона, числовой ссылкой.
+        ///
+        /// TAB здесь намеренно отсутствует: на нём BCL расходится сам с собой,
+        /// см. <see cref="AttributeTabSubject"/>.
+        /// </summary>
+        [XmlAttribute("esc")]
+        public string NeedsEscaping { get; set; }
+
         public string Payload { get; set; }
+    }
+
+    /// <summary>
+    /// TAB в значении атрибута - единственное место, где BCL расходится сам с собой
+    /// по таргетам. На .NET он пишет <c>&amp;#x9;</c> и переживает round-trip, на
+    /// .NET Framework оставляет символ как есть, и читатель по XML 1.0 §3.3.3
+    /// обязан заменить его пробелом. XmlSerDe пишет ссылку на всех таргетах.
+    /// </summary>
+    public class AttributeTabSubject
+    {
+        [XmlAttribute("t")]
+        public string Tabbed { get; set; }
     }
 
     /// <summary>
