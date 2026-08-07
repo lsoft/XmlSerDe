@@ -187,6 +187,19 @@ namespace XmlSerDe.Tests.Interop
                 + "объявление xmlns:xsi у BCL стоит на корне, у XmlSerDe - на самом элементе, "
                 + "но это одно и то же имя в одном и том же URI");
 
+        /// <summary>
+        /// <see cref="System.Collections.Generic.List{T}"/> без сеттера наполняется
+        /// через <c>Add</c> у уже созданного экземпляра. Только он: массив без сеттера
+        /// BCL не сериализует вовсе (заменить нечем, добавить нельзя), строку и сложный
+        /// тип - тоже. Проверено прогоном по типу со всеми четырьмя случаями сразу.
+        /// </summary>
+        [Fact]
+        public void GetOnlyCollection_Test() => AssertInterop(
+            InteropCorpus.GetOnlyCollection(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "коллекция без сеттера наполняется через Add; та, которую конструктор "
+                + "не создал, пропускается обеими сторонами");
+
         [Fact]
         public void XmlAttributeMember_Test() => AssertInterop(
             InteropCorpus.XmlAttributeMember(),
@@ -209,26 +222,6 @@ namespace XmlSerDe.Tests.Interop
             because: "XmlText делает член телом самого элемента, а атрибут рядом с ним "
                 + "остаётся в голове");
 
-        #endregion
-
-        #region молчаливая потеря данных
-
-        [Fact]
-        public void GetOnlyCollection_Test() => AssertInterop(
-            InteropCorpus.GetOnlyCollection(),
-            canReadSystemXml: false, systemXmlCanReadOurs: false, sameShape: false,
-            because: "коллекция без сеттера пропускается: BCL такой член наполняет через Add "
-                + "у уже созданного экземпляра, XmlSerDe требует сеттер");
-
-        [Fact]
-        public void EmptyCollections_Test() => AssertInterop(
-            InteropCorpus.EmptyCollections(),
-            canReadSystemXml: true, systemXmlCanReadOurs: false, sameShape: true,
-            because: "пустая коллекция от BCL (<X />) теперь читается как пустая, а не как null, "
-                + "и формат совпадает. Обратное направление всё ещё расходится, но уже на стороне BCL: "
-                + "прочитав наш <EmptyList></EmptyList>, он материализует пустым и соседний NullList, "
-                + "которого в документе нет вовсе. Отдельная загадка, разбирать её - в следующий заход");
-
         [Fact]
         public void Specified_Test() => AssertInterop(
             InteropCorpus.Specified(),
@@ -239,6 +232,44 @@ namespace XmlSerDe.Tests.Interop
         #endregion
 
         #region расхождение унаследовано от BCL, а не наше
+
+        /// <summary>
+        /// Загадка «BCL материализует соседний <c>NullList</c>, которого в документе нет»
+        /// разгадана, и разгадка не в нашем документе: <c>XmlSerializer</c> вообще не
+        /// умеет прочитать null-<see cref="System.Collections.Generic.List{T}"/>.
+        /// Список создаётся пустым независимо от того, был ли элемент в документе, -
+        /// проверено чтением <c>&lt;E1&gt;&lt;/E1&gt;</c>, где нет ни одного элемента
+        /// вовсе, и оба списка всё равно приходят пустыми. С массивом того же типа
+        /// такого не происходит: там null остаётся null.
+        ///
+        /// Значит, BCL не замыкает round-trip и на собственном выводе, - тест это
+        /// показывает отдельно. Повторять за ним мы не стали: копировать дефект,
+        /// которому противоречит поведение того же BCL на массиве, незачем.
+        /// </summary>
+        [Fact]
+        public void EmptyCollections_Test()
+        {
+            AssertInterop(
+                InteropCorpus.EmptyCollections(),
+                canReadSystemXml: true, systemXmlCanReadOurs: false, sameShape: true,
+                because: "форма совпадает, наше чтение BCL-вывода тоже. Обратное направление "
+                    + "расходится целиком на стороне BCL: прочитанный им null-List<T> "
+                    + "всегда оказывается пустым списком");
+
+            var bclXml = InteropRunner.SystemXmlSerialize(
+                new Subject.EmptyCollectionsSubject
+                {
+                    EmptyList = new System.Collections.Generic.List<int>(),
+                    EmptyArray = new int[0],
+                }
+                );
+            var bclBack = InteropRunner.SystemXmlDeserialize<Subject.EmptyCollectionsSubject>(bclXml);
+
+            //null-список BCL потерял на собственном выводе, ещё до всякого XmlSerDe;
+            //null-массив рядом с ним при этом остался null
+            Assert.NotNull(bclBack.NullList);
+            Assert.Null(bclBack.NullArray);
+        }
 
         /// <summary>
         /// <see cref="System.TimeSpan"/> - единственная форма, чей результат зависит

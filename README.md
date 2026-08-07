@@ -514,7 +514,7 @@ Three of these have a lexical form that does not follow from the type, and each 
 
 ### Members
 
-- Public fields and properties (including inherited) with accessible setters
+- Public fields and properties (including inherited) with accessible setters. A `List<T>` property without a setter is the one exception: it is filled through `Add` on the instance the constructor created (and skipped entirely if it created none) — matching `System.Xml.Serialization`, which likewise skips a setter-less array, string, or complex type
 - `[XmlIgnore]` members (fields as well as properties) are skipped
 - `[DefaultValue(x)]` members are omitted when equal to `x`. Write side only — `System.Xml.Serialization` does not restore the default on read either, and doing so here would diverge from it
 - The `XxxSpecified` companion pattern is honored: a public `bool` named after the member plus `Specified` gates whether the member is written, and is set to `true` on read as soon as the element is seen
@@ -539,7 +539,7 @@ public class Message
 - **No malformed-XML *input* protection** — the deserializer does not validate well-formedness of its input; do not use with untrusted input. (Serialization *output*, by contrast, is guarded: `AppendEncoded` rejects string content containing characters illegal per XML 1.0's `Char` production — see [`XmlCharGuard`](#exhauster).)
 - **Parameterless constructor required** unless `[XmlFactory]` is used.
 - Serialized types must be visible to the serializer partial class.
-- Members need accessible setters for deserialization.
+- Members need accessible setters for deserialization, except setter-less `List<T>` properties (see [Members](#members)).
 - **Only `List<T>` and `T[]`** as collections.
 - The serializer class must be `partial`.
 - Unknown member types cause a compile-time generator error.

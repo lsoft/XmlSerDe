@@ -1430,12 +1430,13 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 var poolVarName = "pool";
 
                 var assignStatement = GenerateAssignStatement(
+                    member,
                     memberType,
-                    member.Name,
                     poolVarName
                     );
 
                 var poolDeclarationStatement = GeneratePoolDeclarationStatement(
+                    member,
                     memberType,
                     listItemType,
                     poolVarName
@@ -1594,6 +1595,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         /// берутся из пула (см. <see cref="PooledArrayBuilder{T}"/>).
         /// </summary>
         private readonly string GeneratePoolDeclarationStatement(
+            ISymbol member,
             TypeSymbol memberType,
             TypeSymbol listItemType,
             string poolVarName
@@ -1601,6 +1603,16 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
             if (memberType.IsList(out _))
             {
+                if (HasNoSetter(member))
+                {
+                    //наполняется тот экземпляр, что создал конструктор. Не создал -
+                    //наполнять нечего, и член остаётся null: BCL в этом случае
+                    //поступает так же, а не создаёт список за пользователя
+                    return
+                        $"var {poolVarName} = result.{member.Name}"
+                        + $" ?? new global::System.Collections.Generic.List<{listItemType.ToGlobalDisplayString()}>();";
+                }
+
                 return $"var {poolVarName} = new global::System.Collections.Generic.List<{listItemType.ToGlobalDisplayString()}>();";
             }
             else if (memberType.IsArray(out _))
@@ -1612,21 +1624,32 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         }
 
         private readonly string GenerateAssignStatement(
+            ISymbol member,
             TypeSymbol memberType,
-            string memberName,
             string poolVarName
             )
         {
             if (memberType.IsList(out _))
             {
-                return $"result.{memberName} = {poolVarName};";
+                if (HasNoSetter(member))
+                {
+                    //пул и есть сам член - присваивать нечего и нечем
+                    return "";
+                }
+
+                return $"result.{member.Name} = {poolVarName};";
             }
             else if (memberType.IsArray(out _))
             {
-                return $"result.{memberName} = {poolVarName}.{nameof(PooledArrayBuilder<int>.ToArrayAndRelease)}();";
+                return $"result.{member.Name} = {poolVarName}.{nameof(PooledArrayBuilder<int>.ToArrayAndRelease)}();";
             }
 
             throw new InvalidOperationException($"Unknown type {memberType.ToGlobalDisplayString()}");
+        }
+
+        private static bool HasNoSetter(ISymbol member)
+        {
+            return member is IPropertySymbol property && property.SetMethod is null;
         }
 
         private readonly string GenerateListItemParseStatement(
@@ -1742,6 +1765,21 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         }
 
         /// <summary>
+        /// Свойство без сеттера, которое всё-таки участвует в обмене: разобранные
+        /// элементы уходят в <c>Add</c> уже существующего экземпляра, присваивать
+        /// ничего не нужно. Так же поступает и System.Xml.Serialization.
+        ///
+        /// Только <see cref="List{T}"/>, и это не упрощение: массив без сеттера BCL
+        /// не сериализует вовсе - наполнить его через Add нельзя, а заменить нечем.
+        /// Строку и сложный тип без сеттера он тоже пропускает. Проверено прогоном
+        /// по типу со всеми четырьмя случаями сразу.
+        /// </summary>
+        private readonly bool IsFillableWithoutSetter(ISymbol member)
+        {
+            return ParseMember(member).IsList(out _);
+        }
+
+        /// <summary>
         /// Члены типа, разложенные по месту внутри элемента. Считается одинаково
         /// для записи и для чтения: разойдись эти два разложения - разошлись бы
         /// и написанное с прочитанным.
@@ -1836,7 +1874,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 }
                 if (member is IPropertySymbol property)
                 {
-                    if (property.SetMethod == null)
+                    if (property.SetMethod == null && !IsFillableWithoutSetter(member))
                     {
                         continue;
                     }

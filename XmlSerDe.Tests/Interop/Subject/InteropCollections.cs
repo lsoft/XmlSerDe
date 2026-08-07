@@ -69,6 +69,13 @@ namespace XmlSerDe.Tests.Interop.Subject
 
         public List<string> Items { get; }
 
+        /// <summary>
+        /// Сеттера нет, и конструктор экземпляр не создал: наполнять нечего.
+        /// Обе стороны такой член молча пропускают - создавать список
+        /// за пользователя не станет ни одна.
+        /// </summary>
+        public List<string> NeverCreated { get; }
+
         public int Other { get; set; }
     }
 }
