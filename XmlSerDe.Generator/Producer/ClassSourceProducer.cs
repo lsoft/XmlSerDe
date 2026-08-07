@@ -1545,7 +1545,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 var fsa = attrSymbol.ToFullDisplayString();
                 if (fsa.NotIn(
                     XmlDeserializeGenerator.SubjectAttributeFullName,
-                    XmlDeserializeGenerator.DerivedSubjectAttributeFullName,
                     XmlDeserializeGenerator.FactoryAttributeFullName,
                     XmlDeserializeGenerator.ExhausterAttributeFullName,
                     XmlDeserializeGenerator.InjectorAttributeFullName))
@@ -1624,7 +1623,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                     exhaustList.Add(type);
                 }
-                else if (fsa == XmlDeserializeGenerator.InjectorAttributeFullName)
+                else
                 {
                     var ca0 = attribute.ConstructorArguments[0];
                     if (ca0.Kind != TypedConstantKind.Type)
@@ -1639,33 +1638,6 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     }
 
                     injectorList.Add(type);
-                }
-                else
-                {
-                    var ca0 = attribute.ConstructorArguments[0];
-                    if (ca0.Kind != TypedConstantKind.Type)
-                    {
-                        throw new InvalidOperationException("Something wrong with attributes 8");
-                    }
-
-                    var ca1 = attribute.ConstructorArguments[1];
-                    if (ca1.Kind != TypedConstantKind.Type)
-                    {
-                        throw new InvalidOperationException("Something wrong with attributes 9");
-                    }
-
-                    var type = (INamedTypeSymbol)ca0.Value!;
-                    var typegn = type.ToGlobalDisplayString();
-                    var derived = (INamedTypeSymbol)ca1.Value!;
-
-                    if (derived.IsAbstract)
-                    {
-                        throw new InvalidOperationException(
-                            $"{derived.ToGlobalDisplayString()} must be non abstract class"
-                            );
-                    }
-
-                    sinfos[typegn].AddDerived(derived);
                 }
             }
 
@@ -1691,14 +1663,15 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         }
 
         /// <summary>
-        /// <see cref="XmlIncludeAttribute"/> на самом типе - штатный способ
-        /// System.Xml.Serialization объявить наследников, и второй раз, уже своим
-        /// атрибутом на классе-сериализаторе, повторять его незачем.
+        /// <see cref="XmlIncludeAttribute"/> на самом типе - единственный способ
+        /// объявить наследников: своего атрибута для этого больше нет, потому что
+        /// штатный делает ровно то же самое и его к тому же понимает
+        /// System.Xml.Serialization.
         ///
-        /// Наследник, встреченный только здесь, регистрируется как отдельный субъект:
-        /// без этого для него не сгенерировалось бы ни одного метода и объявлять его
-        /// пришлось бы всё равно вручную. Обход рекурсивный - наследник вправе
-        /// объявлять уже своих наследников.
+        /// Наследник регистрируется здесь же как отдельный субъект: без этого для
+        /// него не сгенерировалось бы ни одного метода и объявлять его пришлось бы
+        /// всё равно вручную. Обход рекурсивный - наследник вправе объявлять уже
+        /// своих наследников.
         /// </summary>
         private static void ExpandXmlIncludes(
             Dictionary<string, SerializationInfo> sinfos
@@ -1728,7 +1701,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     }
                     if (ssi.Deriveds.Any(d => SymbolEqualityComparer.Default.Equals(d, included)))
                     {
-                        //этот наследник уже объявлен через XmlDerivedSubject
+                        //тот же XmlInclude объявлен на типе дважды
                         continue;
                     }
 

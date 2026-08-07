@@ -18,10 +18,10 @@ namespace XmlSerDe.Tests.Interop
     /// приходится объявить вручную.
     ///
     /// Наследников это больше не касается: генератор читает штатный
-    /// <see cref="System.Xml.Serialization.XmlIncludeAttribute"/>, поэтому ни второго
-    /// атрибута XmlDerivedSubject, ни отдельного XmlSubject на самого наследника
-    /// не нужно. Порядок атрибутов значим только для XmlDerivedSubject: он ищет базу
-    /// среди уже разобранных, поэтому база обязана стоять выше своих наследников.
+    /// <see cref="System.Xml.Serialization.XmlIncludeAttribute"/>, поэтому отдельного
+    /// XmlSubject на самого наследника не нужно. Порядок атрибутов здесь тоже больше
+    /// не значим - раньше его требовал XmlDerivedSubject, искавший базу среди уже
+    /// разобранных.
     /// </summary>
     [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
 

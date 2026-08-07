@@ -29,10 +29,6 @@ namespace XmlSerDe.Tests
     }
 
     [XmlSubject(typeof(XmlObject4Abstract), false)]
-    [XmlDerivedSubject(typeof(XmlObject4Abstract), typeof(XmlObject4Specific1))]
-    [XmlDerivedSubject(typeof(XmlObject4Abstract), typeof(XmlObject4Specific2))]
-    [XmlSubject(typeof(XmlObject4Specific1), false)]
-    [XmlSubject(typeof(XmlObject4Specific2), false)]
     [XmlSubject(typeof(XmlObject5), true)]
     public partial class XmlSerializerDeserializer4_5
     {
@@ -50,20 +46,12 @@ namespace XmlSerDe.Tests
     }
 
     [XmlSubject(typeof(XmlObject9Base), false)]
-    [XmlDerivedSubject(typeof(XmlObject9Base), typeof(XmlObject9Specific1))]
-    [XmlDerivedSubject(typeof(XmlObject9Base), typeof(XmlObject9Specific2))]
-    [XmlSubject(typeof(XmlObject9Specific1), false)]
-    [XmlSubject(typeof(XmlObject9Specific2), false)]
     [XmlSubject(typeof(XmlObject10), true)]
     public partial class XmlSerializerDeserializer9_10
     {
     }
 
     [XmlSubject(typeof(XmlObject11Abstract), false)]
-    [XmlDerivedSubject(typeof(XmlObject11Abstract), typeof(XmlObject11Specific1))]
-    [XmlDerivedSubject(typeof(XmlObject11Abstract), typeof(XmlObject11Specific2))]
-    [XmlSubject(typeof(XmlObject11Specific1), false)]
-    [XmlSubject(typeof(XmlObject11Specific2), false)]
     [XmlSubject(typeof(XmlObject12), true)]
     public partial class XmlSerializerDeserializer11_12
     {
@@ -125,16 +113,12 @@ namespace XmlSerDe.Tests
 
     [XmlSubject(typeof(XmlObject25), true)]
     [XmlSubject(typeof(XmlObject26), false)]
-    [XmlDerivedSubject(typeof(XmlObject26), typeof(XmlObject27))]
-    [XmlSubject(typeof(XmlObject27), false)]
     public partial class XmlSerializerDeserializer25_26_27
     {
     }
 
     [XmlSubject(typeof(XmlObject28), true)]
     [XmlSubject(typeof(XmlObject29), false)]
-    [XmlDerivedSubject(typeof(XmlObject29), typeof(XmlObject30))]
-    [XmlSubject(typeof(XmlObject30), false)]
     public partial class XmlSerializerDeserializer28_29_30
     {
     }

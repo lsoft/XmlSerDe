@@ -24,6 +24,8 @@ namespace XmlSerDe.Tests
         }
     }
 
+    [System.Xml.Serialization.XmlInclude(typeof(XmlObject11Specific1))]
+    [System.Xml.Serialization.XmlInclude(typeof(XmlObject11Specific2))]
     public abstract class XmlObject11Abstract
     {
         public string StringProperty

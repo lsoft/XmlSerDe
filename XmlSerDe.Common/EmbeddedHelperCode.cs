@@ -83,30 +83,6 @@ namespace XmlSerDe.Common
         }
     }
 
-    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
-    public class XmlDerivedSubjectAttribute : Attribute
-    {
-        public readonly Type SubjectType;
-        public readonly Type DerivedType;
-
-        public XmlDerivedSubjectAttribute(Type subjectType, Type derivedType)
-        {
-            if (subjectType is null)
-            {
-                throw new ArgumentNullException(nameof(subjectType));
-            }
-
-            if (derivedType is null)
-            {
-                throw new ArgumentNullException(nameof(derivedType));
-            }
-
-            SubjectType = subjectType;
-            DerivedType = derivedType;
-        }
-    }
-
-
     public readonly ref struct XmlNode2
     {
         public static readonly string CDataHead = "<![CDATA[";

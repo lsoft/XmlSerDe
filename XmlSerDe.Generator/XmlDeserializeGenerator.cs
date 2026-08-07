@@ -19,7 +19,6 @@ namespace XmlSerDe.Generator
     public class XmlDeserializeGenerator : IIncrementalGenerator
     {
         public static readonly string SubjectAttributeFullName = typeof(XmlSubjectAttribute).FullName;
-        public static readonly string DerivedSubjectAttributeFullName = typeof(XmlDerivedSubjectAttribute).FullName;
         public static readonly string FactoryAttributeFullName = typeof(XmlFactoryAttribute).FullName;
         public static readonly string ExhausterAttributeFullName = typeof(XmlExhausterAttribute).FullName;
         public static readonly string InjectorAttributeFullName = typeof(XmlInjectorAttribute).FullName;
@@ -30,7 +29,7 @@ namespace XmlSerDe.Generator
             IncrementalValuesProvider<ClassDeclarationSyntax> classDeclarations = context.SyntaxProvider
                 .CreateSyntaxProvider(
                     predicate: static (s, _) => IsSyntaxTargetForGeneration(s), // select classes with attributes
-                    transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx)) // select the class with the [XmlSubjectAttribute] or [XmlDerivedSubjectAttribute] attributes
+                    transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx)) // select the class with the [XmlSubjectAttribute] attribute
                 .Where(static m => m is not null)!; // filter out attributed classes that we don't care about
 
             // Combine the selected classes with the `Compilation`
@@ -214,10 +213,7 @@ namespace XmlSerDe.Generator
 
             foreach(var attributeSymbol in nts.GetAttributes())
             {
-                if(attributeSymbol.AttributeClass?.ToFullDisplayString().In(
-                    SubjectAttributeFullName,
-                    DerivedSubjectAttributeFullName
-                    ) ?? false)
+                if(attributeSymbol.AttributeClass?.ToFullDisplayString() == SubjectAttributeFullName)
                 {
                     return cds;
                 }

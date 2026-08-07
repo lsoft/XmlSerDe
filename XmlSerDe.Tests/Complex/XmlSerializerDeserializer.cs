@@ -20,12 +20,6 @@ namespace XmlSerDe.Tests.Complex
     [XmlSubject(typeof(PerformanceTime), false)]
     [XmlSubject(typeof(InfoContainer), true)]
     [XmlSubject(typeof(BaseInfo), false)]
-    [XmlDerivedSubject(typeof(BaseInfo), typeof(Derived1Info))]
-    [XmlSubject(typeof(Derived1Info), false)]
-    [XmlDerivedSubject(typeof(BaseInfo), typeof(Derived2Info))]
-    [XmlSubject(typeof(Derived2Info), false)]
-    [XmlDerivedSubject(typeof(BaseInfo), typeof(Derived3Info))]
-    [XmlSubject(typeof(Derived3Info), false)]
     [XmlFactory(typeof(InfoContainer), "global::" + "XmlSerDe.Tests.Complex.Subject" + "." + nameof(CachedInfoContainer) + "." + nameof(CachedInfoContainer.Reuse) + "()")]
     public partial class XmlSerializerDeserializer
     {

@@ -220,12 +220,6 @@ public void Serialize_ToStream_Test()
 [XmlSubject(typeof(PerformanceTime), false)]
 [XmlSubject(typeof(InfoContainer), true)]
 [XmlSubject(typeof(BaseInfo), false)]
-[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived1Info))]
-[XmlSubject(typeof(Derived1Info), false)]
-[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived2Info))]
-[XmlSubject(typeof(Derived2Info), false)]
-[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived3Info))]
-[XmlSubject(typeof(Derived3Info), false)]
 [XmlFactory(typeof(InfoContainer), "global::" + "XmlSerDe.Tests.Complex.Subject" + "." + nameof(CachedInfoContainer) + "." + nameof(CachedInfoContainer.Reuse) + "()")]
 public partial class XmlSerializerDeserializer
 {
@@ -327,9 +321,11 @@ Registers a type for serialization and deserialization.
 | `SubjectType` | The CLR type to handle. Every member type used in the object graph must be registered before it appears in another type. |
 | `IsRoot` | `true` — generates a public `Deserialize(injector, xml, out T)` and root `Serialize(exh, obj, appendXmlHead)` for this type. Typically exactly one root per serializer class. |
 
-### `[XmlDerivedSubject(typeof(Base), typeof(Derived))]`
+### `[XmlInclude(typeof(Derived))]` — `System.Xml.Serialization`
 
-Enables polymorphic deserialization via `xsi:type`. The base type must already have `[XmlSubject]`, and the derived type must be concrete and registered with its own `[XmlSubject]`. Abstract bases require at least one derived registration.
+Enables polymorphic serialization and deserialization via `xsi:type`. Goes on the **base type**, not on the serializer class, and is the very same attribute `System.Xml.Serialization` reads — so a type already annotated for the BCL needs nothing added.
+
+The generator registers each included type as a subject on its own, so a derived type needs no `[XmlSubject]` of its own. Includes are followed recursively: a derived type may declare its own. Abstract bases require at least one include.
 
 ### `[XmlExhauster(typeof(T))]`
 
@@ -352,9 +348,10 @@ The factory type must provide a `Reset()`-style method that clears state before 
 ### Example: polymorphic serializer
 
 ```csharp
+[XmlInclude(typeof(Derived1Info))]
+public abstract class BaseInfo { /* ... */ }
+
 [XmlSubject(typeof(BaseInfo), false)]
-[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived1Info))]
-[XmlSubject(typeof(Derived1Info), false)]
 [XmlSubject(typeof(InfoContainer), true)]
 public partial class MySerializer { }
 ```
@@ -500,7 +497,7 @@ XML element names follow XSD conventions:
 
 - Classes registered with `[XmlSubject]`
 - **Enums** — serialized as `<EnumTypeName>value</EnumTypeName>`. The generator knows every declared member at compile time, so it emits a `switch` over them on serialize and a chain of span `SequenceEqual` comparisons on deserialize, rather than `Enum.ToString()` / `Enum.Parse` — both of which go through reflection, and `Enum.Parse` additionally boxes its `object` return on every call. `Enum.ToString()` / `Enum.Parse` remain as the fallback arm for values that match no declared member (undefined numeric values, `[Flags]` combinations), so behavior is unchanged for those.
-- **Inheritance** — via `[XmlDerivedSubject]` and `xsi:type`
+- **Inheritance** — via `[XmlInclude]` and `xsi:type`
 - **Collections** — `List<T>` and `T[]` only
 
 ### Members
@@ -508,7 +505,7 @@ XML element names follow XSD conventions:
 - Public fields and properties (including inherited) with accessible setters
 - `[XmlIgnore]` properties are skipped
 - Private and protected members are skipped
-- XML element names match C# type and property names (not configurable)
+- XML names default to the C# type and member names, and are overridden by the `System.Xml.Serialization` naming attributes: `[XmlRoot]`, `[XmlType]`, `[XmlElement]`, `[XmlArray]`, `[XmlArrayItem]`, `[XmlEnum]`. `[XmlElement(Order = n)]` / `[XmlArray(Order = n)]` set the element order on write.
 
 ## Limitations
 
@@ -538,7 +535,7 @@ XmlSerDe targets POCO ↔ XML data binding, not general-purpose XML processing. 
 
 ## How the generator works
 
-`XmlDeserializeGenerator` (`IIncrementalGenerator`) triggers on any `partial class` decorated with `[XmlSubject]` or `[XmlDerivedSubject]`.
+`XmlDeserializeGenerator` (`IIncrementalGenerator`) triggers on any `partial class` decorated with `[XmlSubject]`.
 
 For each serializer class it emits:
 

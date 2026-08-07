@@ -25,10 +25,9 @@ namespace XmlSerDe.Tests.Interop.Subject
 
     /// <summary>
     /// Абстрактная база с наследниками - канонический для обеих сторон полиморфизм
-    /// через xsi:type. У BCL наследники объявляются через <see cref="XmlIncludeAttribute"/>,
-    /// у XmlSerDe - через XmlDerivedSubject на классе-сериализаторе; здесь стоят оба,
-    /// и это само по себе показывает объём дублирования, который снимается, если
-    /// генератор научится читать штатный XmlInclude.
+    /// через xsi:type. Наследники объявляются одним и тем же штатным
+    /// <see cref="XmlIncludeAttribute"/>: своего атрибута для этого у XmlSerDe
+    /// больше нет.
     /// </summary>
     [XmlInclude(typeof(PolyDerived1))]
     [XmlInclude(typeof(PolyDerived2))]

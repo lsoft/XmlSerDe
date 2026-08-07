@@ -72,7 +72,7 @@ namespace XmlSerDe.Generator.Producer
                 if (Deriveds.Count == 0)
                 {
                     throw new InvalidOperationException(
-                        $"{Subject.ToGlobalDisplayString()} must have at least one declared implementation via {nameof(XmlDerivedSubjectAttribute)}"
+                        $"{Subject.ToGlobalDisplayString()} must have at least one declared implementation via {nameof(System.Xml.Serialization.XmlIncludeAttribute)}"
                         );
                 }
             }
