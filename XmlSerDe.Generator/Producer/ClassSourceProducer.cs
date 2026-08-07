@@ -1213,7 +1213,30 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
         #endregion
 
-        private readonly IEnumerable<ISymbol> FilterMembers(
+        /// <summary>
+        /// Члены, которые вообще участвуют в обмене, в том порядке, в котором они
+        /// попадут в документ.
+        /// </summary>
+        private readonly List<ISymbol> FilterMembers(
+            List<ISymbol> members
+            )
+        {
+            var result = new List<ISymbol>(SelectMembers(members));
+
+            //Order задаёт порядок элементов явно. Сортировка устойчивая, поэтому
+            //члены без Order остаются там же, где были объявлены, а список, в котором
+            //Order не поставил никто, не трогается вовсе
+            if (result.Exists(m => m.GetXmlOrder() >= 0))
+            {
+                result = result
+                    .OrderBy(m => m.GetXmlOrder() >= 0 ? m.GetXmlOrder() : int.MaxValue)
+                    .ToList();
+            }
+
+            return result;
+        }
+
+        private readonly IEnumerable<ISymbol> SelectMembers(
             List<ISymbol> members
             )
         {

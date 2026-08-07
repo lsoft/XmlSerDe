@@ -148,6 +148,13 @@ namespace XmlSerDe.Tests.Interop
             canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
             because: "XmlArray переименовывает обёртку, XmlArrayItem - элементы");
 
+        [Fact]
+        public void Ordered_Test() => AssertInterop(
+            InteropCorpus.Ordered(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlElement.Order переставляет члены на записи; на чтении порядок "
+                + "и раньше был не важен - разбор идёт по имени, а не по позиции");
+
         #endregion
 
         #region формат расходится, обмен цел
@@ -170,13 +177,6 @@ namespace XmlSerDe.Tests.Interop
         #endregion
 
         #region молчаливая потеря данных
-
-        [Fact]
-        public void Ordered_Test() => AssertInterop(
-            InteropCorpus.Ordered(),
-            canReadSystemXml: true, systemXmlCanReadOurs: false, sameShape: false,
-            because: "XmlElement.Order не читается, порядок остаётся объявленным в C#; "
-                + "BCL же на чтении своего же порядка ждёт строго и второй член теряет");
 
         [Fact]
         public void GetOnlyCollection_Test() => AssertInterop(

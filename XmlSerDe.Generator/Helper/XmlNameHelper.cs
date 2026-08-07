@@ -96,6 +96,22 @@ namespace XmlSerDe.Generator.Helper
         }
 
         /// <summary>
+        /// Явный порядок элемента (<see cref="XmlElementAttribute.Order"/> либо
+        /// <see cref="XmlArrayAttribute.Order"/>). -1 - порядок не задан;
+        /// именно это значение стоит в самих атрибутах по умолчанию.
+        /// </summary>
+        public static int GetXmlOrder(this ISymbol member)
+        {
+            var order = FindOrder(member, typeof(XmlElementAttribute).FullName, nameof(XmlElementAttribute.Order));
+            if (order >= 0)
+            {
+                return order;
+            }
+
+            return FindOrder(member, typeof(XmlArrayAttribute).FullName, nameof(XmlArrayAttribute.Order));
+        }
+
+        /// <summary>
         /// Наследники, объявленные штатным <see cref="XmlIncludeAttribute"/>.
         /// </summary>
         public static List<INamedTypeSymbol> GetXmlIncludes(this ITypeSymbol type)
@@ -170,6 +186,31 @@ namespace XmlSerDe.Generator.Helper
             }
 
             return null;
+        }
+
+        private static int FindOrder(
+            ISymbol symbol,
+            string attributeFullName,
+            string namedArgumentName
+            )
+        {
+            foreach (var attribute in symbol.GetAttributes())
+            {
+                if (attribute.AttributeClass?.ToFullDisplayString() != attributeFullName)
+                {
+                    continue;
+                }
+
+                foreach (var namedArgument in attribute.NamedArguments)
+                {
+                    if (namedArgument.Key == namedArgumentName && namedArgument.Value.Value is int order)
+                    {
+                        return order;
+                    }
+                }
+            }
+
+            return -1;
         }
 
         private static bool HasAttribute(
