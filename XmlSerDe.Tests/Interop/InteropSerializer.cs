@@ -15,10 +15,13 @@ namespace XmlSerDe.Tests.Interop
     ///
     /// Объём этого списка - сам по себе результат замера: у BCL точка входа
     /// <c>new XmlSerializer(typeof(T))</c> и больше ничего, здесь же каждый тип графа
-    /// приходится объявить вручную, а каждого наследника - ещё и вторым атрибутом,
-    /// дублирующим уже стоящий на типе <see cref="System.Xml.Serialization.XmlIncludeAttribute"/>.
-    /// Порядок атрибутов значим: XmlDerivedSubject ищет базу среди уже разобранных,
-    /// поэтому база обязана стоять выше своих наследников.
+    /// приходится объявить вручную.
+    ///
+    /// Наследников это больше не касается: генератор читает штатный
+    /// <see cref="System.Xml.Serialization.XmlIncludeAttribute"/>, поэтому ни второго
+    /// атрибута XmlDerivedSubject, ни отдельного XmlSubject на самого наследника
+    /// не нужно. Порядок атрибутов значим только для XmlDerivedSubject: он ищет базу
+    /// среди уже разобранных, поэтому база обязана стоять выше своих наследников.
     /// </summary>
     [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
 
@@ -38,18 +41,14 @@ namespace XmlSerDe.Tests.Interop
     [XmlSubject(typeof(EmptyCollectionsSubject), true)]
     [XmlSubject(typeof(GetOnlyCollectionSubject), true)]
 
-    //наследование и полиморфизм
+    //наследование и полиморфизм.
+    //Наследники здесь не объявлены вовсе: и PolyBase, и ConcreteBase несут штатный
+    //XmlInclude, а генератор читает его сам - вместе с регистрацией самих наследников
     [XmlSubject(typeof(InheritanceDerived), true)]
     [XmlSubject(typeof(PolyBase), false)]
-    [XmlDerivedSubject(typeof(PolyBase), typeof(PolyDerived1))]
-    [XmlDerivedSubject(typeof(PolyBase), typeof(PolyDerived2))]
-    [XmlSubject(typeof(PolyDerived1), false)]
-    [XmlSubject(typeof(PolyDerived2), false)]
     [XmlSubject(typeof(PolyHolder), true)]
     [XmlSubject(typeof(PolyListHolder), true)]
     [XmlSubject(typeof(ConcreteBase), false)]
-    [XmlDerivedSubject(typeof(ConcreteBase), typeof(ConcreteDerived))]
-    [XmlSubject(typeof(ConcreteDerived), false)]
     [XmlSubject(typeof(ConcreteBaseHolder), true)]
 
     //атрибутная модель System.Xml.Serialization

@@ -117,6 +117,37 @@ namespace XmlSerDe.Tests.Interop
             canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
             because: "экземпляр не-абстрактной базы, у которой есть наследники, пишется как сама база");
 
+        [Fact]
+        public void RenamedElement_Test() => AssertInterop(
+            InteropCorpus.RenamedElement(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlElement(\"имя\") задаёт имя элемента на обеих сторонах сразу");
+
+        [Fact]
+        public void RenamedEnum_Test() => AssertInterop(
+            InteropCorpus.RenamedEnum(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlEnum(\"имя\") подставляется и в switch записи, и в цепочку сравнений чтения");
+
+        [Fact]
+        public void RenamedRoot_Test() => AssertInterop(
+            InteropCorpus.RenamedRoot(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlRoot(\"имя\") действует только на корень, поэтому корню достаётся "
+                + "отдельный метод записи, а чтение принимает оба имени");
+
+        [Fact]
+        public void RenamedType_Test() => AssertInterop(
+            InteropCorpus.RenamedType(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlType(\"имя\") заменяет имя типа везде: и в корне, и в xsi:type");
+
+        [Fact]
+        public void RenamedArray_Test() => AssertInterop(
+            InteropCorpus.RenamedArray(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlArray переименовывает обёртку, XmlArrayItem - элементы");
+
         #endregion
 
         #region формат расходится, обмен цел
@@ -180,36 +211,6 @@ namespace XmlSerDe.Tests.Interop
         #endregion
 
         #region атрибутная модель System.Xml.Serialization не поддержана
-
-        [Fact]
-        public void RenamedElement_Test() => AssertInterop(
-            InteropCorpus.RenamedElement(),
-            canReadSystemXml: false, systemXmlCanReadOurs: false, sameShape: false,
-            because: "XmlElement(\"имя\") не читается: элемент называется по члену C#");
-
-        [Fact]
-        public void RenamedEnum_Test() => AssertInterop(
-            InteropCorpus.RenamedEnum(),
-            canReadSystemXml: false, systemXmlCanReadOurs: false, sameShape: false,
-            because: "XmlEnum(\"имя\") не читается: член перечисления пишется своим именем C#");
-
-        [Fact]
-        public void RenamedRoot_Test() => AssertInterop(
-            InteropCorpus.RenamedRoot(),
-            canReadSystemXml: false, systemXmlCanReadOurs: false, sameShape: false,
-            because: "XmlRoot(\"имя\") не читается: корень называется по типу C#");
-
-        [Fact]
-        public void RenamedType_Test() => AssertInterop(
-            InteropCorpus.RenamedType(),
-            canReadSystemXml: false, systemXmlCanReadOurs: false, sameShape: false,
-            because: "XmlType(\"имя\") не читается: и корень, и xsi:type называются по типу C#");
-
-        [Fact]
-        public void RenamedArray_Test() => AssertInterop(
-            InteropCorpus.RenamedArray(),
-            canReadSystemXml: false, systemXmlCanReadOurs: false, sameShape: false,
-            because: "XmlArray/XmlArrayItem не читаются: обёртка называется по члену, элемент - по типу");
 
         [Fact]
         public void XmlAttributeMember_Test() => AssertInterop(
