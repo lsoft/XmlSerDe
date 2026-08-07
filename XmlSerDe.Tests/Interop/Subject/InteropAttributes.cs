@@ -66,13 +66,56 @@ namespace XmlSerDe.Tests.Interop.Subject
 
     /// <summary>
     /// <see cref="XmlAttributeAttribute"/>: член уходит в атрибут головы, а не в дочерний элемент.
+    ///
+    /// <see cref="Note"/> оставлен null намеренно: значения "атрибута нет" в XML не
+    /// существует, и BCL такой атрибут просто не пишет (проверено). А вот
+    /// <see cref="Nullable{T}"/> в атрибуте BCL не допускает вовсе - падает на
+    /// построении сериализатора, - поэтому его здесь и нет.
     /// </summary>
     public class AttributeSubject
     {
         [XmlAttribute("id")]
         public int Id { get; set; }
 
+        //без имени: атрибут называется по имени члена
+        [XmlAttribute]
+        public string Tag { get; set; }
+
+        [XmlAttribute("kind")]
+        public RenamedEnum Kind { get; set; }
+
+        [XmlAttribute("flag")]
+        public bool Flag { get; set; }
+
+        [XmlAttribute("note")]
+        public string Note { get; set; }
+
         public string Payload { get; set; }
+    }
+
+    /// <summary>
+    /// Атрибуты и текст на полиморфном члене: и то, и другое пишется в ту же голову,
+    /// где уже стоит xsi:type, причём атрибуты базы идут раньше атрибутов наследника.
+    /// </summary>
+    [XmlInclude(typeof(AttributeDerived))]
+    public class AttributeBase
+    {
+        [XmlAttribute("ba")]
+        public int BaseAttribute { get; set; }
+    }
+
+    public class AttributeDerived : AttributeBase
+    {
+        [XmlAttribute("da")]
+        public int DerivedAttribute { get; set; }
+
+        [XmlText]
+        public string Text { get; set; }
+    }
+
+    public class AttributeHolder
+    {
+        public AttributeBase Item { get; set; }
     }
 
     /// <summary>
@@ -107,9 +150,14 @@ namespace XmlSerDe.Tests.Interop.Subject
 
     /// <summary>
     /// <see cref="XmlTextAttribute"/>: содержимое члена становится текстом самого элемента.
+    /// Вместе с атрибутом - потому что это единственные два места, куда член может
+    /// уехать из своего тега, и уживаться друг с другом они обязаны.
     /// </summary>
     public class TextSubject
     {
+        [XmlAttribute("a")]
+        public string Attribute { get; set; }
+
         [XmlText]
         public string Text { get; set; }
     }

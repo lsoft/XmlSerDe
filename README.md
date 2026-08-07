@@ -520,6 +520,18 @@ Three of these have a lexical form that does not follow from the type, and each 
 - The `XxxSpecified` companion pattern is honored: a public `bool` named after the member plus `Specified` gates whether the member is written, and is set to `true` on read as soon as the element is seen
 - Private and protected members are skipped
 - XML names default to the C# type and member names, and are overridden by the `System.Xml.Serialization` naming attributes: `[XmlRoot]`, `[XmlType]`, `[XmlElement]`, `[XmlArray]`, `[XmlArrayItem]`, `[XmlEnum]`. `[XmlElement(Order = n)]` / `[XmlArray(Order = n)]` set the element order on write.
+- `[XmlAttribute]` moves a member into the owner's start tag (`<Owner id="7">`); `[XmlText]` makes it the owner's body, with no tag of its own. Both accept builtin primitives and enums only — a complex type has no plain lexical form, and `System.Xml.Serialization` refuses the same cases (including `Nullable<T>`) for the same reason. A `null` string attribute is not written at all, and an empty body leaves an `[XmlText]` member `null` — both matching the BCL.
+
+```csharp
+public class Message
+{
+    [XmlAttribute("id")]
+    public int Id { get; set; }        // <Message id="7">
+
+    [XmlText]
+    public string Body { get; set; }   // <Message id="7">body</Message>
+}
+```
 
 ## Limitations
 
@@ -541,9 +553,9 @@ XmlSerDe targets POCO ↔ XML data binding, not general-purpose XML processing. 
 
 - **No DTD support.** A `<!DOCTYPE ...>` in the prolog is skipped over, not parsed — so any custom general entities it declares are not resolved. Only the five predefined XML entities (`&amp;`, `&lt;`, `&gt;`, `&apos;`, `&quot;`) plus character references (`&#49;`, `&#x31;`) are understood; a reference to anything else — including an HTML named entity such as `&nbsp;` — throws, because without a DTD declaring it that is a well-formedness error (XML 1.0 §4.1, WFC: Entity Declared) rather than text to pass through. There's also no DTD-based content validation and no fetching of external DTDs.
 - **No general XML Namespaces support.** Only one namespace is special-cased: `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"` for `xsi:type` polymorphism (the prefix itself is flexible — deserialize resolves whichever prefix is actually bound to that URI). Beyond that, element and attribute names are compared as literal text, prefix included; there's no general prefix-to-URI resolution or default-namespace (`xmlns="uri"`) handling.
-- **No XML-attribute data binding.** Every serialized member becomes a child element; there's no equivalent of `System.Xml.Serialization`'s `[XmlAttribute]` or `[XmlText]`. (`[XmlIgnore]` is the exception — XmlSerDe recognizes `System.Xml.Serialization.XmlIgnoreAttribute` directly, so it can be reused as-is.)
+- **Attribute values are escaped for markup, not for line breaks.** `[XmlAttribute]` values go through the same escaping as element text, which covers `< > & " '` — the quote being the one that could actually break the document. Literal CR/LF/TAB inside a value are written verbatim, whereas `System.Xml.Serialization` writes them as character references (`&#xD;&#xA;`); attribute-value normalization (XML 1.0 §3.3.3) then turns them into spaces on read, so a string with a newline in an attribute does not round-trip.
 - **`xml:space`, `xml:lang`, `xml:base` are not interpreted.** In practice this rarely matters for `xml:space`: text content is always preserved verbatim regardless (matching the XML default, `xml:space="preserve"`) — but `xml:space="default"`, which would opt back into whitespace collapsing, has no effect either.
-- **No mixed content.** An element is parsed as either plain text or a list of child elements, never an interleaving of both — text appearing between child elements is discarded rather than bound to any member.
+- **No mixed content.** An element is parsed as either plain text or a list of child elements, never an interleaving of both — text appearing between child elements is discarded rather than bound to any member. Consequently a type that combines an `[XmlText]` member with element members — which `System.Xml.Serialization` does support — fails to build, rather than silently producing a document with the text missing.
 - **No duplicate-attribute detection.** XML 1.0 forbids two attributes with the same name on one element; XmlSerDe doesn't check for this and silently takes the first match.
 - **`encoding` / `standalone` in the XML declaration are ignored** on both serialize and deserialize. XmlSerDe operates on an already-decoded `ReadOnlySpan<char>`, not raw bytes, so byte-level decoding happens before the library sees the input — a mismatch between a document's declared `encoding` and how the caller actually decoded it is not detected.
 

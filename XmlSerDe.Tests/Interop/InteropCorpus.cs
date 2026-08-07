@@ -291,10 +291,27 @@ namespace XmlSerDe.Tests.Interop
             new AttributeSubject
             {
                 Id = 7,
+                Tag = "tag",
+                Kind = Subject.RenamedEnum.One,
+                Flag = true,
+                Note = null,
                 Payload = "payload",
             },
             (e, o) => InteropSerializer.Serialize(e, o, false),
             (ReadOnlySpan<char> xml, out AttributeSubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
+
+        public static InteropResult PolymorphicAttributes() => Check(
+            new AttributeHolder
+            {
+                Item = new AttributeDerived
+                {
+                    BaseAttribute = 1,
+                    DerivedAttribute = 2,
+                    Text = "text of the derived",
+                },
+            },
+            (e, o) => InteropSerializer.Serialize(e, o, false),
+            (ReadOnlySpan<char> xml, out AttributeHolder r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
 
         public static InteropResult RenamedRoot() => Check(
             new RootRenamedSubject
@@ -323,7 +340,8 @@ namespace XmlSerDe.Tests.Interop
         public static InteropResult XmlTextMember() => Check(
             new TextSubject
             {
-                Text = "text body",
+                Attribute = "attribute value",
+                Text = "text & <body>",
             },
             (e, o) => InteropSerializer.Serialize(e, o, false),
             (ReadOnlySpan<char> xml, out TextSubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
@@ -380,6 +398,7 @@ namespace XmlSerDe.Tests.Interop
             new InteropCase(nameof(Ignore), Ignore),
             new InteropCase(nameof(RenamedElement), RenamedElement),
             new InteropCase(nameof(XmlAttributeMember), XmlAttributeMember),
+            new InteropCase(nameof(PolymorphicAttributes), PolymorphicAttributes),
             new InteropCase(nameof(RenamedRoot), RenamedRoot),
             new InteropCase(nameof(RenamedType), RenamedType),
             new InteropCase(nameof(RenamedArray), RenamedArray),

@@ -22,6 +22,17 @@ namespace XmlSerDe.Generator.Producer
         public const string HeadlessSerializeMethodName = "SerializeBody";
 
         /// <summary>
+        /// Члены с <see cref="System.Xml.Serialization.XmlAttributeAttribute"/> живут
+        /// не в теле, а в голове элемента, и потому не могут разбираться теми же
+        /// методами, что и тело: пишутся они между именем тега и '&gt;', а читаются
+        /// из <see cref="XmlHead.FullHead"/>. Оба метода генерируются только для типов,
+        /// у которых атрибутные члены действительно есть - тип без них получает ровно
+        /// тот же код, что и раньше, включая голову одним литералом.
+        /// </summary>
+        public const string SerializeAttributesMethodName = "SerializeAttributes";
+        public const string DeserializeAttributesMethodName = "DeserializeAttributes";
+
+        /// <summary>
         /// Корень с собственным именем (<see cref="System.Xml.Serialization.XmlRootAttribute"/>)
         /// получает отдельный метод: <see cref="HeadSerializeMethodName"/> пишет тот же тип
         /// под его обычным именем и нужен для элементов коллекций, а совместить оба имени
@@ -139,6 +150,8 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             var typeName = subject.GetXmlTypeName();
             var rootName = subject.GetXmlRootName();
 
+            GenerateSerializeAttributesMethod(subject, exhaustType);
+
             GenerateSerializeMethod(subject, ssi.Deriveds, exhaustType, HeadSerializeMethodName, typeName);
             GenerateSerializeMethod(subject, ssi.Deriveds, exhaustType, HeadlessSerializeMethodName, null);
 
@@ -228,7 +241,15 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 if(obj is {{derived.ToGlobalDisplayString()}} dobj)
                 {
-                    exh.{{nameof(IExhauster.Append)}}(@"<{{elementName}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.GetXmlTypeName()}}"">");
+""");
+                        GenerateElementHead(
+                            "                    ",
+                            elementName!,
+                            XsiTypeAttributes(derived),
+                            derived,
+                            "dobj"
+                            );
+                        _sb.AppendLine($$"""
                     {{HeadlessSerializeMethodName}}(exh, dobj);
                     exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
                     return;
@@ -258,19 +279,18 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 if (withHeadMethod)
                 {
-
-                    _sb.AppendLine($$"""
-
-            exh.{{nameof(IExhauster.Append)}}("<{{elementName}}>");
-
-""");
+                    _sb.AppendLine();
+                    GenerateElementHead(
+                        "            ",
+                        elementName!,
+                        "",
+                        subject,
+                        "obj"
+                        );
+                    _sb.AppendLine();
                 }
 
-                var members = GetMembersBaseFirst(subject);
-                if (members.Count > 0)
-                {
-                    GenerateSerializeMembers(methodName, members);
-                }
+                GenerateSerializeMembers(subject);
 
                 if (withHeadMethod)
                 {
@@ -289,18 +309,231 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         }
 
         private readonly void GenerateSerializeMembers(
-            string methodName,
-            List<ISymbol> members
+            INamedTypeSymbol subject
             )
         {
-            foreach (var member in FilterMembers(members))
+            SplitMembers(subject, out var elements, out _, out var text);
+
+            //атрибутные члены сюда не попадают вовсе: их место - голова, и пишет
+            //их SerializeAttributes ещё до того, как начнётся тело
+            foreach (var member in elements)
             {
-                GenerateSerializeMember(methodName, member);
+                GenerateSerializeMember(member);
+            }
+
+            if (text is not null)
+            {
+                GenerateSerializeTextMember(text);
             }
         }
 
+        /// <summary>
+        /// Член с <see cref="XmlTextAttribute"/>: тело владельца целиком, без
+        /// собственного тега. Ни nil, ни пустого элемента здесь быть не может -
+        /// писать их некуда, - поэтому null просто не пишется, и владелец
+        /// оказывается пустым. Ровно так же поступает System.Xml.Serialization.
+        /// </summary>
+        private readonly void GenerateSerializeTextMember(
+            ISymbol member
+            )
+        {
+            var memberType = ParseMember(member);
+
+            _sb.AppendLine($$"""
+            //{{typeof(XmlTextAttribute).Name}} {{memberType.ToGlobalDisplayString()}} {{member.Name}}
+""");
+
+            var presenceGuard = GetPresenceGuard(member);
+            if (presenceGuard is not null)
+            {
+                _sb.AppendLine($$"""
+            if({{presenceGuard}})
+            {
+""");
+            }
+
+            var valueStatement = GenerateSimpleContentStatement(member, memberType, "                ");
+
+            if (!memberType.IsValueType)
+            {
+                _sb.AppendLine($$"""
+            if(obj.{{member.Name}} is not null)
+            {
+                {{valueStatement}}
+            }
+""");
+            }
+            else
+            {
+                _sb.AppendLine($$"""
+            {{valueStatement}}
+""");
+            }
+
+            if (presenceGuard is not null)
+            {
+                _sb.AppendLine($$"""
+            }
+""");
+            }
+        }
+
+        /// <summary>
+        /// Атрибутные члены одного типа - одним методом, чтобы каждое из шести мест,
+        /// где пишется голова элемента, обошлось одним вызовом. Порядок - тот же
+        /// base-first, что и у элементов: так их пишет и System.Xml.Serialization.
+        /// </summary>
+        private readonly void GenerateSerializeAttributesMethod(
+            INamedTypeSymbol subject,
+            INamedTypeSymbol exhaustType
+            )
+        {
+            SplitMembers(subject, out _, out var attributes, out _);
+            if (attributes.Count == 0)
+            {
+                return;
+            }
+
+            _sb.AppendLine($$"""
+        private static void {{SerializeAttributesMethodName}}({{exhaustType.ToGlobalDisplayString()}} exh, {{subject.ToGlobalDisplayString()}} obj)
+        {
+""");
+
+            foreach (var member in attributes)
+            {
+                var memberType = ParseMember(member);
+                var attributeName = member.GetXmlAttributeName();
+
+                _sb.AppendLine($$"""
+            //{{memberType.ToGlobalDisplayString()}} {{member.Name}}
+""");
+
+                var guards = new List<string>();
+                var presenceGuard = GetPresenceGuard(member);
+                if (presenceGuard is not null)
+                {
+                    guards.Add(presenceGuard);
+                }
+                if (!memberType.IsValueType)
+                {
+                    //null-строку BCL не пишет вовсе: атрибута с "отсутствующим"
+                    //значением в XML не бывает, а пустая строка - это уже не null
+                    guards.Add($"obj.{member.Name} is not null");
+                }
+
+                var open = guards.Count > 0
+                    ? $"            if({string.Join(" && ", guards)})\r\n            {{"
+                    : "            {";
+
+                var valueStatement = GenerateSimpleContentStatement(member, memberType, "                ");
+
+                _sb.AppendLine($$"""
+{{open}}
+                exh.{{nameof(IExhauster.Append)}}(" {{attributeName}}=\"");
+                {{valueStatement}}
+                exh.{{nameof(IExhauster.Append)}}("\"");
+            }
+""");
+            }
+
+            _sb.AppendLine($$"""
+        }
+
+""");
+        }
+
+        /// <summary>
+        /// Голова элемента. У типа без атрибутных членов это по-прежнему один
+        /// литерал целиком - тот же самый, что генератор писал всегда.
+        /// </summary>
+        private readonly void GenerateElementHead(
+            string indent,
+            string elementName,
+            string extraAttributes,
+            ITypeSymbol? attributeOwner,
+            string objExpression
+            )
+        {
+            _sb.AppendLine(
+                GenerateElementHeadLines(indent, elementName, extraAttributes, attributeOwner, objExpression)
+                );
+        }
+
+        private readonly string GenerateElementHeadLines(
+            string indent,
+            string elementName,
+            string extraAttributes,
+            ITypeSymbol? attributeOwner,
+            string objExpression
+            )
+        {
+            if (!HasXmlAttributeMembers(attributeOwner))
+            {
+                return $"{indent}exh.{nameof(IExhauster.Append)}({ToCsharpLiteral("<" + elementName + extraAttributes + ">")});";
+            }
+
+            return
+                $"{indent}exh.{nameof(IExhauster.Append)}({ToCsharpLiteral("<" + elementName + extraAttributes)});\r\n"
+                + $"{indent}{SerializeAttributesMethodName}(exh, {objExpression});\r\n"
+                + $"{indent}exh.{nameof(IExhauster.Append)}(\">\");";
+        }
+
+        /// <summary>
+        /// Одна лексема без всякой разметки вокруг: так пишется и значение атрибута,
+        /// и текст тела. Тегов здесь нет ни у того, ни у другого, поэтому обычный
+        /// путь через <see cref="GenerateSerializeEnum"/> не годится.
+        /// </summary>
+        private readonly string GenerateSimpleContentStatement(
+            ISymbol member,
+            TypeSymbol memberType,
+            string indent
+            )
+        {
+            if (!memberType.IsEnum)
+            {
+                return $"{BuiltinSerializeHeadlessFullMethodName}(exh, obj.{member.Name});";
+            }
+
+            var expression = GenerateEnumToStringExpression(
+                (INamedTypeSymbol)memberType.Symbol,
+                $"obj.{member.Name}",
+                indent
+                );
+
+            return $"exh.{nameof(IExhauster.Append)}({expression});";
+        }
+
+        private static string XsiTypeAttributes(ITypeSymbol derived)
+        {
+            return $" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"{derived.GetXmlTypeName()}\"";
+        }
+
+        /// <summary>
+        /// Кавычки внутри бывают только у xsi:type, поэтому вербатим-литерал
+        /// появляется ровно там же, где появлялся раньше.
+        /// </summary>
+        private static string ToCsharpLiteral(string text)
+        {
+            if (text.IndexOf('"') < 0)
+            {
+                return "\"" + text + "\"";
+            }
+
+            return "@\"" + text.Replace("\"", "\"\"") + "\"";
+        }
+
+        private readonly bool HasXmlAttributeMembers(ITypeSymbol? type)
+        {
+            if (type is not INamedTypeSymbol named)
+            {
+                return false;
+            }
+
+            SplitMembers(named, out _, out var attributes, out _);
+            return attributes.Count > 0;
+        }
+
         private readonly void GenerateSerializeMember(
-            string methodName,
             ISymbol member
             )
         {
@@ -386,7 +619,15 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         _sb.AppendLine($$"""
                 {{elseif}}if(obj.{{member.Name}} is {{derived.ToGlobalDisplayString()}} dobj{{derivedIndex}})
                 {
-                    exh.{{nameof(IExhauster.Append)}}(@"<{{elementName}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.GetXmlTypeName()}}"">");
+""");
+                        GenerateElementHead(
+                            "                    ",
+                            elementName,
+                            XsiTypeAttributes(derived),
+                            derived,
+                            $"dobj{derivedIndex}"
+                            );
+                        _sb.AppendLine($$"""
                     {{HeadlessSerializeMethodName}}(exh, dobj{{derivedIndex}});
                     exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
                 }
@@ -401,7 +642,15 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         _sb.AppendLine($$"""
                 else
                 {
-                    exh.{{nameof(IExhauster.Append)}}(@"<{{elementName}}>");
+""");
+                        GenerateElementHead(
+                            "                    ",
+                            elementName,
+                            "",
+                            memberType.Symbol,
+                            $"obj.{member.Name}"
+                            );
+                        _sb.AppendLine($$"""
                     {{HeadlessSerializeMethodName}}(exh, obj.{{member.Name}});
                     exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
                 }
@@ -410,8 +659,14 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 }
                 else
                 {
+                    GenerateElementHead(
+                        "                ",
+                        elementName,
+                        "",
+                        memberType.Symbol,
+                        $"obj.{member.Name}"
+                        );
                     _sb.AppendLine($$"""
-                exh.{{nameof(IExhauster.Append)}}(@"<{{elementName}}>");
                 {{HeadlessSerializeMethodName}}(exh, obj.{{member.Name}});
                 exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
 """);
@@ -537,12 +792,22 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     );
             }
 
-            var headlessInvocation = BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out _)
+            var isBuiltin = BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out _);
+
+            var headlessInvocation = isBuiltin
                 ? $"{BuiltinSerializeHeadlessFullMethodName}(exh, obj.{member.Name}[index]);"
                 : $"{HeadlessSerializeMethodName}(exh, obj.{member.Name}[index]);";
 
+            var head = GenerateElementHeadLines(
+                "                    ",
+                itemName,
+                "",
+                isBuiltin ? null : listItemType,
+                $"obj.{member.Name}[index]"
+                );
+
             return $$"""
-                    exh.{{nameof(IExhauster.Append)}}("<{{itemName}}>");
+{{head}}
                     {{headlessInvocation}}
                     exh.{{nameof(IExhauster.Append)}}("</{{itemName}}>");
 """;
@@ -563,22 +828,45 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             string enumPropertyExpression
             )
         {
-            var switchArms = GenerateEnumToStringSwitchArms(enumType);
+            var expression = GenerateEnumToStringExpression(
+                enumType,
+                "enumValueToAppend",
+                "                    "
+                );
 
             return $$"""
                 {
                     var enumValueToAppend = obj.{{enumPropertyExpression}};
                     exh.{{nameof(IExhauster.Append)}}("<{{tagName}}>");
-                    exh.{{nameof(IExhauster.Append)}}(enumValueToAppend switch
-                    {
-{{switchArms}}                        _ => enumValueToAppend.ToString(),
-                    });
+                    exh.{{nameof(IExhauster.Append)}}({{expression}});
                     exh.{{nameof(IExhauster.Append)}}("</{{tagName}}>");
                 }
 """;
         }
 
-        private readonly string GenerateEnumToStringSwitchArms(INamedTypeSymbol enumType)
+        /// <summary>
+        /// Выражение <c>значение switch { ... }</c>, отдающее имя члена перечисления
+        /// строкой. Жило внутри <see cref="GenerateSerializeEnum"/>, пока перечисление
+        /// могло попасть только в собственный тег; у члена в атрибуте и у члена в тексте
+        /// тегов нет, а switch нужен ровно тот же.
+        /// </summary>
+        private readonly string GenerateEnumToStringExpression(
+            INamedTypeSymbol enumType,
+            string enumValueExpression,
+            string indent
+            )
+        {
+            var switchArms = GenerateEnumToStringSwitchArms(enumType, indent + "    ");
+
+            return
+                $"{enumValueExpression} switch\r\n"
+                + $"{indent}{{\r\n"
+                + switchArms
+                + $"{indent}    _ => {enumValueExpression}.ToString(),\r\n"
+                + $"{indent}}}";
+        }
+
+        private readonly string GenerateEnumToStringSwitchArms(INamedTypeSymbol enumType, string indent)
         {
             var enumGlobalName = enumType.ToGlobalDisplayString();
             var seenValues = new HashSet<object>();
@@ -596,7 +884,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     continue;
                 }
 
-                sb.AppendLine($"""                        {enumGlobalName}.{field.Name} => "{field.GetXmlEnumName()}",""");
+                sb.AppendLine($"""{indent}{enumGlobalName}.{field.Name} => "{field.GetXmlEnumName()}",""");
             }
 
             return sb.ToString();
@@ -644,6 +932,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
             var subject = ssi.Subject;
 
+            GenerateDeserializeAttributesMethod(injectorType, subject);
             GenerateDeserializeHeadMethod(injectorType, subject);
             GenerateDeserializeHeadedMethod(injectorType, subject, ssi.Deriveds, ssi.IsRoot);
             GenerateDeserializeBodyMethod(injectorType, subject, ssi.FactoryInvocation);
@@ -671,6 +960,89 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {{HeadDeserializeMethodName}}(ref settings, inj, xmlFullNode, roschar.Empty, out result);
         }
 """);
+        }
+
+        /// <summary>
+        /// Разбор атрибутных членов. Голова к этому моменту уже прочитана, так что
+        /// работы здесь ровно столько, сколько атрибутов объявлено: каждый ищется
+        /// в голове по имени.
+        ///
+        /// Отсутствующий атрибут не трогает член вовсе - тот остаётся с тем значением,
+        /// с которым его создал конструктор. Так же ведёт себя и BCL (проверено):
+        /// "атрибута не было" и "атрибут был пустой" - разные случаи, и второй
+        /// действительно присваивает пустую лексему.
+        /// </summary>
+        private readonly void GenerateDeserializeAttributesMethod(
+            INamedTypeSymbol injectorType,
+            INamedTypeSymbol subject
+            )
+        {
+            if (subject.IsAbstract)
+            {
+                //экземпляра такого типа не бывает, присваивать нечему
+                return;
+            }
+
+            SplitMembers(subject, out _, out var attributes, out _);
+            if (attributes.Count == 0)
+            {
+                return;
+            }
+
+            _sb.AppendLine($$"""
+        private static void {{DeserializeAttributesMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, ref {{XmlHeadFullName}} xmlNode, {{subject.ToGlobalDisplayString()}} result)
+        {
+            if(!xmlNode.{{nameof(XmlHead.HasAttributes)}})
+            {
+                return;
+            }
+
+            var attributeSearchStart = xmlNode.{{nameof(XmlHead.DeclaredNodeType)}}.Length + 1;
+""");
+
+            foreach (var member in attributes)
+            {
+                var memberType = ParseMember(member);
+
+                var assignment = memberType.IsEnum
+                    ? $"result.{member.Name} = {GenerateEnumParseStatement(memberType, $"{member.Name}Attribute.{nameof(ParsedAttribute.Value)}")};"
+                    : $"inj.{nameof(IInjector.ParseBody)}({member.Name}Attribute.{nameof(ParsedAttribute.Value)}, out {memberType.GlobalName} {member.Name}Parsed);\r\n"
+                      + $"                result.{member.Name} = {member.Name}Parsed;";
+
+                _sb.AppendLine($$"""
+            //{{memberType.ToGlobalDisplayString()}} {{member.Name}}
+            {{XmlScanFullName}}.{{nameof(XmlScan.ParseAttribute)}}(xmlNode.{{nameof(XmlHead.FullHead)}}, attributeSearchStart, roschar.Empty, "{{member.GetXmlAttributeName()}}".AsSpan(), roschar.Empty, out var {{member.Name}}Attribute);
+            if(!{{member.Name}}Attribute.{{nameof(ParsedAttribute.IsEmpty)}})
+            {
+                {{assignment}}
+            }
+""");
+            }
+
+            _sb.AppendLine($$"""
+        }
+
+""");
+        }
+
+        /// <summary>
+        /// Вызов разбора атрибутов - или пустая строка, если у типа их нет.
+        /// </summary>
+        private readonly string GenerateDeserializeAttributesInvocation(
+            string indent,
+            ITypeSymbol type,
+            string headVarName,
+            string resultExpression
+            )
+        {
+            if (!HasXmlAttributeMembers(type))
+            {
+                return "";
+            }
+
+            var className = DetermineClassName(type);
+
+            return $"\r\n{indent}{className}.{DeserializeAttributesMethodName}(inj, ref {headVarName}, {resultExpression});";
         }
 
         /// <summary>
@@ -741,7 +1113,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 throw new InvalidOperationException("(1) Unknown type " + xmlNodePreciseType.ToString());
             }
 
-            {{HeadlessDeserializeMethodName}}(ref settings, inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}, out result, out bodyConsumed);
+            {{HeadlessDeserializeMethodName}}(ref settings, inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}, out result, out bodyConsumed);{{GenerateDeserializeAttributesInvocation("            ", subject, "xmlNode", "result")}}
         }
 """);
         }
@@ -759,7 +1131,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 //{{nameof(GenerateDeserializeDispatch)}}
                 if (xmlNodePreciseType.SequenceEqual("{{d.GetXmlTypeName()}}".AsSpan()))
                 {
-                    {{classAndMethodName}}(ref settings, inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult, out bodyConsumed);
+                    {{classAndMethodName}}(ref settings, inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult, out bodyConsumed);{{GenerateDeserializeAttributesInvocation("                    ", d, "xmlNode", "iresult")}}
                     result = iresult;
                     return;
                 }
@@ -808,9 +1180,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
             }
 
-            var members = GetMembersBaseFirst(subject);
-
-            GenerateDeserializeMembers(members);
+            GenerateDeserializeMembers(subject);
 
             _sb.AppendLine($$"""
         }
@@ -818,10 +1188,20 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         }
 
         private readonly void GenerateDeserializeMembers(
-            List<ISymbol> members
+            INamedTypeSymbol subject
             )
         {
-            foreach (var member in FilterMembers(members))
+            //атрибутные члены разбираются из головы, а сюда приходит одно тело -
+            //искать их среди детей нечего
+            SplitMembers(subject, out var members, out _, out var text);
+
+            if (text is not null)
+            {
+                GenerateDeserializeTextMember(text);
+                return;
+            }
+
+            foreach (var member in members)
             {
                 _sb.AppendLine($$"""
             var {{member.Name}}Span = "{{GetMemberElementName(member)}}".AsSpan();
@@ -858,7 +1238,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             //а что делать с пустым телом, решает ветка конкретного члена: строке и
             //коллекции есть что присвоить, числу - нечего.
             var isFirstMember = true;
-            foreach (var member in FilterMembers(members))
+            foreach (var member in members)
             {
                 var memberType = ParseMember(member);
 
@@ -898,6 +1278,37 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 var childStep = child.{{nameof(XmlHead.TotalLength)}} + childConsumed;
                 bodyConsumed += childStep;
                 cursor = cursor.Slice(childStep);
+            }
+""");
+        }
+
+        /// <summary>
+        /// Член с <see cref="XmlTextAttribute"/> забирает тело целиком, поэтому
+        /// цикла по детям здесь нет вовсе: детей у такого типа и не бывает
+        /// (см. <see cref="SplitMembers"/>).
+        ///
+        /// Пустое тело - <c>&lt;Foo/&gt;</c> и <c>&lt;Foo&gt;&lt;/Foo&gt;</c> -
+        /// члена не касается: у BCL оба случая оставляют его null, а не пустой
+        /// строкой (проверено), и это ровно противоположно тому, как тот же BCL
+        /// читает пустой элемент обычного строкового члена.
+        /// </summary>
+        private readonly void GenerateDeserializeTextMember(
+            ISymbol member
+            )
+        {
+            var memberType = ParseMember(member);
+
+            var assignment = memberType.IsEnum
+                ? $"result.{member.Name} = {GenerateEnumParseStatement(memberType, "bodyText")};"
+                : $"inj.{nameof(IInjector.ParseBody)}(bodyText, out {memberType.GlobalName} bodyParsed);\r\n"
+                  + $"                result.{member.Name} = bodyParsed;";
+
+            _sb.AppendLine($$"""
+            //{{typeof(XmlTextAttribute).Name}} {{memberType.ToGlobalDisplayString()}} {{member.Name}}
+            {{XmlScanFullName}}.{{nameof(XmlScan.ReadTextBody)}}(settings.{{nameof(XmlDeserializeSettings.ContainsXmlComments)}}, settings.{{nameof(XmlDeserializeSettings.ContainsCDataBlocks)}}, body, body.IsEmpty, roschar.Empty, out var bodyText, out bodyConsumed);
+            if(!bodyText.IsEmpty)
+            {
+                {{assignment}}
             }
 """);
         }
@@ -1109,7 +1520,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     _sb.AppendLine($$"""
                         else
                         {
-                            {{classAndMethodName}}(ref settings, inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);
+                            {{classAndMethodName}}(ref settings, inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                            ", memberType.Symbol, "child", "iresult")}}
                             result.{{member.Name}} = iresult;
                         }
                     }
@@ -1124,7 +1535,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         {{specifiedAssignment}}
-                        {{classAndMethodName}}(ref settings, inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);
+                        {{classAndMethodName}}(ref settings, inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                        ", memberType.Symbol, "child", "iresult")}}
                         result.{{member.Name}} = iresult;
                     }
 """);
@@ -1150,7 +1561,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                         //{{nameof(GenerateDeserializeDispatch2)}}
                         {{elseif}}if (childPreciseType.SequenceEqual("{{d.GetXmlTypeName()}}".AsSpan()))
                         {
-                            {{classAndMethodName}}(ref settings, inj, childBody, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult, out childConsumed);
+                            {{classAndMethodName}}(ref settings, inj, childBody, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                            ", d, "child", "iresult")}}
                             result.{{memberName}} = iresult;
                         }
 """);
@@ -1328,6 +1739,89 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Члены типа, разложенные по месту внутри элемента. Считается одинаково
+        /// для записи и для чтения: разойдись эти два разложения - разошлись бы
+        /// и написанное с прочитанным.
+        /// </summary>
+        private readonly void SplitMembers(
+            INamedTypeSymbol type,
+            out List<ISymbol> elements,
+            out List<ISymbol> attributes,
+            out ISymbol? text
+            )
+        {
+            elements = new List<ISymbol>();
+            attributes = new List<ISymbol>();
+            text = null;
+
+            foreach (var member in FilterMembers(GetMembersBaseFirst(type)))
+            {
+                switch (member.GetXmlPlacement())
+                {
+                    case XmlPlacement.Attribute:
+                        CheckSimpleContentMember(member, typeof(XmlAttributeAttribute));
+                        attributes.Add(member);
+                        break;
+                    case XmlPlacement.Text:
+                        CheckSimpleContentMember(member, typeof(XmlTextAttribute));
+                        if (text is not null)
+                        {
+                            throw new InvalidOperationException(
+                                $"{type.Name} declares more than one {typeof(XmlTextAttribute).Name} member"
+                                + $" ({text.Name} and {member.Name}): an element has only one body"
+                                );
+                        }
+                        text = member;
+                        break;
+                    default:
+                        elements.Add(member);
+                        break;
+                }
+            }
+
+            if (text is not null && elements.Count > 0)
+            {
+                //смешанное содержимое System.Xml.Serialization пишет и читает, а здесь
+                //тело - это либо текст, либо дети, и промолчать значило бы выдать документ,
+                //в котором текста просто нет
+                throw new InvalidOperationException(
+                    $"{type.Name} mixes a {typeof(XmlTextAttribute).Name} member ({text.Name})"
+                    + $" with element members ({string.Join(", ", elements.Select(m => m.Name))}):"
+                    + $" mixed content is not supported"
+                    );
+            }
+        }
+
+        /// <summary>
+        /// И атрибут, и текст - это одна лексема без всякой разметки внутри, поэтому
+        /// членам обоих видов доступны ровно те типы, у которых такая лексема есть.
+        /// System.Xml.Serialization отказывается ровно так же и теми же словами
+        /// ("XmlAttribute/XmlText cannot be used to encode complex types"), причём
+        /// <see cref="Nullable{T}"/> он тоже считает сложным типом - проверено.
+        /// </summary>
+        private readonly void CheckSimpleContentMember(
+            ISymbol member,
+            Type attributeType
+            )
+        {
+            var memberType = ParseMember(member);
+            if (memberType.IsEnum)
+            {
+                return;
+            }
+            if (!memberType.IsNullableValueType
+                && BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType.Symbol, out _))
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(
+                $"{attributeType.Name} on {member.Name} is not supported:"
+                + $" {memberType.ToGlobalDisplayString()} has no plain lexical form"
+                );
         }
 
         private readonly IEnumerable<ISymbol> SelectMembers(

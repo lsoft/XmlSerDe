@@ -187,6 +187,28 @@ namespace XmlSerDe.Tests.Interop
                 + "объявление xmlns:xsi у BCL стоит на корне, у XmlSerDe - на самом элементе, "
                 + "но это одно и то же имя в одном и том же URI");
 
+        [Fact]
+        public void XmlAttributeMember_Test() => AssertInterop(
+            InteropCorpus.XmlAttributeMember(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlAttribute уводит член в голову элемента: имя берётся из атрибута либо "
+                + "из имени члена, перечисление пишется теми же именами, что и в элементе, "
+                + "а null-строка не пишется вовсе - атрибута с отсутствующим значением не бывает");
+
+        [Fact]
+        public void PolymorphicAttributes_Test() => AssertInterop(
+            InteropCorpus.PolymorphicAttributes(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "в голове полиморфного члена уживаются xsi:type, атрибуты базы и атрибуты "
+                + "наследника, а тело при этом занято XmlText");
+
+        [Fact]
+        public void XmlTextMember_Test() => AssertInterop(
+            InteropCorpus.XmlTextMember(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlText делает член телом самого элемента, а атрибут рядом с ним "
+                + "остаётся в голове");
+
         #endregion
 
         #region молчаливая потеря данных
@@ -281,22 +303,6 @@ namespace XmlSerDe.Tests.Interop
 
             Assert.Equal(0, bclBack.Value);
         }
-
-        #endregion
-
-        #region атрибутная модель System.Xml.Serialization не поддержана
-
-        [Fact]
-        public void XmlAttributeMember_Test() => AssertInterop(
-            InteropCorpus.XmlAttributeMember(),
-            canReadSystemXml: false, systemXmlCanReadOurs: false, sameShape: false,
-            because: "XmlAttribute не поддержан: член уходит в дочерний элемент, а не в атрибут головы");
-
-        [Fact]
-        public void XmlTextMember_Test() => AssertInterop(
-            InteropCorpus.XmlTextMember(),
-            canReadSystemXml: false, systemXmlCanReadOurs: false, sameShape: false,
-            because: "XmlText не поддержан: член уходит в дочерний элемент, а не в текст самого элемента");
 
         #endregion
     }

@@ -150,7 +150,7 @@ namespace XmlSerDe.Generator.Helper
         /// строкой (<c>[XmlElement(typeof(T))]</c>), а именованным задают ещё и Order
         /// без всякого имени, поэтому проверяется и вид аргумента тоже.
         /// </summary>
-        private static string? FindName(
+        internal static string? FindName(
             ISymbol symbol,
             string attributeFullName,
             string namedArgumentName
