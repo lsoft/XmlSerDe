@@ -263,8 +263,12 @@ namespace XmlSerDe.Tests
                 out XmlObject2 xo
                 );
             Xunit.Assert.NotNull(xo);
+            //<IntProperty/> остаётся нулём: у числа пустого лексического представления нет.
+            //А <StringProperty/> - это пустая строка, а не отсутствие значения: именно так
+            //пустую строку пишет System.Xml.Serialization. Отсутствие значения выглядит
+            //как <StringProperty xsi:nil="true"/> и по-прежнему даёт null (см. SinglePassParserFixture).
             Xunit.Assert.Equal(0, xo.IntProperty);
-            Xunit.Assert.Null(xo.StringProperty);
+            Xunit.Assert.Equal("", xo.StringProperty);
         }
 
         [Fact]
@@ -529,7 +533,9 @@ namespace XmlSerDe.Tests
                 );
             var xml = sb.ToString();
             Xunit.Assert.Equal(
-                @"<XmlObject10><XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1""><IntProperty>123</IntProperty><StringProperty>a</StringProperty></XmlObjectProperty></XmlObject10>",
+                //StringProperty объявлен в базе, IntProperty - в наследнике, и базовые
+                //члены теперь идут первыми: тот же порядок, что у System.Xml.Serialization
+                @"<XmlObject10><XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject9Specific1""><StringProperty>a</StringProperty><IntProperty>123</IntProperty></XmlObjectProperty></XmlObject10>",
                 xml
                 );
         }
@@ -609,7 +615,7 @@ namespace XmlSerDe.Tests
                 );
             var xml = sb.ToString();
             Xunit.Assert.Equal(
-                @"<XmlObject12><XmlObjectProperty><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><IntProperty>0</IntProperty><StringProperty>At0</StringProperty></XmlObject11Abstract><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><IntProperty>1</IntProperty><StringProperty>At1</StringProperty></XmlObject11Abstract></XmlObjectProperty></XmlObject12>",
+                @"<XmlObject12><XmlObjectProperty><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><StringProperty>At0</StringProperty><IntProperty>0</IntProperty></XmlObject11Abstract><XmlObject11Abstract xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject11Specific1""><StringProperty>At1</StringProperty><IntProperty>1</IntProperty></XmlObject11Abstract></XmlObjectProperty></XmlObject12>",
                 xml
                 );
         }
@@ -1187,7 +1193,7 @@ namespace XmlSerDe.Tests
                 );
             var xml = sb.ToString();
             Xunit.Assert.Equal(
-                @"<XmlObject25><Prop25 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject27""><Prop27>27</Prop27><Prop26>26</Prop26></Prop25></XmlObject25>",
+                @"<XmlObject25><Prop25 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject27""><Prop26>26</Prop26><Prop27>27</Prop27></Prop25></XmlObject25>",
                 xml
                 );
         }
@@ -1263,7 +1269,7 @@ namespace XmlSerDe.Tests
                 );
             var xml = sb.ToString();
             Xunit.Assert.Equal(
-                @"<XmlObject28><Prop28><XmlObject29 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject30""><Prop30>130</Prop30><Prop29>129</Prop29></XmlObject29><XmlObject29 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject30""><Prop30>230</Prop30><Prop29>229</Prop29></XmlObject29></Prop28></XmlObject28>",
+                @"<XmlObject28><Prop28><XmlObject29 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject30""><Prop29>129</Prop29><Prop30>130</Prop30></XmlObject29><XmlObject29 xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject30""><Prop29>229</Prop29><Prop30>230</Prop30></XmlObject29></Prop28></XmlObject28>",
                 xml
                 );
         }

@@ -81,63 +81,64 @@ namespace XmlSerDe.Tests.Interop
             canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
             because: "XmlIgnore - единственный атрибут BCL, который генератор уже читает");
 
-        #endregion
-
-        #region формат совпадает, но обмен ломается
-
         [Fact]
         public void Scalars_Test() => AssertInterop(
             InteropCorpus.Scalars(),
-            canReadSystemXml: false, systemXmlCanReadOurs: true, sameShape: true,
-            because: "все примитивы совпадают, кроме DateTime: DefaultInjector зовёт DateTime.Parse "
-                + "без DateTimeStyles.RoundtripKind, поэтому 'Z' на чтении превращается в локальное "
-                + "время и Kind теряется");
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "все примитивы, которые XmlSerDe считает встроенными, совпадают полностью");
 
         [Fact]
         public void Strings_Test() => AssertInterop(
             InteropCorpus.Strings(),
-            canReadSystemXml: false, systemXmlCanReadOurs: true, sameShape: true,
-            because: "пустую строку BCL пишет как <Empty />, а разбор считает узел без тела "
-                + "отсутствующим значением и не присваивает член вовсе - пустая строка читается как null");
-
-        [Fact]
-        public void DateTimeKinds_Test() => AssertInterop(
-            InteropCorpus.DateTimeKinds(),
-            canReadSystemXml: false, systemXmlCanReadOurs: true, sameShape: false,
-            because: "Kind теряется на чтении (см. Scalars_Test), а на записи дробная часть всегда "
-                + "семь знаков: BCL для целой секунды пишет '...T14:30:45Z', XmlSerDe - '...T14:30:45.0000000Z'");
-
-        [Fact]
-        public void Nullables_Test() => AssertInterop(
-            InteropCorpus.Nullables(),
-            canReadSystemXml: false, systemXmlCanReadOurs: true, sameShape: false,
-            because: "null-члена XmlSerDe не пишет вовсе, а BCL пишет <X xsi:nil=\"true\" />; "
-                + "на чтении обе формы дают null, так что обмен от этого не страдает - страдает только формат. "
-                + "Сам обмен ломает всё тот же DateTime.Kind");
-
-        #endregion
-
-        #region порядок членов
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "строка во всех состояниях, включая пустую (<Empty /> от BCL) и null");
 
         [Fact]
         public void Inheritance_Test() => AssertInterop(
             InteropCorpus.Inheritance(),
-            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: false,
-            because: "BCL пишет сначала члены базы, XmlSerDe - сначала свои "
-                + "(ClassSourceProducer.GetMembersOrderByInheritance идёт от типа к базе). "
-                + "Обмен не страдает: обе стороны разбирают детей по имени, а не по позиции");
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "члены базы идут первыми - тот же порядок, что у BCL");
 
         [Fact]
         public void Polymorphic_Test() => AssertInterop(
             InteropCorpus.Polymorphic(),
-            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: false,
-            because: "xsi:type диспетчеризуется одинаково, расходится только порядок членов базы и наследника");
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "xsi:type диспетчеризуется одинаково, порядок членов базы и наследника совпадает");
 
         [Fact]
         public void PolymorphicList_Test() => AssertInterop(
             InteropCorpus.PolymorphicList(),
-            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: false,
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
             because: "то же, что и в Polymorphic_Test, но внутри коллекции");
+
+        [Fact]
+        public void ConcreteBaseInstance_Test() => AssertInterop(
+            InteropCorpus.ConcreteBaseInstance(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "экземпляр не-абстрактной базы, у которой есть наследники, пишется как сама база");
+
+        #endregion
+
+        #region формат расходится, обмен цел
+
+        [Fact]
+        public void DateTimeKinds_Test() => AssertInterop(
+            InteropCorpus.DateTimeKinds(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: false,
+            because: "Kind теперь сохраняется, но дробная часть на записи всегда семь знаков: "
+                + "BCL для целой секунды пишет '...T14:30:45Z', XmlSerDe - '...T14:30:45.0000000Z'. "
+                + "Обе формы обе стороны читают одинаково");
+
+        [Fact]
+        public void Nullables_Test() => AssertInterop(
+            InteropCorpus.Nullables(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: false,
+            because: "null-члена XmlSerDe не пишет вовсе, а BCL пишет <X xsi:nil=\"true\" />; "
+                + "на чтении обе формы дают null, так что страдает только формат");
+
+        #endregion
+
+        #region молчаливая потеря данных
 
         [Fact]
         public void Ordered_Test() => AssertInterop(
@@ -145,18 +146,6 @@ namespace XmlSerDe.Tests.Interop
             canReadSystemXml: true, systemXmlCanReadOurs: false, sameShape: false,
             because: "XmlElement.Order не читается, порядок остаётся объявленным в C#; "
                 + "BCL же на чтении своего же порядка ждёт строго и второй член теряет");
-
-        #endregion
-
-        #region молчаливая потеря данных
-
-        [Fact]
-        public void ConcreteBaseInstance_Test() => AssertInterop(
-            InteropCorpus.ConcreteBaseInstance(),
-            canReadSystemXml: true, systemXmlCanReadOurs: false, sameShape: false,
-            because: "у не-абстрактной базы с наследниками генератор строит только цепочку "
-                + "'is Derived' и не оставляет ветки на саму базу, поэтому экземпляр базы "
-                + "сериализуется в пустоту - без ошибки и без предупреждения");
 
         [Fact]
         public void GetOnlyCollection_Test() => AssertInterop(
@@ -168,9 +157,11 @@ namespace XmlSerDe.Tests.Interop
         [Fact]
         public void EmptyCollections_Test() => AssertInterop(
             InteropCorpus.EmptyCollections(),
-            canReadSystemXml: false, systemXmlCanReadOurs: false, sameShape: true,
-            because: "пустая коллекция от BCL приходит как <X /> и читается как null: "
-                + "то же самое место, что и с пустой строкой - узел без тела не присваивает член");
+            canReadSystemXml: true, systemXmlCanReadOurs: false, sameShape: true,
+            because: "пустая коллекция от BCL (<X />) теперь читается как пустая, а не как null, "
+                + "и формат совпадает. Обратное направление всё ещё расходится, но уже на стороне BCL: "
+                + "прочитав наш <EmptyList></EmptyList>, он материализует пустым и соседний NullList, "
+                + "которого в документе нет вовсе. Отдельная загадка, разбирать её - в следующий заход");
 
         [Fact]
         public void Specified_Test() => AssertInterop(

@@ -57,15 +57,24 @@ namespace XmlSerDe.Components.Injector
 
             ParseBody(xmlNode.Internals, out result);
         }
+
+        /// <summary>
+        /// RoundtripKind обязателен: без него DateTime.Parse переводит "...T14:30:45Z"
+        /// в местное время и ставит Kind = Local. Мгновение при этом сохраняется, но
+        /// лексическая форма - нет, поэтому round-trip не замыкается ни с
+        /// System.Xml.Serialization (тот разбирает через XmlConvert и Kind сохраняет),
+        /// ни с собственной сериализацией: формат "yyyy-MM-ddTHH:mm:ss.fffffffK"
+        /// выведет уже не "Z", а смещение машины, на которой шёл разбор.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out global::System.DateTime result)
         {
-            result = DateTime.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = DateTime.Parse(Parsable(body), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out global::System.DateTime? result)
         {
-            result = DateTime.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = DateTime.Parse(Parsable(body), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
         }
 
 

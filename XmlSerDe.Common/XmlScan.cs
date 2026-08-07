@@ -137,6 +137,37 @@ namespace XmlSerDe.Common
 
             return parsedAttribute.Value;
         }
+
+        /// <summary>
+        /// Стоит ли на теге xsi:nil="true". Отличает &lt;Foo xsi:nil="true"/&gt; ("значения
+        /// нет") от &lt;Foo/&gt; ("значение пустое"): System.Xml.Serialization пишет так
+        /// null-члена, а пустую строку и пустую коллекцию - вторым способом, и без этой
+        /// проверки обе формы читались бы одинаково.
+        ///
+        /// Префикс не проверяется: годится любой атрибут с именем nil. Строго по спецификации
+        /// значащим был бы только префикс, привязанный к XMLSchema-instance, но привязка
+        /// в документе может и отсутствовать (xsi считают общеизвестным и объявить забывают),
+        /// а атрибут с именем nil и другим смыслом - случай, которого на практике не бывает.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public readonly bool IsNil()
+        {
+            if (!HasAttributes)
+            {
+                return false;
+            }
+
+            XmlScan.ParseAttribute(
+                FullHead,
+                DeclaredNodeType.Length + 1,
+                roschar.Empty,
+                XmlScan.NilSpan,
+                roschar.Empty,
+                out var parsedAttribute
+                );
+
+            return parsedAttribute.Value.SequenceEqual(XmlScan.TrueSpan);
+        }
     }
 
     /// <summary>
@@ -167,6 +198,18 @@ namespace XmlSerDe.Common
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => "type".AsSpan();
+        }
+
+        public static roschar NilSpan
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => "nil".AsSpan();
+        }
+
+        public static roschar TrueSpan
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => "true".AsSpan();
         }
 
         private static roschar CDataHeadSpan

@@ -186,6 +186,10 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
             }
 
+            //цепочка проверок на наследников, а следом - тело самого типа.
+            //Раньше эти два случая были взаимоисключающими (if/else), и у не-абстрактной
+            //базы с наследниками экземпляр самой базы не подходил ни под одну проверку
+            //и уходил в пустоту: ни исключения, ни предупреждения, просто пропавший объект.
             if (deriveds.Count > 0)
             {
                 foreach (var derived in deriveds)
@@ -220,7 +224,10 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     }
                 }
             }
-            else
+
+            //абстрактный тип экземпляром быть не может, поэтому после цепочки наследников
+            //писать нечего; во всех остальных случаях дальше идёт тело самого типа
+            if (deriveds.Count == 0 || !subject.IsAbstract)
             {
                 if (withHeadMethod)
                 {
@@ -232,7 +239,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
                 }
 
-                var members = GetMembersOrderByInheritance(subject);
+                var members = GetMembersBaseFirst(subject);
                 if (members.Count > 0)
                 {
                     GenerateSerializeMembers(methodName, members);
@@ -328,19 +335,38 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 var subjectFound = SerializationInfoCollection.TryGetSubject(memberType.Symbol, out var ssi);
                 if (subjectFound && ssi.Deriveds.Count > 0)
                 {
+                    //цепочка else if, а не набор независимых if: во-первых, ниже за ней идёт
+                    //ветка на сам базовый тип, во-вторых, из двух наследников, состоящих в
+                    //родстве между собой, независимые проверки сработали бы обе и написали
+                    //бы член дважды. Переменная в каждой ветке своя: у else if общая область
+                    //видимости, и одно имя на всю цепочку не скомпилировалось бы.
+                    var derivedIndex = 0;
                     foreach (var derived in ssi.Deriveds)
                     {
+                        var elseif = derivedIndex == 0 ? "" : "else ";
+
                         _sb.AppendLine($$"""
-
+                {{elseif}}if(obj.{{member.Name}} is {{derived.ToGlobalDisplayString()}} dobj{{derivedIndex}})
                 {
-                    if(obj.{{member.Name}} is {{derived.ToGlobalDisplayString()}} dobj)
-                    {
-                        exh.{{nameof(IExhauster.Append)}}(@"<{{member.Name}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.Name}}"">");
-                        {{HeadlessSerializeMethodName}}(exh, dobj);
-                        exh.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
-                    }
+                    exh.{{nameof(IExhauster.Append)}}(@"<{{member.Name}} xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""{{derived.Name}}"">");
+                    {{HeadlessSerializeMethodName}}(exh, dobj{{derivedIndex}});
+                    exh.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
                 }
+""");
+                        derivedIndex++;
+                    }
 
+                    if (!memberType.IsAbstract)
+                    {
+                        //экземпляр самой базы: ни одна проверка на наследника не сработала.
+                        //Без этой ветки такой член уходил в пустоту молча
+                        _sb.AppendLine($$"""
+                else
+                {
+                    exh.{{nameof(IExhauster.Append)}}(@"<{{member.Name}}>");
+                    {{HeadlessSerializeMethodName}}(exh, obj.{{member.Name}});
+                    exh.{{nameof(IExhauster.Append)}}("</{{member.Name}}>");
+                }
 """);
                     }
                 }
@@ -634,7 +660,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 """);
             }
 
-            var members = GetMembersOrderByInheritance(subject);
+            var members = GetMembersBaseFirst(subject);
 
             GenerateDeserializeMembers(members);
 
@@ -674,30 +700,52 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 var childDeclaredNodeType = child.{{nameof(XmlHead.DeclaredNodeType)}};
                 var childBody = child.{{nameof(XmlHead.IsBodyless)}} ? roschar.Empty : cursor.Slice(child.{{nameof(XmlHead.TotalLength)}});
                 int childConsumed;
-                if(child.{{nameof(XmlHead.IsBodyless)}})
-                {
-                    //закрытая нода <Foo/>: тела нет, присваивать члену нечего.
-                    //Прежний код на такой ноде обрывал весь цикл по детям и терял
-                    //заодно всех следующих братьев; здесь теряется только она сама.
-                    childConsumed = 0;
-                }
 
 """);
 
+            //закрытая нода <Foo/> раньше отсекалась здесь, до разбора имени, и член
+            //не получал ничего. Но <Foo/> - это не "члена не было", а "значение пустое":
+            //именно так System.Xml.Serialization пишет и пустую строку, и пустую
+            //коллекцию, так что оба читались как null. Теперь имя сверяется всегда,
+            //а что делать с пустым телом, решает ветка конкретного члена: строке и
+            //коллекции есть что присвоить, числу - нечего.
+            var isFirstMember = true;
             foreach (var member in FilterMembers(members))
             {
                 var memberType = ParseMember(member);
 
-                GenerateDeserializeMember(member, memberType);
+                GenerateDeserializeMember(member, memberType, isFirstMember);
+                isFirstMember = false;
             }
 
-            _sb.AppendLine($$"""
+            //у типа без единого разбираемого члена цепочки нет вовсе, и хвост
+            //не может начинаться с else
+            var skipStatement =
+                $"childConsumed = child.{nameof(XmlHead.IsBodyless)}"
+                + $" ? 0"
+                + $" : {XmlScanFullName}.{nameof(XmlScan.SkipBody)}(childBody, false);";
+
+            if (isFirstMember)
+            {
+                _sb.AppendLine($$"""
+                //у этого типа нет разбираемых членов - любому элементу достаточно
+                //досчитать баланс тегов
+                {{skipStatement}}
+""");
+            }
+            else
+            {
+                _sb.AppendLine($$"""
                 else
                 {
                     //этому элементу не соответствует ни один член - разбирать нечего,
                     //достаточно досчитать баланс тегов
-                    childConsumed = {{XmlScanFullName}}.{{nameof(XmlScan.SkipBody)}}(childBody, false);
+                    {{skipStatement}}
                 }
+""");
+            }
+
+            _sb.AppendLine($$"""
 
                 var childStep = child.{{nameof(XmlHead.TotalLength)}} + childConsumed;
                 bodyConsumed += childStep;
@@ -708,24 +756,64 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
         private readonly void GenerateDeserializeMember(
             ISymbol member,
-            TypeSymbol memberType
+            TypeSymbol memberType,
+            bool isFirstMember
             )
         {
-            //все ветки живут внутри if(!child.IsBodyless), поэтому цепочка
-            //начинается не с первого члена, а с той проверки
-            const string elseif = "else ";
+            var elseif = isFirstMember ? "" : "else ";
+
+            //пустое тело осмысленно не для всякого типа. У строки пустое лексическое
+            //представление есть, и <Foo/> - это "", а не отсутствие значения. У числа,
+            //Guid, DateTime и перечисления его нет: разбор пустоты закончился бы
+            //исключением, поэтому такой элемент по-прежнему пропускается.
+            var isString = SymbolEqualityComparer.Default.Equals(
+                memberType.Symbol,
+                _compilation.String()
+                );
 
             if(BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType.Symbol, out _))
             {
-                _sb.AppendLine($$"""
+                if (isString)
+                {
+                    _sb.AppendLine($$"""
                     //{{memberType.ToGlobalDisplayString()}}  {{member.Name}}
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
-                        {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
-                        inj.{{nameof(IInjector.ParseBody)}}(childText, out {{memberType.GlobalName}} injr);
-                        result.{{member.Name}} = injr;
+                        if(child.{{nameof(XmlHead.IsBodyless)}} && child.{{nameof(XmlHead.IsNil)}}())
+                        {
+                            //<Foo xsi:nil="true"/> - значения нет, член остаётся null
+                            childConsumed = 0;
+                        }
+                        else
+                        {
+                            //ReadTextBody на закрытой ноде отдаёт пустой текст и consumed = 0,
+                            //так что <Foo/> здесь превращается в пустую строку
+                            {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
+                            inj.{{nameof(IInjector.ParseBody)}}(childText, out {{memberType.GlobalName}} injr);
+                            result.{{member.Name}} = injr;
+                        }
                     }
 """);
+                }
+                else
+                {
+                    _sb.AppendLine($$"""
+                    //{{memberType.ToGlobalDisplayString()}}  {{member.Name}}
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
+                    {
+                        if(child.{{nameof(XmlHead.IsBodyless)}})
+                        {
+                            childConsumed = 0;
+                        }
+                        else
+                        {
+                            {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
+                            inj.{{nameof(IInjector.ParseBody)}}(childText, out {{memberType.GlobalName}} injr);
+                            result.{{member.Name}} = injr;
+                        }
+                    }
+""");
+                }
             }
             else if (memberType.IsEnum)
             {
@@ -738,8 +826,15 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     //Enum
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
-                        {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
-                        result.{{member.Name}} = {{fullParserInvocation}};
+                        if(child.{{nameof(XmlHead.IsBodyless)}})
+                        {
+                            childConsumed = 0;
+                        }
+                        else
+                        {
+                            {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
+                            result.{{member.Name}} = {{fullParserInvocation}};
+                        }
                     }
 """);
 
@@ -779,6 +874,13 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     //List<T>
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
+                        if(child.{{nameof(XmlHead.IsBodyless)}} && child.{{nameof(XmlHead.IsNil)}}())
+                        {
+                            //<Foo xsi:nil="true"/> - коллекции нет вовсе, а не пустая коллекция
+                            childConsumed = 0;
+                        }
+                        else
+                        {
                         {{poolDeclarationStatement}}
 
                         var itemCursor = childBody;
@@ -812,6 +914,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
                         childConsumed = itemConsumed;
                         {{assignStatement}}
+                        }
                     }
 """);
             }
@@ -1465,22 +1568,41 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 );
         }
 
-        private static List<ISymbol> GetMembersOrderByInheritance(
+        /// <summary>
+        /// Члены типа, начиная с самых дальних предков и заканчивая собственными.
+        /// Именно в таком порядке пишет их System.Xml.Serialization, и совпадение
+        /// формата на любом типе с наследованием держится на этом порядке.
+        ///
+        /// Обход идёт от типа к базе, потому что дойти до предков иначе нельзя,
+        /// а результат разворачивается по слоям: внутри одного типа объявленный
+        /// порядок членов сохраняется, переставляются только сами слои.
+        /// (Прежнее имя метода - GetMembersOrderByInheritance - обещало этот порядок,
+        /// но отдавало обратный.)
+        /// </summary>
+        private static List<ISymbol> GetMembersBaseFirst(
             INamedTypeSymbol serializationSubject
             )
         {
-            var result = new List<ISymbol>();
+            var layers = new List<List<ISymbol>>();
 
             var symbol = serializationSubject;
             while(symbol.BaseType != null)
             {
-                result.AddRange(
-                    from m in symbol.GetMembers()
+                layers.Add(
+                    (from m in symbol.GetMembers()
                     where m.Kind.In(SymbolKind.Property, SymbolKind.Field) && !m.IsStatic
-                    select m
+                    select m).ToList()
                     );
 
                 symbol = symbol.BaseType;
+            }
+
+            layers.Reverse();
+
+            var result = new List<ISymbol>();
+            foreach (var layer in layers)
+            {
+                result.AddRange(layer);
             }
 
             return result;
