@@ -39,6 +39,22 @@ namespace XmlSerDe.Tests.Interop
 
         #region полная совместимость
 
+        /// <summary>
+        /// Вещественные и char: типы, у которых лексическая форма не выводится
+        /// из типа и её пришлось снимать прогоном самого BCL.
+        ///
+        /// Обратите внимание на <c>ThirdMember = 1.0/3.0</c>: на .NET Framework
+        /// обе стороны пишут семнадцать знаков, на .NET Core - шестнадцать.
+        /// Тест этого не различает и не должен: важно, что стороны пишут
+        /// одинаково, а не сколько именно знаков даёт платформа.
+        /// </summary>
+        [Fact]
+        public void TrickyScalars_Test() => AssertInterop(
+            InteropCorpus.TrickyScalars(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "кратчайшее round-trippable представление у вещественных, INF/-INF/NaN "
+                + "вместо Infinity и кодовая точка числом у char");
+
         [Fact]
         public void Fields_Test() => AssertInterop(
             InteropCorpus.Fields(),
@@ -201,6 +217,45 @@ namespace XmlSerDe.Tests.Interop
         #endregion
 
         #region расхождение унаследовано от BCL, а не наше
+
+        /// <summary>
+        /// <see cref="System.TimeSpan"/> - единственная форма, чей результат зависит
+        /// от таргета, и единственная, где расходимся мы <b>в лучшую сторону</b>.
+        ///
+        /// Поддержку <see cref="System.TimeSpan"/> в <c>XmlSerializer</c> завезли
+        /// только в .NET Core. На .NET Framework у типа нет ни одного публичного члена
+        /// с сеттером, поэтому BCL пишет пустой элемент и теряет значение целиком -
+        /// тест это показывает отдельно, чтобы «НЕТ» на net472 не приняли за нашу потерю.
+        /// XmlSerDe пишет длительность ISO-8601 на всех таргетах одинаково.
+        /// </summary>
+        [Fact]
+        public void Durations_Test()
+        {
+#if NETFRAMEWORK
+            AssertInterop(
+                InteropCorpus.Durations(),
+                canReadSystemXml: false, systemXmlCanReadOurs: true, sameShape: false,
+                because: "на .NET Framework XmlSerializer не знает TimeSpan вовсе и пишет "
+                    + "пустой элемент; XmlSerDe пишет длительность ISO-8601. "
+                    + "\"System.Xml читает XmlSerDe: да\" здесь не значит, что он что-то "
+                    + "прочитал: он не видит эти члены ни на записи, ни на чтении, "
+                    + "поэтому сверка канонов сходится сама собой");
+
+            var bclXml = InteropRunner.SystemXmlSerialize(
+                new Subject.DurationSubject { Ordinary = new System.TimeSpan(1, 2, 3, 4, 5) }
+                );
+
+            //значение потеряно самим BCL, ещё до всякого чтения
+            Assert.DoesNotContain("P1DT2H3M4", bclXml);
+#else
+            AssertInterop(
+                InteropCorpus.Durations(),
+                canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+                because: "длительность ISO-8601 совпадает посимвольно, включая PT0S у нуля "
+                    + "и ведущий минус у отрицательной");
+#endif
+        }
+
 
         /// <summary>
         /// Единственная форма, где «НЕТ» в обоих направлениях чтения - не дефект

@@ -27,6 +27,8 @@ namespace XmlSerDe.Tests.Interop
 
     //скаляры
     [XmlSubject(typeof(ScalarsSubject), true)]
+    [XmlSubject(typeof(TrickyScalarsSubject), true)]
+    [XmlSubject(typeof(DurationSubject), true)]
     [XmlSubject(typeof(NullableSubject), true)]
     [XmlSubject(typeof(StringsSubject), true)]
     [XmlSubject(typeof(DateTimeKindsSubject), true)]

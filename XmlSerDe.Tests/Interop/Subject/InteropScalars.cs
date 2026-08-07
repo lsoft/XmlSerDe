@@ -5,9 +5,9 @@ using System;
 namespace XmlSerDe.Tests.Interop.Subject
 {
     /// <summary>
-    /// Все примитивы, которые XmlSerDe объявляет встроенными. float/double/char/TimeSpan
-    /// сюда не входят намеренно: генератор их не знает и падает с ошибкой компиляции,
-    /// поэтому форму с ними нельзя даже собрать - это расхождение видно не тестом, а сборкой.
+    /// Целочисленные и прочие примитивы с однозначной лексической формой.
+    /// Вещественные, char и TimeSpan вынесены в <see cref="TrickyScalarsSubject"/>:
+    /// у них форма как раз неочевидна.
     /// </summary>
     public class ScalarsSubject
     {
@@ -24,6 +24,49 @@ namespace XmlSerDe.Tests.Interop.Subject
         public string StringMember { get; set; }
         public Guid GuidMember { get; set; }
         public DateTime DateTimeMember { get; set; }
+    }
+
+    /// <summary>
+    /// Примитивы, у которых лексическая форма не выводится из типа:
+    ///
+    /// <list type="bullet">
+    /// <item>вещественные - кратчайшее round-trippable представление, но бесконечности
+    /// пишутся как <c>INF</c>/<c>-INF</c>, а не "Infinity";</item>
+    /// <item><see cref="char"/> - кодовой точкой числом, потому что типа для одиночного
+    /// символа в xsd нет вовсе.</item>
+    /// </list>
+    ///
+    /// Пока генератор их не знал, форму с ними нельзя было даже собрать - расхождение
+    /// было видно сборкой, а не тестом. Теперь оно видно тестом.
+    /// </summary>
+    public class TrickyScalarsSubject
+    {
+        public float FloatMember { get; set; }
+        public double DoubleMember { get; set; }
+        public double ThirdMember { get; set; }
+        public float NaNMember { get; set; }
+        public double PositiveInfinityMember { get; set; }
+        public double NegativeInfinityMember { get; set; }
+        public char CharMember { get; set; }
+        public char NonAsciiCharMember { get; set; }
+        public double? FilledNullableDouble { get; set; }
+        public double? EmptyNullableDouble { get; set; }
+    }
+
+    /// <summary>
+    /// <see cref="TimeSpan"/> отдельной формой, потому что он единственный расходится
+    /// не с BCL вообще, а с BCL на конкретном таргете: поддержку <see cref="TimeSpan"/>
+    /// в <c>XmlSerializer</c> завезли только в .NET Core. На .NET Framework у него нет
+    /// ни одного публичного члена с сеттером, поэтому BCL пишет пустой элемент и теряет
+    /// значение целиком - см. <c>InteropFixture.Durations_Test</c>.
+    /// </summary>
+    public class DurationSubject
+    {
+        public TimeSpan Ordinary { get; set; }
+        public TimeSpan Zero { get; set; }
+        public TimeSpan Negative { get; set; }
+        public TimeSpan? Filled { get; set; }
+        public TimeSpan? Empty { get; set; }
     }
 
     /// <summary>

@@ -491,7 +491,19 @@ XML element names follow XSD conventions:
 | `long` / `long?` | `long` |
 | `ulong` / `ulong?` | `unsignedLong` |
 | `decimal` / `decimal?` | `decimal` |
+| `float` / `float?` | `float` |
+| `double` / `double?` | `double` |
+| `char` / `char?` | `char` |
+| `TimeSpan` / `TimeSpan?` | `duration` |
 | `string` | `string` (HTML-encoded on serialize) |
+
+Three of these have a lexical form that does not follow from the type, and each matches what `System.Xml.Serialization` writes:
+
+- **`float` / `double`** use the shortest round-trippable representation, but infinities are written `INF` / `-INF`, not `Infinity`.
+- **`char` is written as its code point**, not as the character: `'A'` becomes `65`. XSD has no type for a single character, and the BCL uses one of its own from `http://microsoft.com/wsdl/types/`.
+- **`TimeSpan`** is an ISO-8601 duration (`P1DT2H3M4.005S`, `PT0S` for zero, leading minus when negative). Note that `XmlSerializer` only gained `TimeSpan` support in .NET Core — on .NET Framework it writes an empty element and loses the value, so XmlSerDe's output is not byte-compatible with it there. XmlSerDe writes the duration on every target.
+
+`byte[]` is *not* a builtin: it is handled as a collection of bytes, whereas `System.Xml.Serialization` writes it as a single `base64Binary` string.
 
 ### Complex types
 

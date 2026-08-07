@@ -370,6 +370,114 @@ namespace XmlSerDe.Components.Exhauster
             Append(value.Value);
         }
 
+        /// <summary>
+        /// Формат "R", а не по умолчанию: см. <see cref="DefaultStringBuilderExhauster"/>.
+        /// </summary>
+#if NET8_0_OR_GREATER
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void WriteRoundtrip<T>(T value) where T : ISpanFormattable
+        {
+            Span<char> charBuffer = stackalloc char[40];
+            if (value.TryFormat(charBuffer, out var charsWritten, "R".AsSpan(), CultureInfo.InvariantCulture))
+            {
+                WriteChars(charBuffer.Slice(0, charsWritten));
+            }
+            else
+            {
+                WriteChars(value.ToString("R", CultureInfo.InvariantCulture).AsSpan());
+            }
+        }
+#else
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void WriteRoundtrip<T>(T value) where T : IFormattable
+        {
+            WriteChars(value.ToString("R", CultureInfo.InvariantCulture).AsSpan());
+        }
+#endif
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(float value)
+        {
+            var special = XmlNumberLexis.SpecialOrNull(value);
+            if (special is not null)
+            {
+                WriteChars(special.AsSpan());
+                return;
+            }
+
+            WriteRoundtrip(value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(float? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            Append(value.Value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(double value)
+        {
+            var special = XmlNumberLexis.SpecialOrNull(value);
+            if (special is not null)
+            {
+                WriteChars(special.AsSpan());
+                return;
+            }
+
+            WriteRoundtrip(value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(double? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            Append(value.Value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(char value)
+        {
+            //кодовая точка, а не символ - см. IExhauster
+            WriteInvariant((ushort)value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(char? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            Append(value.Value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(TimeSpan value)
+        {
+            WriteChars(XmlNumberLexis.ToDurationString(value).AsSpan());
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(TimeSpan? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            Append(value.Value);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(string? value)
         {

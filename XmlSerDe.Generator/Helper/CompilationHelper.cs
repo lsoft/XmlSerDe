@@ -507,6 +507,114 @@ namespace XmlSerDe.Generator.Helper
                     ;
         }
 
+        public static INamedTypeSymbol Single(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return compilation.GetTypeByMetadataName("System.Single")!;
+        }
+
+        public static INamedTypeSymbol NSingle(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(Single(compilation))
+                    ;
+        }
+
+        public static INamedTypeSymbol Double(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return compilation.GetTypeByMetadataName("System.Double")!;
+        }
+
+        public static INamedTypeSymbol NDouble(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(Double(compilation))
+                    ;
+        }
+
+        public static INamedTypeSymbol Char(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return compilation.GetTypeByMetadataName("System.Char")!;
+        }
+
+        public static INamedTypeSymbol NChar(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(Char(compilation))
+                    ;
+        }
+
+        public static INamedTypeSymbol TimeSpan(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return compilation.GetTypeByMetadataName("System.TimeSpan")!;
+        }
+
+        public static INamedTypeSymbol NTimeSpan(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            return
+                compilation.GetTypeByMetadataName("System.Nullable`1")!
+                    .Construct(TimeSpan(compilation))
+                    ;
+        }
+
     }
 }
 #endif

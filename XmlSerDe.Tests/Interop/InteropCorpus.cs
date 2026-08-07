@@ -70,6 +70,37 @@ namespace XmlSerDe.Tests.Interop
             (e, o) => InteropSerializer.Serialize(e, o, false),
             (ReadOnlySpan<char> xml, out ScalarsSubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
 
+        public static InteropResult TrickyScalars() => Check(
+            new TrickyScalarsSubject
+            {
+                FloatMember = 1.5f,
+                DoubleMember = 1e300,
+                //1/3 не представимо двоично: если запись потеряет хоть одну цифру,
+                //обратное чтение даст другое число, и это будет видно
+                ThirdMember = 1.0 / 3.0,
+                NaNMember = float.NaN,
+                PositiveInfinityMember = double.PositiveInfinity,
+                NegativeInfinityMember = double.NegativeInfinity,
+                CharMember = 'A',
+                NonAsciiCharMember = 'я',
+                FilledNullableDouble = 2.25,
+                EmptyNullableDouble = null,
+            },
+            (e, o) => InteropSerializer.Serialize(e, o, false),
+            (ReadOnlySpan<char> xml, out TrickyScalarsSubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
+
+        public static InteropResult Durations() => Check(
+            new DurationSubject
+            {
+                Ordinary = new TimeSpan(1, 2, 3, 4, 5),
+                Zero = TimeSpan.Zero,
+                Negative = TimeSpan.FromDays(-1),
+                Filled = TimeSpan.FromHours(3),
+                Empty = null,
+            },
+            (e, o) => InteropSerializer.Serialize(e, o, false),
+            (ReadOnlySpan<char> xml, out DurationSubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
+
         public static InteropResult Nullables() => Check(
             new NullableSubject
             {
@@ -328,6 +359,8 @@ namespace XmlSerDe.Tests.Interop
         public static IReadOnlyList<InteropCase> All => new[]
         {
             new InteropCase(nameof(Scalars), Scalars),
+            new InteropCase(nameof(TrickyScalars), TrickyScalars),
+            new InteropCase(nameof(Durations), Durations),
             new InteropCase(nameof(Nullables), Nullables),
             new InteropCase(nameof(Strings), Strings),
             new InteropCase(nameof(DateTimeKinds), DateTimeKinds),

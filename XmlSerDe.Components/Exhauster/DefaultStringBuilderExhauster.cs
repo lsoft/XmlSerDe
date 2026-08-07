@@ -311,6 +311,120 @@ namespace XmlSerDe.Components.Exhauster
             AppendInvariant(value.Value);
         }
 
+        /// <summary>
+        /// Формат "R", а не форматирование по умолчанию: на netstandard2.0 и net472
+        /// <c>ToString()</c> отдаёт 15 значащих цифр и теряет точность, и round-trip
+        /// не замкнулся бы. Начиная с .NET Core 3.0 "R" уже даёт кратчайшее
+        /// round-trippable представление - то же, что <c>XmlConvert.ToString</c>.
+        ///
+        /// Бесконечности и NaN пишутся руками: у <c>double.ToString</c> это
+        /// "Infinity"/"-Infinity", а в xsd - "INF"/"-INF", и BCL пишет именно "INF".
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(double value)
+        {
+            var special = XmlNumberLexis.SpecialOrNull(value);
+            if (special is not null)
+            {
+                _sb.Append(special);
+                return;
+            }
+
+            AppendRoundtrip(value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(double? value)
+        {
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            Append(value.Value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(float value)
+        {
+            var special = XmlNumberLexis.SpecialOrNull(value);
+            if (special is not null)
+            {
+                _sb.Append(special);
+                return;
+            }
+
+            AppendRoundtrip(value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(float? value)
+        {
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            Append(value.Value);
+        }
+
+#if NET8_0_OR_GREATER
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void AppendRoundtrip<T>(T value) where T : ISpanFormattable
+        {
+            Span<char> buffer = stackalloc char[40];
+            if (value.TryFormat(buffer, out var written, "R".AsSpan(), CultureInfo.InvariantCulture))
+            {
+                _sb.Append(buffer.Slice(0, written));
+            }
+            else
+            {
+                _sb.Append(value.ToString("R", CultureInfo.InvariantCulture));
+            }
+        }
+#else
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void AppendRoundtrip<T>(T value) where T : IFormattable
+        {
+            _sb.Append(value.ToString("R", CultureInfo.InvariantCulture));
+        }
+#endif
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(char value)
+        {
+            //кодовая точка, а не символ - см. IExhauster
+            AppendInvariant((ushort)value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(char? value)
+        {
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            Append(value.Value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(TimeSpan value)
+        {
+            _sb.Append(XmlNumberLexis.ToDurationString(value));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(TimeSpan? value)
+        {
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            Append(value.Value);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(string? value)
         {

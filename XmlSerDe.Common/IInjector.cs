@@ -264,6 +264,90 @@ namespace XmlSerDe.Common
             ref XmlDeserializeSettings settings,
             roschar fullNode,
             roschar xmlnsAttributeName,
+            out float value
+            );
+        void Parse(
+            ref XmlDeserializeSettings settings,
+            roschar fullNode,
+            roschar xmlnsAttributeName,
+            out float? value
+            );
+        void ParseBody(
+            roschar body,
+            out float value
+            );
+        void ParseBody(
+            roschar body,
+            out float? value
+            );
+
+        void Parse(
+            ref XmlDeserializeSettings settings,
+            roschar fullNode,
+            roschar xmlnsAttributeName,
+            out double value
+            );
+        void Parse(
+            ref XmlDeserializeSettings settings,
+            roschar fullNode,
+            roschar xmlnsAttributeName,
+            out double? value
+            );
+        void ParseBody(
+            roschar body,
+            out double value
+            );
+        void ParseBody(
+            roschar body,
+            out double? value
+            );
+
+        void Parse(
+            ref XmlDeserializeSettings settings,
+            roschar fullNode,
+            roschar xmlnsAttributeName,
+            out char value
+            );
+        void Parse(
+            ref XmlDeserializeSettings settings,
+            roschar fullNode,
+            roschar xmlnsAttributeName,
+            out char? value
+            );
+        void ParseBody(
+            roschar body,
+            out char value
+            );
+        void ParseBody(
+            roschar body,
+            out char? value
+            );
+
+        void Parse(
+            ref XmlDeserializeSettings settings,
+            roschar fullNode,
+            roschar xmlnsAttributeName,
+            out TimeSpan value
+            );
+        void Parse(
+            ref XmlDeserializeSettings settings,
+            roschar fullNode,
+            roschar xmlnsAttributeName,
+            out TimeSpan? value
+            );
+        void ParseBody(
+            roschar body,
+            out TimeSpan value
+            );
+        void ParseBody(
+            roschar body,
+            out TimeSpan? value
+            );
+
+        void Parse(
+            ref XmlDeserializeSettings settings,
+            roschar fullNode,
+            roschar xmlnsAttributeName,
             out string value
             );
         void ParseBody(

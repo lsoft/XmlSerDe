@@ -80,8 +80,25 @@ namespace XmlSerDe.Generator.Producer
                         new Builtin(compilation.Decimal(), "decimal", false),
                         new Builtin(compilation.NDecimal(), "decimal", false),
 
+                        new Builtin(compilation.Single(), "float", false),
+                        new Builtin(compilation.NSingle(), "float", false),
+
+                        new Builtin(compilation.Double(), "double", false),
+                        new Builtin(compilation.NDouble(), "double", false),
+
+                        //char в xsd нет вовсе; System.Xml.Serialization пользуется
+                        //собственным типом из http://microsoft.com/wsdl/types/ и пишет
+                        //кодовую точку числом: 'A' превращается в 65, а не в "A"
+                        new Builtin(compilation.Char(), "char", false),
+                        new Builtin(compilation.NChar(), "char", false),
+
+                        new Builtin(compilation.TimeSpan(), "duration", false),
+                        new Builtin(compilation.NTimeSpan(), "duration", false),
+
                         new Builtin(compilation.String(), "string", true),
-                        //TODO other builtin branches (+IExhauster, +IInjector)
+                        //byte[] сюда не входит намеренно: BCL пишет его одной строкой
+                        //base64Binary, а у XmlSerDe это коллекция байтов. Перехват
+                        //коллекции - отдельная работа, а не ещё один builtin
                     }
                 );
         }
