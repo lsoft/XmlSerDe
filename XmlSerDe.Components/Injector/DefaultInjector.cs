@@ -63,7 +63,7 @@ namespace XmlSerDe.Components.Injector
         /// в местное время и ставит Kind = Local. Мгновение при этом сохраняется, но
         /// лексическая форма - нет, поэтому round-trip не замыкается ни с
         /// System.Xml.Serialization (тот разбирает через XmlConvert и Kind сохраняет),
-        /// ни с собственной сериализацией: формат "yyyy-MM-ddTHH:mm:ss.fffffffK"
+        /// ни с собственной сериализацией: формат "yyyy-MM-ddTHH:mm:ss.FFFFFFFK"
         /// выведет уже не "Z", а смещение машины, на которой шёл разбор.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

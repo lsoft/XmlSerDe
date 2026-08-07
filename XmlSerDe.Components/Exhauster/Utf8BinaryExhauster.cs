@@ -21,8 +21,12 @@ namespace XmlSerDe.Components.Exhauster
         private const int CharCountBufferSize = 36; //36 = char count in Guid.ToString()
         private readonly byte[] _internalBuffer = new byte[CharCountBufferSize * 2];
 
+        /// <param name="dateTimeFormat">
+        /// См. <see cref="DefaultStringBuilderExhauster"/>: <c>FFFFFFF</c> даёт ту же
+        /// лексическую форму, что и System.Xml.Serialization.
+        /// </param>
         public Utf8BinaryExhauster(
-            string dateTimeFormat = "yyyy-MM-ddTHH:mm:ss.fffffffK"
+            string dateTimeFormat = "yyyy-MM-ddTHH:mm:ss.FFFFFFFK"
             )
         {
             if (dateTimeFormat is null)

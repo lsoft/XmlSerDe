@@ -155,17 +155,17 @@ namespace XmlSerDe.Tests.Interop
             because: "XmlElement.Order переставляет члены на записи; на чтении порядок "
                 + "и раньше был не важен - разбор идёт по имени, а не по позиции");
 
-        #endregion
-
-        #region формат расходится, обмен цел
-
         [Fact]
         public void DateTimeKinds_Test() => AssertInterop(
             InteropCorpus.DateTimeKinds(),
-            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: false,
-            because: "Kind теперь сохраняется, но дробная часть на записи всегда семь знаков: "
-                + "BCL для целой секунды пишет '...T14:30:45Z', XmlSerDe - '...T14:30:45.0000000Z'. "
-                + "Обе формы обе стороны читают одинаково");
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "формат дат совпадает с XmlConvert.ToString(RoundtripKind) во всех четырёх "
+                + "Kind'ах: незначащие нули дробной части не пишутся, а на ровной секунде "
+                + "пропадает и сама точка");
+
+        #endregion
+
+        #region формат расходится, обмен цел
 
         [Fact]
         public void Nullables_Test() => AssertInterop(

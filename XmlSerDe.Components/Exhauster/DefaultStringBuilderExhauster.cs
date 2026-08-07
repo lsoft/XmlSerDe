@@ -15,9 +15,20 @@ namespace XmlSerDe.Components.Exhauster
         private readonly StringBuilder _sb;
         private readonly string _dateTimeFormat;
 
+        /// <param name="dateTimeFormat">
+        /// По умолчанию - лексическая форма, которую даёт
+        /// <c>XmlConvert.ToString(value, XmlDateTimeSerializationMode.RoundtripKind)</c>,
+        /// то есть та же, что пишет System.Xml.Serialization.
+        ///
+        /// Ключ здесь - <c>FFFFFFF</c> вместо <c>fffffff</c>: незначащие нули дробной
+        /// части не пишутся, а когда она нулевая целиком - вместе с ней пропадает и
+        /// сама точка. Прежнее <c>fffffff</c> давало на ровной секунде
+        /// <c>...T14:30:45.0000000Z</c> там, где BCL пишет <c>...T14:30:45Z</c>;
+        /// оба варианта разбираются одинаково, но документы посимвольно не совпадали.
+        /// </param>
         public DefaultStringBuilderExhauster(
             StringBuilder? sb = null,
-            string dateTimeFormat = "yyyy-MM-ddTHH:mm:ss.fffffffK"
+            string dateTimeFormat = "yyyy-MM-ddTHH:mm:ss.FFFFFFFK"
             )
         {
             if (dateTimeFormat is null)
