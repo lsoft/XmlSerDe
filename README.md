@@ -2,7 +2,7 @@
 
 Allocation-free XML serializer/deserializer based on C# incremental source generators (ISG). Because generation happens at compile time, there is no runtime reflection cost and no performance degradation as the number of serialized types grows.
 
-XmlSerDe's purpose is **POCO ↔ XML data binding**: mapping plain C# classes to XML and back, format-compatible with `System.Xml.Serialization` for the primitives, collections, and `xsi:type` polymorphism it supports. It targets that data-binding scenario specifically rather than being a general-purpose XML processor — see [Out of scope by design](#out-of-scope-by-design) for what that excludes and why.
+XmlSerDe's purpose is **POCO ↔ XML data binding**: mapping plain C# classes to XML and back, format-compatible with `System.Xml.Serialization` for the primitives, collections, and `xsi:type` polymorphism it supports. It targets that data-binding scenario specifically rather than being a general-purpose XML processor — see [Out of scope by design](#out-of-scope-by-design) for what that excludes and why. Existing `XmlSerializer` code can be moved over one project at a time without being rewritten — see [Drop-in mode](#drop-in-mode-xmlserdecompat), and note what it deliberately does not accelerate.
 
 ## Status
 
@@ -220,12 +220,6 @@ public void Serialize_ToStream_Test()
 [XmlSubject(typeof(PerformanceTime), false)]
 [XmlSubject(typeof(InfoContainer), true)]
 [XmlSubject(typeof(BaseInfo), false)]
-[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived1Info))]
-[XmlSubject(typeof(Derived1Info), false)]
-[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived2Info))]
-[XmlSubject(typeof(Derived2Info), false)]
-[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived3Info))]
-[XmlSubject(typeof(Derived3Info), false)]
 [XmlFactory(typeof(InfoContainer), "global::" + "XmlSerDe.Tests.Complex.Subject" + "." + nameof(CachedInfoContainer) + "." + nameof(CachedInfoContainer.Reuse) + "()")]
 public partial class XmlSerializerDeserializer
 {
@@ -239,6 +233,7 @@ public partial class XmlSerializerDeserializer
 | **XmlSerDe.Common** | netstandard2.0; net8.0; net10.0 | Attributes, `IInjector` / `IExhauster` contracts, `XmlScan`/`XmlTextDecoder`, and `XmlNode2` — a low-allocation XML node parser over `ReadOnlySpan<char>`. |
 | **XmlSerDe.Components** | netstandard2.0; net8.0; net10.0 | Default runtime implementations: injectors and exhausters. |
 | **XmlSerDe.Generator** | netstandard2.0 (Roslyn analyzer) | Incremental source generator that emits serialization/deserialization code at compile time. |
+| **XmlSerDe.Compat** | netstandard2.0; net8.0; net10.0 | Optional. A facade that *is* a `System.Xml.Serialization.XmlSerializer` — see [Drop-in mode](#drop-in-mode-xmlserdecompat). Referenced only if you want it; nothing else depends on it. |
 | **XmlSerDe.Tests** | net472; net8.0; net10.0 | Functional tests (xUnit). |
 | **XmlSerDe.PerformanceTests** | net472; net8.0; net10.0 | BenchmarkDotNet benchmarks vs `System.Xml.Serialization`. |
 
@@ -314,6 +309,241 @@ var body = BuiltinCodeHelper.CutXmlHead(fullXml.AsSpan());
 OrderSerializer.Deserialize(DefaultInjector.Instance, body, out Order result);
 ```
 
+## Drop-in mode: `XmlSerDe.Compat`
+
+The route above is the native one: you declare the serializer class, and every call site names it. `XmlSerDe.Compat` is the other route — for code that already calls `System.Xml.Serialization.XmlSerializer` and would rather not be rewritten. It is **not** a full drop-in replacement; see [What it does not accelerate](#what-it-does-not-accelerate) and [Limitations](#limitations) before reaching for it. In particular, it inherits the untrusted-input caveat: the facade does not add well-formedness validation, so an accelerated type is no safer on hostile input than the native route.
+
+Reference the extra project and add one line to your own:
+
+```xml
+<ProjectReference Include="..\XmlSerDe.Compat\XmlSerDe.Compat.csproj" />
+```
+
+```csharp
+global using XmlSerializer = XmlSerDe.Compat.XmlSerializer;
+```
+
+That is the whole setup. There is no serializer class to declare and no registration to write: the generator finds every `new XmlSerializer(typeof(T))` whose argument is a literal `typeof`, walks the object graph from `T` transitively — members, collection element types, `[XmlInclude]` derived types, none of which the call site names — and registers the generated delegates from a `[ModuleInitializer]`, before your first line of code runs.
+
+`XmlSerDe.Compat.XmlSerializer` derives from `System.Xml.Serialization.XmlSerializer`, so an instance can be handed to DI, to a field, or to third-party code that has never heard of XmlSerDe:
+
+```csharp
+var serializer = new XmlSerializer(typeof(Order));   // resolves to the facade
+
+// fast path: the static type at the call site is the facade
+string xml = serializer.SerializeToString(order);
+var back = (Order)serializer.Deserialize(xml.AsSpan());
+
+// also works, at a cost — see below
+System.Xml.Serialization.XmlSerializer asBcl = serializer;
+asBcl.Serialize(Console.Out, order);
+```
+
+### When it pays off — and when it doesn't
+
+Two things get cheaper, and they are cheaper for different reasons.
+
+**Per call.** `System.Xml.Serialization` walks a reflection-built plan and materializes an intermediate node tree; the generated code does neither. A round trip of a three-member document (`int`, `string`, `List<string>` of two items), 1000 iterations after warm-up:
+
+| Round trip | Allocated per call |
+|---|---|
+| facade, `SerializeToString` + `Deserialize(span)` | 1.0 KB |
+| facade, `Serialize(TextWriter)` + `Deserialize(TextReader)` | 2.0 KB |
+| `System.Xml.Serialization`, same `TextWriter`/`TextReader` | 29.4 KB |
+
+**Per process.** `System.Xml.Serialization` builds a serialization plan for each type on first use — measured cold on the same machine: ~40 ms for the first `XmlSerializer` in the process (that one warms the shared infrastructure), then ~1.5–2 ms of constructor plus ~0.5 ms of first call for every further type. Constructing the facade for an accelerated type instead does a dictionary lookup, and the BCL serializer for that type is never built at all — the fallback field stays null unless something actually needs it.
+
+(Both figures are quick in-process measurements, not BenchmarkDotNet runs; the rigorous numbers for the underlying engine are in [Performance](#performance).)
+
+So it pays off when:
+
+- **you serialize a lot.** Message pumps, per-request payloads, batch jobs — anything where the per-call cost is multiplied by a large number;
+- **process startup is on the clock.** CLI tools, serverless functions, desktop app launch: a project with a dozen serialized types pays tens of milliseconds to `System.Xml.Serialization` before doing any work, and accelerated types skip it;
+- **allocation rate is the problem**, not raw speed — a service whose gen0 collections are driven by XML traffic;
+- **documents are deeply nested.** Deserialization is single-pass, so cost does not grow with depth ([5.7× on a 100-level document](#deserialization)).
+
+It buys you nothing — or close to nothing — when:
+
+- **the types are refused.** See [What it does not accelerate](#what-it-does-not-accelerate); the code still works, at exactly the speed it had before;
+- **the calls go through `XmlWriter` / `XmlReader` / `XmlSerializerNamespaces`.** Those paths materialize the document or hand the call over entirely — see [What the fast path costs elsewhere](#what-the-fast-path-costs-elsewhere). If that is *all* your code does, the facade adds a layer and returns nothing;
+- **serialization happens once, at startup, on a small config file.** Saving 2 ms on a 300 ms boot is not a reason to add a dependency;
+- **the bytes must match `System.Xml.Serialization` exactly** — see [Where the output differs](#where-the-output-differs-from-systemxmlserialization);
+- **the input is untrusted.** XmlSerDe does not validate well-formedness; that is a property of the engine, and the facade does not change it.
+
+A useful way to decide: the facade helps in proportion to how much of your XML work already goes through the fast overloads on types the generator accepts. Measure that share first — [Verifying the migration](#verifying-the-migration) shows how to get the list.
+
+### What it does not accelerate
+
+A type that the generator will not serve is not an error: it falls back to `System.Xml.Serialization.XmlSerializer` and keeps working, just without the speed-up. The generator refuses a type **whole** rather than emitting almost-correct code for it, so a refusal is triggered by any of:
+
+- any type in the graph is not a class (a `struct` is refused, though the BCL supports it), or is generic, or — unless `abstract` — has no accessible parameterless constructor;
+- an `abstract` type declares no `[XmlInclude]`, or is the root itself: dispatch by `xsi:type` at the top of the document is not supported;
+- a member type is a collection other than `List<T>` or `T[]` (a `HashSet<T>` is refused, though the BCL supports it), or a nested collection (`List<List<int>>`), or any other generic.
+
+Some *call sites* aren't accelerated either: `new XmlSerializer(someTypeVariable)` cannot be resolved at build time and is not seen at all. Some *paths* aren't either — see the table below. `XmlSerDe.Compat.XmlSerializer.IsAccelerated` answers the question for an instance you already hold.
+
+Every refusal is reported, because "why didn't mine get faster" should have an answer:
+
+| Diagnostic | Meaning | Default severity |
+|---|---|---|
+| `XMLSERDE001` | this type falls back, with the reason and the call-site location | `Info` |
+| `XMLSERDE002` | code generation was abandoned after the graph walk had accepted the type — a gap in the generator, not a refusal by design | `Warning` |
+
+Refusing one type never affects the others. If your project depends on the acceleration, make the fallback loud:
+
+```xml
+<PropertyGroup><XmlSerDeCompatStrict>error</XmlSerDeCompatStrict></PropertyGroup>
+<ItemGroup><CompilerVisibleProperty Include="XmlSerDeCompatStrict" /></ItemGroup>
+```
+
+`warning` and `true` raise `XMLSERDE001` to a warning; `error` fails the build. The strict setting changes only the volume, never the decision — the same types are accelerated either way. `CompilerVisibleProperty` is required: without it the generator cannot see the property.
+
+### What the fast path costs elsewhere
+
+The allocation figures in [Performance](#performance) are for the span API, and the facade does not extend them to every overload:
+
+| Call | Path |
+|---|---|
+| `SerializeToString`, `Deserialize(ReadOnlySpan<char>)` | generated code only — nothing else is materialized |
+| `Serialize(TextWriter)`, `Serialize(Stream)` | the document is built as a string first, then written (and encoded, for a stream) |
+| `Deserialize(TextReader)`, `Deserialize(Stream)` | the input is read to a string first (`ReadToEnd`), then parsed from its span |
+| `Serialize(XmlWriter)`, `Deserialize(XmlReader)` — i.e. any call through the base type | same materialization, plus the `XmlWriter`/`XmlReader` themselves: the document goes out through `WriteRaw` and comes in through `ReadOuterXml` |
+| `Serialize(…, XmlSerializerNamespaces)`, `CanDeserialize` | handed to `System.Xml.Serialization` in full |
+
+The `XmlSerializerNamespaces` overloads are given away rather than approximated: XmlSerDe writes namespace declarations as fixed literals and cannot honor a caller-supplied set, so producing a document without the requested declarations would be worse than being slow.
+
+If you have no reference to `XmlSerDe.Compat`, none of this exists: the generator emits nothing for compatibility, which is asserted by a test rather than promised.
+
+### Where the output differs from `System.Xml.Serialization`
+
+Both sides read each other's documents — that is what the [differential harness](#test-coverage-map) checks on every build, in both directions. But the two writers do not produce the same *text*, and if anything downstream compares XML byte-for-byte, this is the part that will surprise you. The same object, written by each side:
+
+```xml
+<!-- System.Xml.Serialization, Serialize(TextWriter) -->
+<?xml version="1.0" encoding="utf-16"?>
+<Order xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Id>7</Id>
+  <CustomerName>ACME</CustomerName>
+</Order>
+
+<!-- XmlSerDe.Compat, same call -->
+<?xml version="1.0" encoding="utf-8"?><Order><Id>7</Id><CustomerName>ACME</CustomerName></Order>
+```
+
+Three differences, all deliberate:
+
+- **No indentation.** XmlSerDe writes the document compactly; `System.Xml.Serialization` indents with two spaces and CRLF. Insignificant whitespace, but not identical bytes.
+- **No `xmlns:xsi` / `xmlns:xsd` on the root.** The BCL declares both prefixes on every document whether or not they are used; XmlSerDe declares `xmlns:xsi` exactly where it writes `xsi:type` or `xsi:nil`, and nowhere else. Both are legal, and each side reads the other's form.
+- **The declared encoding is always `utf-8`.** The BCL derives it from the sink, so writing to a `StringWriter` yields `encoding="utf-16"` — technically the truth about a UTF-16 string in memory, and a lie about the same text once written to a file. Pass `appendXmlDeclaration: false` to `SerializeToString` if you would rather write the prolog yourself.
+
+Beyond the text, two behavioral differences worth knowing before you migrate:
+
+- **The `UnknownElement` / `UnknownAttribute` / `UnknownNode` / `UnreferencedObject` events do not fire on the fast path.** XmlSerDe skips unrecognized elements silently — as does the BCL, but the BCL raises the event first. Code that subscribes to those events for logging or strictness gets silence instead. This is verified, not assumed: with an unknown element in the input, the BCL raised one event and the facade raised none.
+- **Exceptions have different types.** Handing an object of the wrong type to `Serialize` throws `InvalidCastException` from the facade and `InvalidOperationException` (wrapping the real cause) from the BCL. A `catch (InvalidOperationException)` that used to cover this will not catch it any more.
+
+Null, on the other hand, behaves identically on purpose: `null` is written as `<T xsi:nil="true" />` and read back as `null`, because the fast path hands nulls to `System.Xml.Serialization` rather than inventing an answer.
+
+### Migrating an existing project
+
+Work one project at a time — the `global using` is per compilation, so the blast radius of each step is one assembly.
+
+**1. Pick a project and add the reference.**
+
+```xml
+<ProjectReference Include="..\XmlSerDe.Compat\XmlSerDe.Compat.csproj" />
+<ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" />
+<ProjectReference Include="..\XmlSerDe.Components\XmlSerDe.Components.csproj" />
+<ProjectReference Include="..\XmlSerDe.Generator\XmlSerDe.Generator.csproj"
+                  OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+```
+
+**2. Take the inventory before switching anything.** Add the alias in a scratch commit, then build once with the fallback made loud — the default severity of `XMLSERDE001` is `Info`, which `dotnet build` does not print at any verbosity:
+
+```xml
+<ItemGroup><CompilerVisibleProperty Include="XmlSerDeCompatStrict" /></ItemGroup>
+```
+
+```bash
+dotnet build -p:XmlSerDeCompatStrict=warning
+```
+
+Every refused type shows up as a warning pointing at the *call site*, with the reason:
+
+```
+Program.cs(13,19): warning XMLSERDE001: 'global::Bad' falls back to
+System.Xml.Serialization.XmlSerializer: Set: HashSet<int> is not a supported generic type
+```
+
+That list is the decision: if the types you actually care about are all on it, stop here and drop the branch — this project is not a candidate.
+
+**3. Switch the alias on**, in one file:
+
+```csharp
+global using XmlSerializer = XmlSerDe.Compat.XmlSerializer;
+```
+
+Anything that names `System.Xml.Serialization.XmlSerializer` by its full name is unaffected — the alias only rebinds the short name, so a partially migrated file keeps compiling.
+
+**4. Find the call sites the generator cannot see.** `new XmlSerializer(t)` with a variable, a `Type` from configuration, or a factory that takes `Type` produces no acceleration and no diagnostic — there is nothing to report. Where the type is statically known, spell it out:
+
+```csharp
+// invisible to the generator
+static XmlSerializer For(Type t) => new XmlSerializer(t);
+
+// visible
+static XmlSerializer ForOrder() => new XmlSerializer(typeof(Order));
+```
+
+**5. Deal with the constructors that don't exist.** The facade has one constructor, `XmlSerializer(Type)`. `XmlSerializer(Type, XmlRootAttribute)`, `XmlSerializer(Type, Type[])`, `XmlSerializer(Type, XmlAttributeOverrides)` and friends are not there, so those call sites won't compile — which is the honest outcome, since the generator could not have honored them anyway. Keep them on `System.Xml.Serialization.XmlSerializer` by its full name.
+
+**6. Move the hot calls onto the fast overloads.** Existing code keeps working untouched, but `SerializeToString(obj)` and `Deserialize(span)` are where the numbers above come from. Passing an `XmlWriter` or `XmlReader` works and is correct — it just gives up most of the win.
+
+**7. Turn on strict mode once the list is empty**, so a future edit that quietly costs you the acceleration — a new `Dictionary<,>` member, a type that loses its parameterless constructor — fails the build instead of getting slower:
+
+```xml
+<PropertyGroup><XmlSerDeCompatStrict>error</XmlSerDeCompatStrict></PropertyGroup>
+```
+
+### Verifying the migration
+
+The migration is a no-op for correctness if all four of these hold. Check them in order — each catches a different failure.
+
+**1. The build is clean under strict mode.**
+
+```bash
+dotnet build -p:XmlSerDeCompatStrict=error
+```
+
+No `XMLSERDE001` means every call site the generator *saw* was accepted — it says nothing about the ones it never saw, which is what check 2 is for. `XMLSERDE002` means the graph walk accepted a type the code generator then choked on: that is a bug in XmlSerDe, not in your code — the affected types fall back and keep working, and the message is worth reporting.
+
+**2. The types you expect are actually registered**, at runtime, where a refactor can't silently undo it:
+
+```csharp
+var serializer = new XmlSerializer(typeof(Order));
+Debug.Assert(serializer.IsAccelerated, "Order is no longer served by the generated code");
+```
+
+`IsAccelerated` is the only way to tell the two paths apart from the outside — a fallback is invisible otherwise, which is exactly why the property exists.
+
+**3. Old documents still read, and new documents still parse elsewhere.** Round-tripping through XmlSerDe alone proves nothing: two consistent-but-wrong halves cancel out. Compare against the BCL in both directions, which is what the project's own harness does:
+
+```csharp
+var ours = new XmlSerializer(typeof(Order));
+var bcl = new System.Xml.Serialization.XmlSerializer(typeof(Order));
+
+// they read our documents
+var theirs = (Order)bcl.Deserialize(new StringReader(ours.SerializeToString(order)));
+
+// we read theirs
+var writer = new StringWriter();
+bcl.Serialize(writer, order);
+var mine = (Order)ours.Deserialize(writer.ToString().AsSpan());
+```
+
+Keep a corpus of real documents from production for this — the shapes that break interop are the ones nobody thought to write a POCO for.
+
+**4. Nothing downstream depends on the exact bytes.** Grep for golden-file comparisons, XML stored as a string and compared for equality, checksums over serialized payloads, and schema validation that expects the `xsd`/`xsi` declarations. See [Where the output differs](#where-the-output-differs-from-systemxmlserialization) — this is the failure that shows up in someone else's test suite, not yours.
+
 ## Serialization/deserialization class
 
 You register types and configure code generation by decorating a single `partial` class with attributes from `XmlSerDe.Common`. All attributes can be applied multiple times to the same class.
@@ -327,9 +557,11 @@ Registers a type for serialization and deserialization.
 | `SubjectType` | The CLR type to handle. Every member type used in the object graph must be registered before it appears in another type. |
 | `IsRoot` | `true` — generates a public `Deserialize(injector, xml, out T)` and root `Serialize(exh, obj, appendXmlHead)` for this type. Typically exactly one root per serializer class. |
 
-### `[XmlDerivedSubject(typeof(Base), typeof(Derived))]`
+### `[XmlInclude(typeof(Derived))]` — `System.Xml.Serialization`
 
-Enables polymorphic deserialization via `xsi:type`. The base type must already have `[XmlSubject]`, and the derived type must be concrete and registered with its own `[XmlSubject]`. Abstract bases require at least one derived registration.
+Enables polymorphic serialization and deserialization via `xsi:type`. Goes on the **base type**, not on the serializer class, and is the very same attribute `System.Xml.Serialization` reads — so a type already annotated for the BCL needs nothing added.
+
+The generator registers each included type as a subject on its own, so a derived type needs no `[XmlSubject]` of its own. Includes are followed recursively: a derived type may declare its own. Abstract bases require at least one include.
 
 ### `[XmlExhauster(typeof(T))]`
 
@@ -352,9 +584,10 @@ The factory type must provide a `Reset()`-style method that clears state before 
 ### Example: polymorphic serializer
 
 ```csharp
+[XmlInclude(typeof(Derived1Info))]
+public abstract class BaseInfo { /* ... */ }
+
 [XmlSubject(typeof(BaseInfo), false)]
-[XmlDerivedSubject(typeof(BaseInfo), typeof(Derived1Info))]
-[XmlSubject(typeof(Derived1Info), false)]
 [XmlSubject(typeof(InfoContainer), true)]
 public partial class MySerializer { }
 ```
@@ -423,11 +656,15 @@ Its attribute parser follows XML 1.0's actual grammar rather than a narrow subse
 An **exhauster** (`IExhauster`) is the output sink for serialized data. For each supported builtin type it provides `Append(T)` and `Append(T?)`, plus:
 
 - `Append(string? value)` — raw append.
-- `AppendEncoded(string? value)` — validates then HTML-encodes then appends (used for `string` builtins).
+- `AppendEncoded(string? value)` — validates then HTML-encodes then appends (used for `string` builtins in element text).
+- `AppendAttributeEncoded(string? value)` — the same for an attribute value, which needs a wider escape set: see the well-formedness note below.
+- `AppendBase64(byte[]? value)` — a `byte[]` as one `base64Binary` token. No escaping at all: the base64 alphabet contains no markup and no whitespace, so the same token serves both element text and attribute values. The length estimator is the only exhauster that does not call the encoder here — it computes the encoded length arithmetically rather than building a string only to measure it.
 
 Null nullable values (including nullable value types like `int?`, `DateTime?`) are skipped entirely on serialize rather than emitting an empty tag.
 
 **Culture-invariant formatting:** numeric and `DateTime` values are formatted via `ISpanFormattable.TryFormat` into a stack buffer with `CultureInfo.InvariantCulture` (falling back to an invariant-culture `ToString` for larger values), so output matches XSD's fixed lexical space regardless of the ambient thread culture. `Guid` uses the same stack-buffer `TryFormat` path — note that `StringBuilder` has no `Append(Guid)` overload, so appending one directly would silently bind to `Append(object?)` and box.
+
+**Attribute values escape more than text:** in element text a tab, CR or LF is an ordinary character, but inside an attribute value a reader is *required* to replace each one with a space (XML 1.0 §3.3.3, attribute-value normalization) — the only way to get one through is a character reference written by the producer. So `AppendAttributeEncoded` (`XmlAttributeEncoder`) escapes `< > & "` plus CR, LF and TAB, and leaves the apostrophe alone since the value is always double-quoted — character for character what `XmlWriter` does. It returns the original string instance when there is nothing to escape, which is the overwhelmingly common case.
 
 **Well-formedness guard:** `AppendEncoded` calls `XmlCharGuard.EnsureValidXmlChars` before encoding. `WebUtility.HtmlEncode` escapes `<`, `>`, `&`, `"`, `'` but doesn't know about XML's `Char` production (XML 1.0 §2.2), which forbids most C0 control characters, unpaired surrogates, and `U+FFFE`/`U+FFFF` outright — there is no legal escape for these in XML. String content containing them throws `ArgumentException` instead of silently producing not-well-formed output. Legal whitespace (tab/CR/LF) is allowed through.
 
@@ -494,21 +731,47 @@ XML element names follow XSD conventions:
 | `long` / `long?` | `long` |
 | `ulong` / `ulong?` | `unsignedLong` |
 | `decimal` / `decimal?` | `decimal` |
+| `float` / `float?` | `float` |
+| `double` / `double?` | `double` |
+| `char` / `char?` | `char` |
+| `TimeSpan` / `TimeSpan?` | `duration` |
 | `string` | `string` (HTML-encoded on serialize) |
+
+Three of these have a lexical form that does not follow from the type, and each matches what `System.Xml.Serialization` writes:
+
+- **`float` / `double`** use the shortest round-trippable representation, but infinities are written `INF` / `-INF`, not `Infinity`.
+- **`char` is written as its code point**, not as the character: `'A'` becomes `65`. XSD has no type for a single character, and the BCL uses one of its own from `http://microsoft.com/wsdl/types/`.
+- **`TimeSpan`** is an ISO-8601 duration (`P1DT2H3M4.005S`, `PT0S` for zero, leading minus when negative). Note that `XmlSerializer` only gained `TimeSpan` support in .NET Core — on .NET Framework it writes an empty element and loses the value, so XmlSerDe's output is not byte-compatible with it there. XmlSerDe writes the duration on every target.
+
+`byte[]` is not in the table because it is not decided by type alone. It is written as a single `base64Binary` token — `<Bytes>AQL6</Bytes>`, not one element per byte — but only when the member carries no explicit `[XmlArray]` / `[XmlArrayItem]` wrapper; with one, the array goes back to being an ordinary collection. `List<byte>` is never base64: it stays a collection of `<unsignedByte>` elements. Both rules are `System.Xml.Serialization`'s, measured rather than assumed. An empty array is an empty element, a `null` array is no element at all, and both an empty and a self-closed element read back as `byte[0]`, never `null`.
 
 ### Complex types
 
 - Classes registered with `[XmlSubject]`
 - **Enums** — serialized as `<EnumTypeName>value</EnumTypeName>`. The generator knows every declared member at compile time, so it emits a `switch` over them on serialize and a chain of span `SequenceEqual` comparisons on deserialize, rather than `Enum.ToString()` / `Enum.Parse` — both of which go through reflection, and `Enum.Parse` additionally boxes its `object` return on every call. `Enum.ToString()` / `Enum.Parse` remain as the fallback arm for values that match no declared member (undefined numeric values, `[Flags]` combinations), so behavior is unchanged for those.
-- **Inheritance** — via `[XmlDerivedSubject]` and `xsi:type`
-- **Collections** — `List<T>` and `T[]` only
+- **Inheritance** — via `[XmlInclude]` and `xsi:type`
+- **Collections** — `List<T>` and `T[]` only. `byte[]` is the one array that is not written element-per-item — see the note under [Builtin primitives](#builtin-primitives). A collection *of* `byte[]` (`byte[][]`, `List<byte[]>`), which `System.Xml.Serialization` writes as one `<base64Binary>` element per inner array, is not supported.
 
 ### Members
 
-- Public fields and properties (including inherited) with accessible setters
-- `[XmlIgnore]` properties are skipped
+- Public fields and properties (including inherited) with accessible setters. A `List<T>` property without a setter is the one exception: it is filled through `Add` on the instance the constructor created (and skipped entirely if it created none) — matching `System.Xml.Serialization`, which likewise skips a setter-less array, string, or complex type
+- `[XmlIgnore]` members (fields as well as properties) are skipped
+- `[DefaultValue(x)]` members are omitted when equal to `x`. Write side only — `System.Xml.Serialization` does not restore the default on read either, and doing so here would diverge from it
+- The `XxxSpecified` companion pattern is honored: a public `bool` named after the member plus `Specified` gates whether the member is written, and is set to `true` on read as soon as the element is seen
 - Private and protected members are skipped
-- XML element names match C# type and property names (not configurable)
+- XML names default to the C# type and member names, and are overridden by the `System.Xml.Serialization` naming attributes: `[XmlRoot]`, `[XmlType]`, `[XmlElement]`, `[XmlArray]`, `[XmlArrayItem]`, `[XmlEnum]`. `[XmlElement(Order = n)]` / `[XmlArray(Order = n)]` set the element order on write.
+- `[XmlAttribute]` moves a member into the owner's start tag (`<Owner id="7">`); `[XmlText]` makes it the owner's body, with no tag of its own. Both accept builtin primitives, enums and `byte[]` only — everything else has no plain lexical form, and `System.Xml.Serialization` refuses the same cases (including `Nullable<T>`) for the same reason. A `null` string attribute is not written at all, and an empty body leaves an `[XmlText]` member `null` — both matching the BCL. Attribute values get their own escaping: on top of the markup characters, a literal CR, LF or TAB is written as a character reference (`&#xD;` `&#xA;` `&#x9;`), because a reader is required to replace each of them with a space otherwise (XML 1.0 §3.3.3) — so a string with a newline in an attribute round-trips.
+
+```csharp
+public class Message
+{
+    [XmlAttribute("id")]
+    public int Id { get; set; }        // <Message id="7">
+
+    [XmlText]
+    public string Body { get; set; }   // <Message id="7">body</Message>
+}
+```
 
 ## Limitations
 
@@ -516,7 +779,7 @@ XML element names follow XSD conventions:
 - **No malformed-XML *input* protection** — the deserializer does not validate well-formedness of its input; do not use with untrusted input. (Serialization *output*, by contrast, is guarded: `AppendEncoded` rejects string content containing characters illegal per XML 1.0's `Char` production — see [`XmlCharGuard`](#exhauster).)
 - **Parameterless constructor required** unless `[XmlFactory]` is used.
 - Serialized types must be visible to the serializer partial class.
-- Members need accessible setters for deserialization.
+- Members need accessible setters for deserialization, except setter-less `List<T>` properties (see [Members](#members)).
 - **Only `List<T>` and `T[]`** as collections.
 - The serializer class must be `partial`.
 - Unknown member types cause a compile-time generator error.
@@ -530,15 +793,14 @@ XmlSerDe targets POCO ↔ XML data binding, not general-purpose XML processing. 
 
 - **No DTD support.** A `<!DOCTYPE ...>` in the prolog is skipped over, not parsed — so any custom general entities it declares are not resolved. Only the five predefined XML entities (`&amp;`, `&lt;`, `&gt;`, `&apos;`, `&quot;`) plus character references (`&#49;`, `&#x31;`) are understood; a reference to anything else — including an HTML named entity such as `&nbsp;` — throws, because without a DTD declaring it that is a well-formedness error (XML 1.0 §4.1, WFC: Entity Declared) rather than text to pass through. There's also no DTD-based content validation and no fetching of external DTDs.
 - **No general XML Namespaces support.** Only one namespace is special-cased: `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"` for `xsi:type` polymorphism (the prefix itself is flexible — deserialize resolves whichever prefix is actually bound to that URI). Beyond that, element and attribute names are compared as literal text, prefix included; there's no general prefix-to-URI resolution or default-namespace (`xmlns="uri"`) handling.
-- **No XML-attribute data binding.** Every serialized member becomes a child element; there's no equivalent of `System.Xml.Serialization`'s `[XmlAttribute]` or `[XmlText]`. (`[XmlIgnore]` is the exception — XmlSerDe recognizes `System.Xml.Serialization.XmlIgnoreAttribute` directly, so it can be reused as-is.)
 - **`xml:space`, `xml:lang`, `xml:base` are not interpreted.** In practice this rarely matters for `xml:space`: text content is always preserved verbatim regardless (matching the XML default, `xml:space="preserve"`) — but `xml:space="default"`, which would opt back into whitespace collapsing, has no effect either.
-- **No mixed content.** An element is parsed as either plain text or a list of child elements, never an interleaving of both — text appearing between child elements is discarded rather than bound to any member.
+- **No mixed content.** An element is parsed as either plain text or a list of child elements, never an interleaving of both — text appearing between child elements is discarded rather than bound to any member. Consequently a type that combines an `[XmlText]` member with element members — which `System.Xml.Serialization` does support — fails to build, rather than silently producing a document with the text missing.
 - **No duplicate-attribute detection.** XML 1.0 forbids two attributes with the same name on one element; XmlSerDe doesn't check for this and silently takes the first match.
 - **`encoding` / `standalone` in the XML declaration are ignored** on both serialize and deserialize. XmlSerDe operates on an already-decoded `ReadOnlySpan<char>`, not raw bytes, so byte-level decoding happens before the library sees the input — a mismatch between a document's declared `encoding` and how the caller actually decoded it is not detected.
 
 ## How the generator works
 
-`XmlDeserializeGenerator` (`IIncrementalGenerator`) triggers on any `partial class` decorated with `[XmlSubject]` or `[XmlDerivedSubject]`.
+`XmlDeserializeGenerator` (`IIncrementalGenerator`) triggers on any `partial class` decorated with `[XmlSubject]`.
 
 For each serializer class it emits:
 
@@ -553,6 +815,10 @@ For each serializer class it emits:
 **Serialize:** wraps objects in `<TypeName>` elements; polymorphic types get `xmlns:xsi` + `xsi:type`; builtin members use property wrapper + XSD inner element.
 
 **Deserialize:** walks child nodes, dispatches on element name (`SequenceEqual` on spans), resolves polymorphism via `xsi:type`, constructs objects with `new T()` or the `XmlFactory` expression.
+
+**Incrementality.** The usual advice for incremental generators — never put a `Compilation` in the pipeline, drive generation from the annotated declaration alone — does not apply here unchanged. `[XmlSubject(typeof(T))]` sits on the host class, but the emitted code is derived from the *transitive type graph* rooted at `T`, and those types live in other files. Since Roslyn re-runs a syntax provider's transform only for trees that changed, a generator keyed on the host's syntax node would be perfectly incremental and would happily serve stale code after a member is renamed elsewhere.
+
+So the `Compilation` stays an input, and symbol binding runs on every edit. Caching comes from *output equality* instead: the pipeline's last step yields plain strings and diagnostic descriptions with no symbols, syntax nodes, or compilations in them, so whenever an edit doesn't change the generated text, the source-output step is reported as `Cached` and Roslyn reuses the already-parsed generated trees rather than re-parsing and re-binding them. That reuse, not the generator's own work, is the dominant cost in the IDE. Both halves of the contract — cache hits on irrelevant edits, cache *misses* on cross-file changes that matter — are covered by `GeneratorIncrementalityFixture`.
 
 ## Building and testing
 
@@ -592,6 +858,10 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | `SerDeFixtureV2` | Same feature set as `SerDeFixture`, exercised through a second serializer declaration to catch cross-class code-gen issues |
 | `CoverageExpansionFixture` | All primitive types incl. `decimal`/`Guid` round-trips, nullable value-type omission on serialize, length-estimator accuracy, empty/null collections, CDATA strings (including concatenated blocks), HTML-entity-encoded string serialization |
 | `SpecComplianceFixture` | XML 1.0 edge cases: unescaped `>` in attribute values (including a foreign-producer-style extra attribute during polymorphic deserialize), prolog processing instructions / `DOCTYPE` (incl. internal subset) being skipped, attribute-value whitespace normalization vs. character references |
+| `Interop/*` | Differential harness: 36 POCO shapes run through both XmlSerDe and `System.Xml.Serialization` in all three directions (each reads the other's output; the two documents are compared). Divergences are pinned by tests as well, so closing one turns a test red on purpose. A compatibility table is written to `interop-report.md` next to the test assembly |
+| `Interop/BinaryLexicalFixture` | `base64Binary` lexical edges that neither side writes and the differential runs therefore cannot produce: empty and self-closing elements decoding to `byte[0]` rather than `null`, whitespace inside the lexeme, a corrupt lexeme. Each is asserted as "both sides agree", not as "ours works" |
+| `Compat/CompatFixture` | The facade at runtime: it *is* a `System.Xml.Serialization.XmlSerializer`, a refused type still round-trips through the fallback, a transitive graph is accelerated from a single call site, and every overload — including calls through the base-typed reference — produces a document the BCL can read |
+| `Compat/CompatGeneratorFixture` | The facade at build time, driven through `CSharpGeneratorDriver`: which types are refused and why, that a refusal of one root leaves the others accelerated, that `XmlSerDeCompatStrict` changes severity only, and that a project without `XmlSerDe.Compat` gets no generated code at all |
 
 ## Alternatives
 

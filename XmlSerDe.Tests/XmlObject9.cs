@@ -25,6 +25,8 @@ namespace XmlSerDe.Tests
         }
     }
 
+    [System.Xml.Serialization.XmlInclude(typeof(XmlObject9Specific1))]
+    [System.Xml.Serialization.XmlInclude(typeof(XmlObject9Specific2))]
     public class XmlObject9Base
     {
         public string StringProperty

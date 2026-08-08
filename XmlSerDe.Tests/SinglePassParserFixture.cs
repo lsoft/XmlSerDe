@@ -108,7 +108,8 @@ namespace XmlSerDe.Tests
                 out XmlObject2 xo
                 );
 
-            Assert.Null(xo.StringProperty);
+            //закрытая нода без xsi:nil - это пустое значение, а не отсутствие значения
+            Assert.Equal("", xo.StringProperty);
             Assert.Equal(7, xo.IntProperty);
         }
 
@@ -121,6 +122,7 @@ namespace XmlSerDe.Tests
                 out XmlObject2 xo
                 );
 
+            //а вот с xsi:nil="true" значения действительно нет, и член остаётся null
             Assert.Null(xo.StringProperty);
             Assert.Equal(7, xo.IntProperty);
         }

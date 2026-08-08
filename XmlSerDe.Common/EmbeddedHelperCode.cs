@@ -83,30 +83,6 @@ namespace XmlSerDe.Common
         }
     }
 
-    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
-    public class XmlDerivedSubjectAttribute : Attribute
-    {
-        public readonly Type SubjectType;
-        public readonly Type DerivedType;
-
-        public XmlDerivedSubjectAttribute(Type subjectType, Type derivedType)
-        {
-            if (subjectType is null)
-            {
-                throw new ArgumentNullException(nameof(subjectType));
-            }
-
-            if (derivedType is null)
-            {
-                throw new ArgumentNullException(nameof(derivedType));
-            }
-
-            SubjectType = subjectType;
-            DerivedType = derivedType;
-        }
-    }
-
-
     public readonly ref struct XmlNode2
     {
         public static readonly string CDataHead = "<![CDATA[";
@@ -814,6 +790,202 @@ namespace XmlSerDe.Common
             throw new ArgumentException(
                 $"String contains character U+{(int)c:X4} at position {index}, which is not a legal XML 1.0 character (XML 1.0 §2.2)."
                 );
+        }
+    }
+
+    /// <summary>
+    /// Экранирование значения атрибута. От экранирования текста тела оно отличается
+    /// ровно на CR, LF и TAB: в теле это обычные значащие символы, а в значении
+    /// атрибута читатель обязан заменить каждый из них пробелом - это нормализация
+    /// значения атрибута, XML 1.0 §3.3.3, и отменить её нельзя. Единственный способ
+    /// довезти перевод строки до читателя - числовая ссылка, и пишет её тот, кто
+    /// пишет документ. Ровно это делает System.Xml.Serialization.
+    ///
+    /// Кавычка экранируется, апостроф - нет: значение всегда идёт в двойных кавычках.
+    /// Тот же набор замен, что у XmlWriter, символ в символ.
+    /// </summary>
+    public static class XmlAttributeEncoder
+    {
+        /// <summary>
+        /// Возвращает тот же экземпляр, если экранировать нечего: у подавляющего
+        /// большинства значений специальных символов нет вовсе, и платить за них
+        /// копией строки незачем.
+        /// </summary>
+        public static string Encode(string value)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
+
+            var first = IndexOfEscapable(value);
+            if (first < 0)
+            {
+                return value;
+            }
+
+            var sb = new System.Text.StringBuilder(value.Length + EscapedLength);
+            sb.Append(value, 0, first);
+
+            for (var i = first; i < value.Length; i++)
+            {
+                var c = value[i];
+                var replacement = ReplacementOrNull(c);
+                if (replacement is null)
+                {
+                    sb.Append(c);
+                }
+                else
+                {
+                    sb.Append(replacement);
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Сколько символов сверх исходной длины может занять экранирование.
+        /// Оценка сверху: самая длинная замена - <c>&amp;quot;</c>, шесть символов
+        /// на месте одного.
+        /// </summary>
+        public static int EstimateOverhead(string value)
+        {
+            if (value is null)
+            {
+                return 0;
+            }
+
+            var overhead = 0;
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (ReplacementOrNull(value[i]) is not null)
+                {
+                    overhead += EscapedLength;
+                }
+            }
+
+            return overhead;
+        }
+
+        /// <summary>
+        /// Длина самой длинной замены минус сам заменяемый символ, который уже
+        /// посчитан в длине исходной строки.
+        /// </summary>
+        private const int EscapedLength = 5;
+
+        private static int IndexOfEscapable(string value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (ReplacementOrNull(value[i]) is not null)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private static string? ReplacementOrNull(char c)
+        {
+            switch (c)
+            {
+                case '<':
+                    return "&lt;";
+                case '>':
+                    return "&gt;";
+                case '&':
+                    return "&amp;";
+                case '"':
+                    return "&quot;";
+                case '\r':
+                    return "&#xD;";
+                case '\n':
+                    return "&#xA;";
+                case '\t':
+                    return "&#x9;";
+                default:
+                    return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>byte[]</c> в XML - это не коллекция байтов, а одна лексема base64Binary:
+    /// <c>&lt;Bytes&gt;AQL6&lt;/Bytes&gt;</c>, а не три элемента подряд. Так его пишет
+    /// System.Xml.Serialization, и правило у него узкое - оно про сам <c>byte[]</c>,
+    /// а не про байт и не про всякую коллекцию байтов: <c>List&lt;byte&gt;</c>
+    /// остаётся обычной коллекцией, и <c>byte[]</c> с явной обёрткой
+    /// <see cref="System.Xml.Serialization.XmlArrayAttribute"/> - тоже (проверено).
+    ///
+    /// Алфавит base64 - это буквы, цифры, <c>+</c>, <c>/</c> и <c>=</c>, поэтому
+    /// экранировать здесь нечего ни в теле элемента, ни в значении атрибута.
+    /// </summary>
+    public static class XmlBase64
+    {
+        public static string Encode(byte[] value)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            //без переносов строк: перегрузка с Base64FormattingOptions.InsertLineBreaks
+            //рвала бы лексему каждые 76 символов, а XmlWriter пишет её одной строкой
+            return Convert.ToBase64String(value);
+        }
+
+        /// <summary>
+        /// Сколько символов займёт <see cref="Encode"/>: четыре символа на каждые
+        /// три байта, с добиванием до кратности padding'ом. Считается точно, а не
+        /// сверху, - формат постоянной длины, приблизительность тут не нужна.
+        /// </summary>
+        public static int EncodedLength(byte[]? value)
+        {
+            if (value is null)
+            {
+                return 0;
+            }
+
+            return (value.Length + 2) / 3 * 4;
+        }
+
+        /// <summary>
+        /// Пробелы и переносы строк внутри лексемы игнорируются - так же, как их
+        /// игнорирует и читатель BCL (проверено на обеих реализациях). Пустое тело
+        /// даёт пустой массив, а не null: <c>&lt;Bytes/&gt;</c> у BCL читается
+        /// именно в <c>byte[0]</c>.
+        /// </summary>
+        public static byte[] Decode(ReadOnlySpan<char> value)
+        {
+#if NETSTANDARD2_0
+            return Convert.FromBase64String(value.ToString());
+#else
+            //четыре символа на три байта - оценка сверху: пробельные символы внутри
+            //лексемы делают её длиннее, а результат от этого только короче
+            var maxLength = value.Length / 4 * 3 + 3;
+            var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(maxLength);
+            try
+            {
+                if (!Convert.TryFromBase64Chars(value, buffer, out var written))
+                {
+                    throw new FormatException(
+                        "The input is not a valid base64Binary lexical form: '" + value.ToString() + "'"
+                        );
+                }
+
+                var result = new byte[written];
+                Array.Copy(buffer, result, written);
+                return result;
+            }
+            finally
+            {
+                System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+            }
+#endif
         }
     }
 

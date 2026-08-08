@@ -40,7 +40,43 @@ namespace XmlSerDe.Common
         void Append(decimal value);
         void Append(decimal? value);
 
+        void Append(float value);
+        void Append(float? value);
+
+        void Append(double value);
+        void Append(double? value);
+
+        /// <summary>
+        /// Пишется кодовой точкой, а не символом: <c>'A'</c> превращается в
+        /// <c>65</c>. Так делает System.Xml.Serialization, и это не произвол -
+        /// в xsd типа для одиночного символа нет вовсе.
+        /// </summary>
+        void Append(char value);
+        void Append(char? value);
+
+        void Append(TimeSpan value);
+        void Append(TimeSpan? value);
+
         void Append(string? value);
+
+        /// <summary>
+        /// Текст тела элемента: экранируется разметка.
+        /// </summary>
         void AppendEncoded(string? value);
+
+        /// <summary>
+        /// Значение атрибута: сверх разметки экранируются ещё CR, LF и TAB, иначе
+        /// читатель заменит их пробелом и строка с переводом строки не переживёт
+        /// round-trip. См. <see cref="XmlAttributeEncoder"/>.
+        /// </summary>
+        void AppendAttributeEncoded(string? value);
+
+        /// <summary>
+        /// <c>byte[]</c> одной лексемой base64Binary. Экранирования здесь нет вовсе:
+        /// в алфавите base64 нет ни разметки, ни пробельных символов, поэтому одна
+        /// и та же лексема годится и в тело элемента, и в значение атрибута.
+        /// См. <see cref="XmlBase64"/>.
+        /// </summary>
+        void AppendBase64(byte[]? value);
     }
 }

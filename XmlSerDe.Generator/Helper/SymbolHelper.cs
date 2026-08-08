@@ -1,5 +1,7 @@
 ﻿#if NETSTANDARD
+using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -8,6 +10,45 @@ namespace XmlSerDe.Generator.Helper
 {
     internal static class SymbolHelper
     {
+        /// <summary>
+        /// Имя типа в форме метаданных: <c>Ns.Outer+Inner</c>, у обобщённых - с
+        /// арностью (<c>Ns.Pair`2</c>). Это то единственное, что генератор проносит
+        /// через инкрементальный конвейер вместо самого символа: строка ничего
+        /// не держит живым и сравнивается по значению, а разрешить её обратно
+        /// в символ можно у любой компиляции.
+        /// </summary>
+        public static string ToMetadataName(this INamedTypeSymbol type)
+        {
+            var nesting = new Stack<INamedTypeSymbol>();
+            for (var current = type.OriginalDefinition; current is not null; current = current.ContainingType)
+            {
+                nesting.Push(current);
+            }
+
+            var sb = new StringBuilder();
+
+            var ns = nesting.Peek().ContainingNamespace;
+            if (ns is not null && !ns.IsGlobalNamespace)
+            {
+                sb.Append(ns.ToDisplayString());
+                sb.Append('.');
+            }
+
+            var first = true;
+            foreach (var part in nesting)
+            {
+                if (!first)
+                {
+                    sb.Append('+');
+                }
+
+                sb.Append(part.MetadataName);
+                first = false;
+            }
+
+            return sb.ToString();
+        }
+
         public static bool IsPartial(this ITypeSymbol _toType)
         {
             if (_toType.DeclaringSyntaxReferences.Length > 1)

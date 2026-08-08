@@ -57,15 +57,24 @@ namespace XmlSerDe.Components.Injector
 
             ParseBody(xmlNode.Internals, out result);
         }
+
+        /// <summary>
+        /// RoundtripKind обязателен: без него DateTime.Parse переводит "...T14:30:45Z"
+        /// в местное время и ставит Kind = Local. Мгновение при этом сохраняется, но
+        /// лексическая форма - нет, поэтому round-trip не замыкается ни с
+        /// System.Xml.Serialization (тот разбирает через XmlConvert и Kind сохраняет),
+        /// ни с собственной сериализацией: формат "yyyy-MM-ddTHH:mm:ss.FFFFFFFK"
+        /// выведет уже не "Z", а смещение машины, на которой шёл разбор.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out global::System.DateTime result)
         {
-            result = DateTime.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = DateTime.Parse(Parsable(body), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out global::System.DateTime? result)
         {
-            result = DateTime.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = DateTime.Parse(Parsable(body), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
         }
 
 
@@ -507,6 +516,182 @@ namespace XmlSerDe.Components.Injector
         public void ParseBody(roschar body, out decimal? result)
         {
             result = decimal.Parse(Parsable(body), NumberStyles.Number, CultureInfo.InvariantCulture);
+        }
+
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out float result)
+        {
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
+
+            var returnType = "float".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
+            {
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
+            }
+
+            ParseBody(xmlNode.Internals, out result);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out float? result)
+        {
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
+
+            var returnType = "float".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
+            {
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
+            }
+
+            ParseBody(xmlNode.Internals, out result);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ParseBody(roschar body, out float result)
+        {
+            result = global::XmlSerDe.Common.XmlNumberLexis.ParseSingle(body);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ParseBody(roschar body, out float? result)
+        {
+            result = global::XmlSerDe.Common.XmlNumberLexis.ParseSingle(body);
+        }
+
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out double result)
+        {
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
+
+            var returnType = "double".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
+            {
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
+            }
+
+            ParseBody(xmlNode.Internals, out result);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out double? result)
+        {
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
+
+            var returnType = "double".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
+            {
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
+            }
+
+            ParseBody(xmlNode.Internals, out result);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ParseBody(roschar body, out double result)
+        {
+            result = global::XmlSerDe.Common.XmlNumberLexis.ParseDouble(body);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ParseBody(roschar body, out double? result)
+        {
+            result = global::XmlSerDe.Common.XmlNumberLexis.ParseDouble(body);
+        }
+
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out char result)
+        {
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
+
+            var returnType = "char".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
+            {
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
+            }
+
+            ParseBody(xmlNode.Internals, out result);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out char? result)
+        {
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
+
+            var returnType = "char".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
+            {
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
+            }
+
+            ParseBody(xmlNode.Internals, out result);
+        }
+        /// <summary>
+        /// В документе лежит кодовая точка числом, а не сам символ, - см.
+        /// <see cref="global::XmlSerDe.Common.IExhauster.Append(char)"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ParseBody(roschar body, out char result)
+        {
+            result = (char)ushort.Parse(Parsable(body), NumberStyles.Integer, CultureInfo.InvariantCulture);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ParseBody(roschar body, out char? result)
+        {
+            ParseBody(body, out char value);
+            result = value;
+        }
+
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out TimeSpan result)
+        {
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
+
+            var returnType = "duration".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
+            {
+                InvalidOperationException(returnType, xmlNodeDeclaredType);
+            }
+
+            ParseBody(xmlNode.Internals, out result);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Parse(ref global::XmlSerDe.Common.XmlDeserializeSettings settings, roschar fullNode, roschar xmlnsAttributeName, out TimeSpan? result)
+        {
+            var xmlNode = new global::XmlSerDe.Common.XmlNode2(settings, fullNode, xmlnsAttributeName);
+            var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
+
+            var returnType = "duration".AsSpan();
+            if (!xmlNodeDeclaredType.SequenceEqual(returnType))
+            {
+                NullableInvalidOperationException(returnType, xmlNodeDeclaredType);
+            }
+
+            ParseBody(xmlNode.Internals, out result);
+        }
+        /// <summary>
+        /// Длительность ISO-8601 разбирается штатным <see cref="XmlConvert"/>:
+        /// грамматика у неё нетривиальная (годы и месяцы, дробные секунды,
+        /// знак), а писать её второй раз ради спана - цена, несоразмерная тому,
+        /// как часто TimeSpan встречается в документах.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ParseBody(roschar body, out TimeSpan result)
+        {
+            result = XmlConvert.ToTimeSpan(body.Trim().ToString());
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ParseBody(roschar body, out TimeSpan? result)
+        {
+            ParseBody(body, out TimeSpan value);
+            result = value;
         }
 
 

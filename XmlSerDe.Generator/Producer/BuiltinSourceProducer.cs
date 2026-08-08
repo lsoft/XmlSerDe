@@ -80,8 +80,27 @@ namespace XmlSerDe.Generator.Producer
                         new Builtin(compilation.Decimal(), "decimal", false),
                         new Builtin(compilation.NDecimal(), "decimal", false),
 
+                        new Builtin(compilation.Single(), "float", false),
+                        new Builtin(compilation.NSingle(), "float", false),
+
+                        new Builtin(compilation.Double(), "double", false),
+                        new Builtin(compilation.NDouble(), "double", false),
+
+                        //char в xsd нет вовсе; System.Xml.Serialization пользуется
+                        //собственным типом из http://microsoft.com/wsdl/types/ и пишет
+                        //кодовую точку числом: 'A' превращается в 65, а не в "A"
+                        new Builtin(compilation.Char(), "char", false),
+                        new Builtin(compilation.NChar(), "char", false),
+
+                        new Builtin(compilation.TimeSpan(), "duration", false),
+                        new Builtin(compilation.NTimeSpan(), "duration", false),
+
                         new Builtin(compilation.String(), "string", true),
-                        //TODO other builtin branches (+IExhauster, +IInjector)
+                        //byte[] сюда не входит намеренно, хотя одной лексемой base64Binary
+                        //он теперь и пишется: решение зависит не от одного типа, а от пары
+                        //"член плюс его атрибуты" - явный XmlArray возвращает массиву вид
+                        //обычной коллекции, - а builtin о члене ничего не знает. Перехват
+                        //стоит в ClassSourceProducer.IsBase64Binary
                     }
                 );
         }

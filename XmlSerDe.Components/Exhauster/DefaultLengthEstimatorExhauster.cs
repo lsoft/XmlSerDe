@@ -259,6 +259,79 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(float value)
+        {
+            //кратчайшее round-trippable представление float не длиннее 14 символов
+            //("-3.4028235E+38"), запас взят с потолка вверх
+            _totalLength += 20;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(float? value)
+        {
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            _totalLength += 20;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(double value)
+        {
+            //"-1.7976931348623157E+308" - 24 символа, дальше запас
+            _totalLength += 30;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(double? value)
+        {
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            _totalLength += 30;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(char value)
+        {
+            //пишется кодовой точкой: не больше пяти цифр
+            _totalLength += 5;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(char? value)
+        {
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            _totalLength += 5;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(TimeSpan value)
+        {
+            //"-P10675199DT2H48M5.4775808S" - 26 символов на TimeSpan.MinValue
+            _totalLength += 30;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Append(TimeSpan? value)
+        {
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            _totalLength += 30;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(string? value)
         {
             if (value is null)
@@ -282,6 +355,28 @@ namespace XmlSerDe.Components.Exhauster
                 );
 
             _totalLength += value!.Length + specialSymbolOverhead;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendAttributeEncoded(string? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            _totalLength += value.Length + XmlAttributeEncoder.EstimateOverhead(value);
+        }
+
+        /// <summary>
+        /// Единственное место, где оценщик не повторяет работу писателя, а считает:
+        /// длина base64 известна по длине массива, и кодировать его ради одной
+        /// только длины - выбросить строку сразу после того, как её построили.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendBase64(byte[]? value)
+        {
+            _totalLength += XmlBase64.EncodedLength(value);
         }
 
         private static int CalculateOverheadFromXmlSpecialSymbol(string value)

@@ -1,0 +1,410 @@
+#nullable disable
+
+using Xunit;
+
+namespace XmlSerDe.Tests.Interop
+{
+    /// <summary>
+    /// Прибивает текущее состояние совместимости с <see cref="System.Xml.Serialization.XmlSerializer"/>:
+    /// на каждую форму - три независимых утверждения и причина, по которой оно именно такое.
+    ///
+    /// Тест, ожидающий "НЕТ", не узаконивает расхождение, а караулит его: как только
+    /// расхождение будет закрыто, тест покраснеет и потребует переписать сюда новое
+    /// положение дел. Иначе прогресс виден только в отчёте, который никто не читает,
+    /// а регресс не виден вовсе.
+    /// </summary>
+    public class InteropFixture
+    {
+        private static void AssertInterop(
+            InteropResult result,
+            bool canReadSystemXml,
+            bool systemXmlCanReadOurs,
+            bool sameShape,
+            string because
+            )
+        {
+            Assert.True(
+                canReadSystemXml == result.CanReadSystemXml,
+                $"XmlSerDe читает System.Xml: ожидалось {canReadSystemXml}. {because}\r\n{result.Describe()}"
+                );
+            Assert.True(
+                systemXmlCanReadOurs == result.SystemXmlCanReadOurs,
+                $"System.Xml читает XmlSerDe: ожидалось {systemXmlCanReadOurs}. {because}\r\n{result.Describe()}"
+                );
+            Assert.True(
+                sameShape == result.SameShape,
+                $"Совпадение формата: ожидалось {sameShape}. {because}\r\n{result.Describe()}"
+                );
+        }
+
+        #region полная совместимость
+
+        /// <summary>
+        /// Вещественные и char: типы, у которых лексическая форма не выводится
+        /// из типа и её пришлось снимать прогоном самого BCL.
+        ///
+        /// Обратите внимание на <c>ThirdMember = 1.0/3.0</c>: на .NET Framework
+        /// обе стороны пишут семнадцать знаков, на .NET Core - шестнадцать.
+        /// Тест этого не различает и не должен: важно, что стороны пишут
+        /// одинаково, а не сколько именно знаков даёт платформа.
+        /// </summary>
+        [Fact]
+        public void TrickyScalars_Test() => AssertInterop(
+            InteropCorpus.TrickyScalars(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "кратчайшее round-trippable представление у вещественных, INF/-INF/NaN "
+                + "вместо Infinity и кодовая точка числом у char");
+
+        [Fact]
+        public void Fields_Test() => AssertInterop(
+            InteropCorpus.Fields(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "публичные поля обе стороны сериализуют наравне со свойствами");
+
+        [Fact]
+        public void Empty_Test() => AssertInterop(
+            InteropCorpus.Empty(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "<X></X> и <X /> - одно и то же для обеих сторон");
+
+        [Fact]
+        public void Nested_Test() => AssertInterop(
+            InteropCorpus.Nested(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "вложенный сложный тип и null-член совпадают полностью");
+
+        [Fact]
+        public void Lists_Test() => AssertInterop(
+            InteropCorpus.Lists(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "обёртка по имени члена, элементы по имени типа - как у BCL");
+
+        [Fact]
+        public void Arrays_Test() => AssertInterop(
+            InteropCorpus.Arrays(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "массив пишется так же, как List<T>");
+
+        [Fact]
+        public void Enums_Test() => AssertInterop(
+            InteropCorpus.Enums(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "имя члена перечисления совпадает с его именем в XML");
+
+        [Fact]
+        public void Ignore_Test() => AssertInterop(
+            InteropCorpus.Ignore(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlIgnore - единственный атрибут BCL, который генератор уже читает");
+
+        [Fact]
+        public void Scalars_Test() => AssertInterop(
+            InteropCorpus.Scalars(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "все примитивы, которые XmlSerDe считает встроенными, совпадают полностью");
+
+        [Fact]
+        public void Strings_Test() => AssertInterop(
+            InteropCorpus.Strings(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "строка во всех состояниях, включая пустую (<Empty /> от BCL) и null");
+
+        [Fact]
+        public void Inheritance_Test() => AssertInterop(
+            InteropCorpus.Inheritance(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "члены базы идут первыми - тот же порядок, что у BCL");
+
+        [Fact]
+        public void Polymorphic_Test() => AssertInterop(
+            InteropCorpus.Polymorphic(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "xsi:type диспетчеризуется одинаково, порядок членов базы и наследника совпадает");
+
+        [Fact]
+        public void PolymorphicList_Test() => AssertInterop(
+            InteropCorpus.PolymorphicList(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "то же, что и в Polymorphic_Test, но внутри коллекции");
+
+        [Fact]
+        public void ConcreteBaseInstance_Test() => AssertInterop(
+            InteropCorpus.ConcreteBaseInstance(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "экземпляр не-абстрактной базы, у которой есть наследники, пишется как сама база");
+
+        [Fact]
+        public void RenamedElement_Test() => AssertInterop(
+            InteropCorpus.RenamedElement(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlElement(\"имя\") задаёт имя элемента на обеих сторонах сразу");
+
+        [Fact]
+        public void RenamedEnum_Test() => AssertInterop(
+            InteropCorpus.RenamedEnum(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlEnum(\"имя\") подставляется и в switch записи, и в цепочку сравнений чтения");
+
+        [Fact]
+        public void RenamedRoot_Test() => AssertInterop(
+            InteropCorpus.RenamedRoot(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlRoot(\"имя\") действует только на корень, поэтому корню достаётся "
+                + "отдельный метод записи, а чтение принимает оба имени");
+
+        [Fact]
+        public void RenamedType_Test() => AssertInterop(
+            InteropCorpus.RenamedType(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlType(\"имя\") заменяет имя типа везде: и в корне, и в xsi:type");
+
+        [Fact]
+        public void RenamedArray_Test() => AssertInterop(
+            InteropCorpus.RenamedArray(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlArray переименовывает обёртку, XmlArrayItem - элементы");
+
+        [Fact]
+        public void Ordered_Test() => AssertInterop(
+            InteropCorpus.Ordered(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlElement.Order переставляет члены на записи; на чтении порядок "
+                + "и раньше был не важен - разбор идёт по имени, а не по позиции");
+
+        [Fact]
+        public void DateTimeKinds_Test() => AssertInterop(
+            InteropCorpus.DateTimeKinds(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "формат дат совпадает с XmlConvert.ToString(RoundtripKind) во всех четырёх "
+                + "Kind'ах: незначащие нули дробной части не пишутся, а на ровной секунде "
+                + "пропадает и сама точка");
+
+        [Fact]
+        public void Nullables_Test() => AssertInterop(
+            InteropCorpus.Nullables(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "null у Nullable<T> обе стороны пишут пустым элементом с xsi:nil=\"true\"; "
+                + "объявление xmlns:xsi у BCL стоит на корне, у XmlSerDe - на самом элементе, "
+                + "но это одно и то же имя в одном и том же URI");
+
+        /// <summary>
+        /// <see cref="System.Collections.Generic.List{T}"/> без сеттера наполняется
+        /// через <c>Add</c> у уже созданного экземпляра. Только он: массив без сеттера
+        /// BCL не сериализует вовсе (заменить нечем, добавить нельзя), строку и сложный
+        /// тип - тоже. Проверено прогоном по типу со всеми четырьмя случаями сразу.
+        /// </summary>
+        [Fact]
+        public void GetOnlyCollection_Test() => AssertInterop(
+            InteropCorpus.GetOnlyCollection(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "коллекция без сеттера наполняется через Add; та, которую конструктор "
+                + "не создал, пропускается обеими сторонами");
+
+        [Fact]
+        public void XmlAttributeMember_Test() => AssertInterop(
+            InteropCorpus.XmlAttributeMember(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlAttribute уводит член в голову элемента: имя берётся из атрибута либо "
+                + "из имени члена, перечисление пишется теми же именами, что и в элементе, "
+                + "а null-строка не пишется вовсе - атрибута с отсутствующим значением не бывает. "
+                + "CR и LF уезжают в числовые ссылки: иначе читатель заменил бы их пробелом");
+
+        [Fact]
+        public void PolymorphicAttributes_Test() => AssertInterop(
+            InteropCorpus.PolymorphicAttributes(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "в голове полиморфного члена уживаются xsi:type, атрибуты базы и атрибуты "
+                + "наследника, а тело при этом занято XmlText");
+
+        [Fact]
+        public void XmlTextMember_Test() => AssertInterop(
+            InteropCorpus.XmlTextMember(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlText делает член телом самого элемента, а атрибут рядом с ним "
+                + "остаётся в голове");
+
+        [Fact]
+        public void Specified_Test() => AssertInterop(
+            InteropCorpus.Specified(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XxxSpecified=false убирает член из документа на записи, а встреченный "
+                + "элемент взводит спутник на чтении");
+
+        [Fact]
+        public void Binary_Test() => AssertInterop(
+            InteropCorpus.Binary(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "byte[] - одна лексема base64Binary, а не коллекция байтов; пустой "
+                + "массив даёт пустой элемент, null не пишется вовсе");
+
+        [Fact]
+        public void BinaryAttribute_Test() => AssertInterop(
+            InteropCorpus.BinaryAttribute(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "в атрибут byte[] проходит той же лексемой: экранировать в base64 нечего");
+
+        [Fact]
+        public void BinaryText_Test() => AssertInterop(
+            InteropCorpus.BinaryText(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlText на byte[] делает лексику base64 телом самого элемента");
+
+        [Fact]
+        public void BinaryArray_Test() => AssertInterop(
+            InteropCorpus.BinaryArray(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "явная обёртка XmlArray отменяет base64 и возвращает массиву вид "
+                + "обычной коллекции - так же поступает и BCL");
+
+        [Fact]
+        public void ByteList_Test() => AssertInterop(
+            InteropCorpus.ByteList(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "base64 - свойство именно byte[], а не всего, что состоит из байтов: "
+                + "List<byte> остаётся коллекцией unsignedByte");
+
+        #endregion
+
+        #region расхождение унаследовано от BCL, а не наше
+
+        /// <summary>
+        /// Загадка «BCL материализует соседний <c>NullList</c>, которого в документе нет»
+        /// разгадана, и разгадка не в нашем документе: <c>XmlSerializer</c> вообще не
+        /// умеет прочитать null-<see cref="System.Collections.Generic.List{T}"/>.
+        /// Список создаётся пустым независимо от того, был ли элемент в документе, -
+        /// проверено чтением <c>&lt;E1&gt;&lt;/E1&gt;</c>, где нет ни одного элемента
+        /// вовсе, и оба списка всё равно приходят пустыми. С массивом того же типа
+        /// такого не происходит: там null остаётся null.
+        ///
+        /// Значит, BCL не замыкает round-trip и на собственном выводе, - тест это
+        /// показывает отдельно. Повторять за ним мы не стали: копировать дефект,
+        /// которому противоречит поведение того же BCL на массиве, незачем.
+        /// </summary>
+        [Fact]
+        public void EmptyCollections_Test()
+        {
+            AssertInterop(
+                InteropCorpus.EmptyCollections(),
+                canReadSystemXml: true, systemXmlCanReadOurs: false, sameShape: true,
+                because: "форма совпадает, наше чтение BCL-вывода тоже. Обратное направление "
+                    + "расходится целиком на стороне BCL: прочитанный им null-List<T> "
+                    + "всегда оказывается пустым списком");
+
+            var bclXml = InteropRunner.SystemXmlSerialize(
+                new Subject.EmptyCollectionsSubject
+                {
+                    EmptyList = new System.Collections.Generic.List<int>(),
+                    EmptyArray = new int[0],
+                }
+                );
+            var bclBack = InteropRunner.SystemXmlDeserialize<Subject.EmptyCollectionsSubject>(bclXml);
+
+            //null-список BCL потерял на собственном выводе, ещё до всякого XmlSerDe;
+            //null-массив рядом с ним при этом остался null
+            Assert.NotNull(bclBack.NullList);
+            Assert.Null(bclBack.NullArray);
+        }
+
+        /// <summary>
+        /// <see cref="System.TimeSpan"/> - единственная форма, чей результат зависит
+        /// от таргета, и единственная, где расходимся мы <b>в лучшую сторону</b>.
+        ///
+        /// Поддержку <see cref="System.TimeSpan"/> в <c>XmlSerializer</c> завезли
+        /// только в .NET Core. На .NET Framework у типа нет ни одного публичного члена
+        /// с сеттером, поэтому BCL пишет пустой элемент и теряет значение целиком -
+        /// тест это показывает отдельно, чтобы «НЕТ» на net472 не приняли за нашу потерю.
+        /// XmlSerDe пишет длительность ISO-8601 на всех таргетах одинаково.
+        /// </summary>
+        [Fact]
+        public void Durations_Test()
+        {
+#if NETFRAMEWORK
+            AssertInterop(
+                InteropCorpus.Durations(),
+                canReadSystemXml: false, systemXmlCanReadOurs: true, sameShape: false,
+                because: "на .NET Framework XmlSerializer не знает TimeSpan вовсе и пишет "
+                    + "пустой элемент; XmlSerDe пишет длительность ISO-8601. "
+                    + "\"System.Xml читает XmlSerDe: да\" здесь не значит, что он что-то "
+                    + "прочитал: он не видит эти члены ни на записи, ни на чтении, "
+                    + "поэтому сверка канонов сходится сама собой");
+
+            var bclXml = InteropRunner.SystemXmlSerialize(
+                new Subject.DurationSubject { Ordinary = new System.TimeSpan(1, 2, 3, 4, 5) }
+                );
+
+            //значение потеряно самим BCL, ещё до всякого чтения
+            Assert.DoesNotContain("P1DT2H3M4", bclXml);
+#else
+            AssertInterop(
+                InteropCorpus.Durations(),
+                canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+                because: "длительность ISO-8601 совпадает посимвольно, включая PT0S у нуля "
+                    + "и ведущий минус у отрицательной");
+#endif
+        }
+
+        /// <summary>
+        /// TAB в значении атрибута - второе место (после <see cref="Durations_Test"/>),
+        /// где результат зависит от таргета и где расходимся мы <b>в лучшую сторону</b>.
+        ///
+        /// Читатель обязан заменить литеральный TAB пробелом (XML 1.0 §3.3.3), и
+        /// единственный способ этого избежать - числовая ссылка на записи. На .NET
+        /// её пишет и BCL, а на .NET Framework старый XmlTextWriter оставляет символ
+        /// как есть и теряет его на собственном выводе; тест это показывает отдельно.
+        /// XmlSerDe пишет ссылку на всех таргетах.
+        /// </summary>
+        [Fact]
+        public void AttributeTab_Test()
+        {
+#if NETFRAMEWORK
+            AssertInterop(
+                InteropCorpus.AttributeTab(),
+                canReadSystemXml: false, systemXmlCanReadOurs: true, sameShape: false,
+                because: "на .NET Framework BCL оставляет TAB в значении атрибута литеральным, "
+                    + "и читатель заменяет его пробелом; XmlSerDe пишет &#x9; и довозит символ "
+                    + "до читателя целым");
+
+            var bclXml = InteropRunner.SystemXmlSerialize(
+                new Subject.AttributeTabSubject { Tabbed = "a\tb" }
+                );
+            var bclBack = InteropRunner.SystemXmlDeserialize<Subject.AttributeTabSubject>(bclXml);
+
+            //символ потерян самим BCL, ещё до всякого XmlSerDe
+            Assert.Equal("a b", bclBack.Tabbed);
+#else
+            AssertInterop(
+                InteropCorpus.AttributeTab(),
+                canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+                because: "на .NET обе стороны пишут &#x9;, и TAB переживает round-trip");
+#endif
+        }
+
+
+        /// <summary>
+        /// Единственная форма, где «НЕТ» в обоих направлениях чтения - не дефект
+        /// XmlSerDe: <see cref="System.ComponentModel.DefaultValueAttribute"/> лишает
+        /// документ значения, а на чтении BCL умолчание <b>не</b> восстанавливает.
+        /// Форма документа при этом совпадает точь-в-точь.
+        ///
+        /// Чтобы это не приняли за нашу потерю, тест отдельно показывает, что и BCL
+        /// не замыкает round-trip на собственном выводе.
+        /// </summary>
+        [Fact]
+        public void DefaultValue_Test()
+        {
+            AssertInterop(
+                InteropCorpus.DefaultValue(),
+                canReadSystemXml: false, systemXmlCanReadOurs: false, sameShape: true,
+                because: "член, равный DefaultValue, не пишет ни одна из сторон, а на чтении "
+                    + "умолчание не восстанавливает тоже ни одна: 42 превращается в 0 у обеих");
+
+            var original = new Subject.DefaultValueSubject { Value = 42, Other = 1 };
+            var bclXml = InteropRunner.SystemXmlSerialize(original);
+            var bclBack = InteropRunner.SystemXmlDeserialize<Subject.DefaultValueSubject>(bclXml);
+
+            Assert.Equal(0, bclBack.Value);
+        }
+
+        #endregion
+    }
+}
