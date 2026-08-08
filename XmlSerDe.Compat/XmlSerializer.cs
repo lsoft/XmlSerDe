@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
+using XmlSerDe.Common;
 using XmlSerDe.Components.Exhauster;
 
 namespace XmlSerDe.Compat
@@ -90,7 +91,10 @@ namespace XmlSerDe.Compat
         /// </summary>
         public string SerializeToString(object o, bool appendXmlDeclaration = true)
         {
-            if (!_accelerated)
+            //null - это не «нечего писать»: BCL пишет <T xsi:nil="true" />, и генератору
+            //такой документ выдать нечем (метод сериализации начинается с разыменования).
+            //Тот же отказ уже стоит на контракте предгенерированных сборок, ниже
+            if (!_accelerated || o is null)
             {
                 var sw = new StringWriter();
                 Fallback.Serialize(sw, o);
@@ -106,21 +110,42 @@ namespace XmlSerDe.Compat
         /// Разбор прямо из спана - тот самый путь, ради которого существует XmlSerDe.
         /// Пролог срезается здесь, делегату достаётся уже корневой элемент.
         /// </summary>
-        public object Deserialize(ReadOnlySpan<char> xml)
+        public object? Deserialize(ReadOnlySpan<char> xml)
         {
             if (!_accelerated)
             {
                 //штатному сериализатору спан не скормить, деваться некуда
                 using var reader = new StringReader(xml.ToString());
-                return Fallback.Deserialize(reader)!;
+                return Fallback.Deserialize(reader);
             }
 
-            return _entry.Deserialize(XmlPrologue.Cut(xml));
+            return Deserialize(XmlPrologue.Cut(xml), _entry);
+        }
+
+        /// <summary>
+        /// Корень с <c>xsi:nil="true"</c> - это документ про null, а не про пустой
+        /// объект: именно так <see cref="System.Xml.Serialization.XmlSerializer"/>
+        /// пишет null, и читает его обратно тоже в null. Сгенерированный метод такого
+        /// ответа дать не может - он всегда конструирует объект, - поэтому корень
+        /// проверяется здесь. Внутри документа тем же занимается сгенерированный код,
+        /// у которого голова члена уже под рукой.
+        /// </summary>
+        private static object? Deserialize(ReadOnlySpan<char> root, XmlSerDeEntry entry)
+        {
+            var head = new XmlHead();
+            XmlScan.ReadHead(true, true, root, ReadOnlySpan<char>.Empty, ref head);
+
+            if (head.IsBodyless && head.IsNil())
+            {
+                return null;
+            }
+
+            return entry.Deserialize(root);
         }
 
         public new void Serialize(TextWriter textWriter, object o)
         {
-            if (!_accelerated)
+            if (!_accelerated || o is null)
             {
                 Fallback.Serialize(textWriter, o);
                 return;
@@ -131,7 +156,7 @@ namespace XmlSerDe.Compat
 
         public new void Serialize(Stream stream, object o)
         {
-            if (!_accelerated)
+            if (!_accelerated || o is null)
             {
                 Fallback.Serialize(stream, o);
                 return;
@@ -141,21 +166,21 @@ namespace XmlSerDe.Compat
             stream.Write(bytes, 0, bytes.Length);
         }
 
-        public new object Deserialize(TextReader textReader)
+        public new object? Deserialize(TextReader textReader)
         {
             if (!_accelerated)
             {
-                return Fallback.Deserialize(textReader)!;
+                return Fallback.Deserialize(textReader);
             }
 
             return Deserialize(textReader.ReadToEnd().AsSpan());
         }
 
-        public new object Deserialize(Stream stream)
+        public new object? Deserialize(Stream stream)
         {
             if (!_accelerated)
             {
-                return Fallback.Deserialize(stream)!;
+                return Fallback.Deserialize(stream);
             }
 
             //поток чужой, закрывать его нельзя, поэтому StreamReader не оборачивается
@@ -239,7 +264,7 @@ namespace XmlSerDe.Compat
             xmlReader.MoveToContent();
             var xml = xmlReader.ReadOuterXml();
 
-            return _entry.Deserialize(XmlPrologue.Cut(xml.AsSpan()));
+            return Deserialize(XmlPrologue.Cut(xml.AsSpan()), _entry)!;
         }
 
         /// <summary>

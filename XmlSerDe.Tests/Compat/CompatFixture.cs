@@ -143,6 +143,40 @@ namespace XmlSerDe.Tests.Compat
             Assert.Equal("derived", ((CompatDerived)back.Polymorphic).DerivedName);
         }
 
+        /// <summary>
+        /// null - это не «нечего писать»: BCL пишет <c>&lt;T xsi:nil="true" /&gt;</c>.
+        /// Быстрый путь такой документ выдать не может (сериализация начинается
+        /// с разыменования), поэтому null обязан уходить штатным путём на **всех**
+        /// перегрузках, а не только на контракте предгенерированных сборок. Пока это
+        /// стояло в одном месте из четырёх, ускоренный тип молча отдавал пустой
+        /// документ - потеря объекта целиком.
+        /// </summary>
+        [Fact]
+        public void Null_GoesThroughSystemXml_Test()
+        {
+            var serializer = new XmlSerializer(typeof(CompatSubject));
+
+            Assert.True(serializer.IsAccelerated, "иначе тест проверяет не то, что должен");
+
+            var bcl = new BclXmlSerializer(typeof(CompatSubject));
+
+            var expected = new StringWriter();
+            bcl.Serialize(expected, null);
+
+            var actual = new StringWriter();
+            serializer.Serialize(actual, (object)null);
+
+            Assert.Contains("xsi:nil=\"true\"", actual.ToString());
+            Assert.Equal(expected.ToString(), actual.ToString());
+            Assert.Equal(expected.ToString(), serializer.SerializeToString(null));
+
+            var stream = new MemoryStream();
+            serializer.Serialize(stream, (object)null);
+            Assert.Contains("xsi:nil=\"true\"", Encoding.UTF8.GetString(stream.ToArray()));
+
+            Assert.Null(serializer.Deserialize(actual.ToString().AsSpan()));
+        }
+
         [Fact]
         public void SerializeToString_MatchesSystemXml_Test()
         {

@@ -339,6 +339,39 @@ System.Xml.Serialization.XmlSerializer asBcl = serializer;
 asBcl.Serialize(Console.Out, order);
 ```
 
+### When it pays off — and when it doesn't
+
+Two things get cheaper, and they are cheaper for different reasons.
+
+**Per call.** `System.Xml.Serialization` walks a reflection-built plan and materializes an intermediate node tree; the generated code does neither. A round trip of a three-member document (`int`, `string`, `List<string>` of two items), 1000 iterations after warm-up:
+
+| Round trip | Allocated per call |
+|---|---|
+| facade, `SerializeToString` + `Deserialize(span)` | 1.0 KB |
+| facade, `Serialize(TextWriter)` + `Deserialize(TextReader)` | 2.0 KB |
+| `System.Xml.Serialization`, same `TextWriter`/`TextReader` | 29.4 KB |
+
+**Per process.** `System.Xml.Serialization` builds a serialization plan for each type on first use — measured cold on the same machine: ~40 ms for the first `XmlSerializer` in the process (that one warms the shared infrastructure), then ~1.5–2 ms of constructor plus ~0.5 ms of first call for every further type. Constructing the facade for an accelerated type instead does a dictionary lookup, and the BCL serializer for that type is never built at all — the fallback field stays null unless something actually needs it.
+
+(Both figures are quick in-process measurements, not BenchmarkDotNet runs; the rigorous numbers for the underlying engine are in [Performance](#performance).)
+
+So it pays off when:
+
+- **you serialize a lot.** Message pumps, per-request payloads, batch jobs — anything where the per-call cost is multiplied by a large number;
+- **process startup is on the clock.** CLI tools, serverless functions, desktop app launch: a project with a dozen serialized types pays tens of milliseconds to `System.Xml.Serialization` before doing any work, and accelerated types skip it;
+- **allocation rate is the problem**, not raw speed — a service whose gen0 collections are driven by XML traffic;
+- **documents are deeply nested.** Deserialization is single-pass, so cost does not grow with depth ([5.7× on a 100-level document](#deserialization)).
+
+It buys you nothing — or close to nothing — when:
+
+- **the types are refused.** See [What it does not accelerate](#what-it-does-not-accelerate); the code still works, at exactly the speed it had before;
+- **the calls go through `XmlWriter` / `XmlReader` / `XmlSerializerNamespaces`.** Those paths materialize the document or hand the call over entirely — see [What the fast path costs elsewhere](#what-the-fast-path-costs-elsewhere). If that is *all* your code does, the facade adds a layer and returns nothing;
+- **serialization happens once, at startup, on a small config file.** Saving 2 ms on a 300 ms boot is not a reason to add a dependency;
+- **the bytes must match `System.Xml.Serialization` exactly** — see [Where the output differs](#where-the-output-differs-from-systemxmlserialization);
+- **the input is untrusted.** XmlSerDe does not validate well-formedness; that is a property of the engine, and the facade does not change it.
+
+A useful way to decide: the facade helps in proportion to how much of your XML work already goes through the fast overloads on types the generator accepts. Measure that share first — [Verifying the migration](#verifying-the-migration) shows how to get the list.
+
 ### What it does not accelerate
 
 A type that the generator will not serve is not an error: it falls back to `System.Xml.Serialization.XmlSerializer` and keeps working, just without the speed-up. The generator refuses a type **whole** rather than emitting almost-correct code for it, so a refusal is triggered by any of:
@@ -380,6 +413,136 @@ The allocation figures in [Performance](#performance) are for the span API, and 
 The `XmlSerializerNamespaces` overloads are given away rather than approximated: XmlSerDe writes namespace declarations as fixed literals and cannot honor a caller-supplied set, so producing a document without the requested declarations would be worse than being slow.
 
 If you have no reference to `XmlSerDe.Compat`, none of this exists: the generator emits nothing for compatibility, which is asserted by a test rather than promised.
+
+### Where the output differs from `System.Xml.Serialization`
+
+Both sides read each other's documents — that is what the [differential harness](#test-coverage-map) checks on every build, in both directions. But the two writers do not produce the same *text*, and if anything downstream compares XML byte-for-byte, this is the part that will surprise you. The same object, written by each side:
+
+```xml
+<!-- System.Xml.Serialization, Serialize(TextWriter) -->
+<?xml version="1.0" encoding="utf-16"?>
+<Order xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Id>7</Id>
+  <CustomerName>ACME</CustomerName>
+</Order>
+
+<!-- XmlSerDe.Compat, same call -->
+<?xml version="1.0" encoding="utf-8"?><Order><Id>7</Id><CustomerName>ACME</CustomerName></Order>
+```
+
+Three differences, all deliberate:
+
+- **No indentation.** XmlSerDe writes the document compactly; `System.Xml.Serialization` indents with two spaces and CRLF. Insignificant whitespace, but not identical bytes.
+- **No `xmlns:xsi` / `xmlns:xsd` on the root.** The BCL declares both prefixes on every document whether or not they are used; XmlSerDe declares `xmlns:xsi` exactly where it writes `xsi:type` or `xsi:nil`, and nowhere else. Both are legal, and each side reads the other's form.
+- **The declared encoding is always `utf-8`.** The BCL derives it from the sink, so writing to a `StringWriter` yields `encoding="utf-16"` — technically the truth about a UTF-16 string in memory, and a lie about the same text once written to a file. Pass `appendXmlDeclaration: false` to `SerializeToString` if you would rather write the prolog yourself.
+
+Beyond the text, two behavioral differences worth knowing before you migrate:
+
+- **The `UnknownElement` / `UnknownAttribute` / `UnknownNode` / `UnreferencedObject` events do not fire on the fast path.** XmlSerDe skips unrecognized elements silently — as does the BCL, but the BCL raises the event first. Code that subscribes to those events for logging or strictness gets silence instead. This is verified, not assumed: with an unknown element in the input, the BCL raised one event and the facade raised none.
+- **Exceptions have different types.** Handing an object of the wrong type to `Serialize` throws `InvalidCastException` from the facade and `InvalidOperationException` (wrapping the real cause) from the BCL. A `catch (InvalidOperationException)` that used to cover this will not catch it any more.
+
+Null, on the other hand, behaves identically on purpose: `null` is written as `<T xsi:nil="true" />` and read back as `null`, because the fast path hands nulls to `System.Xml.Serialization` rather than inventing an answer.
+
+### Migrating an existing project
+
+Work one project at a time — the `global using` is per compilation, so the blast radius of each step is one assembly.
+
+**1. Pick a project and add the reference.**
+
+```xml
+<ProjectReference Include="..\XmlSerDe.Compat\XmlSerDe.Compat.csproj" />
+<ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" />
+<ProjectReference Include="..\XmlSerDe.Components\XmlSerDe.Components.csproj" />
+<ProjectReference Include="..\XmlSerDe.Generator\XmlSerDe.Generator.csproj"
+                  OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+```
+
+**2. Take the inventory before switching anything.** Add the alias in a scratch commit, then build once with the fallback made loud — the default severity of `XMLSERDE001` is `Info`, which `dotnet build` does not print at any verbosity:
+
+```xml
+<ItemGroup><CompilerVisibleProperty Include="XmlSerDeCompatStrict" /></ItemGroup>
+```
+
+```bash
+dotnet build -p:XmlSerDeCompatStrict=warning
+```
+
+Every refused type shows up as a warning pointing at the *call site*, with the reason:
+
+```
+Program.cs(13,19): warning XMLSERDE001: 'global::Bad' falls back to
+System.Xml.Serialization.XmlSerializer: Set: HashSet<int> is not a supported generic type
+```
+
+That list is the decision: if the types you actually care about are all on it, stop here and drop the branch — this project is not a candidate.
+
+**3. Switch the alias on**, in one file:
+
+```csharp
+global using XmlSerializer = XmlSerDe.Compat.XmlSerializer;
+```
+
+Anything that names `System.Xml.Serialization.XmlSerializer` by its full name is unaffected — the alias only rebinds the short name, so a partially migrated file keeps compiling.
+
+**4. Find the call sites the generator cannot see.** `new XmlSerializer(t)` with a variable, a `Type` from configuration, or a factory that takes `Type` produces no acceleration and no diagnostic — there is nothing to report. Where the type is statically known, spell it out:
+
+```csharp
+// invisible to the generator
+static XmlSerializer For(Type t) => new XmlSerializer(t);
+
+// visible
+static XmlSerializer ForOrder() => new XmlSerializer(typeof(Order));
+```
+
+**5. Deal with the constructors that don't exist.** The facade has one constructor, `XmlSerializer(Type)`. `XmlSerializer(Type, XmlRootAttribute)`, `XmlSerializer(Type, Type[])`, `XmlSerializer(Type, XmlAttributeOverrides)` and friends are not there, so those call sites won't compile — which is the honest outcome, since the generator could not have honored them anyway. Keep them on `System.Xml.Serialization.XmlSerializer` by its full name.
+
+**6. Move the hot calls onto the fast overloads.** Existing code keeps working untouched, but `SerializeToString(obj)` and `Deserialize(span)` are where the numbers above come from. Passing an `XmlWriter` or `XmlReader` works and is correct — it just gives up most of the win.
+
+**7. Turn on strict mode once the list is empty**, so a future edit that quietly costs you the acceleration — a new `Dictionary<,>` member, a type that loses its parameterless constructor — fails the build instead of getting slower:
+
+```xml
+<PropertyGroup><XmlSerDeCompatStrict>error</XmlSerDeCompatStrict></PropertyGroup>
+```
+
+### Verifying the migration
+
+The migration is a no-op for correctness if all four of these hold. Check them in order — each catches a different failure.
+
+**1. The build is clean under strict mode.**
+
+```bash
+dotnet build -p:XmlSerDeCompatStrict=error
+```
+
+No `XMLSERDE001` means every call site the generator *saw* was accepted — it says nothing about the ones it never saw, which is what check 2 is for. `XMLSERDE002` means the graph walk accepted a type the code generator then choked on: that is a bug in XmlSerDe, not in your code — the affected types fall back and keep working, and the message is worth reporting.
+
+**2. The types you expect are actually registered**, at runtime, where a refactor can't silently undo it:
+
+```csharp
+var serializer = new XmlSerializer(typeof(Order));
+Debug.Assert(serializer.IsAccelerated, "Order is no longer served by the generated code");
+```
+
+`IsAccelerated` is the only way to tell the two paths apart from the outside — a fallback is invisible otherwise, which is exactly why the property exists.
+
+**3. Old documents still read, and new documents still parse elsewhere.** Round-tripping through XmlSerDe alone proves nothing: two consistent-but-wrong halves cancel out. Compare against the BCL in both directions, which is what the project's own harness does:
+
+```csharp
+var ours = new XmlSerializer(typeof(Order));
+var bcl = new System.Xml.Serialization.XmlSerializer(typeof(Order));
+
+// they read our documents
+var theirs = (Order)bcl.Deserialize(new StringReader(ours.SerializeToString(order)));
+
+// we read theirs
+var writer = new StringWriter();
+bcl.Serialize(writer, order);
+var mine = (Order)ours.Deserialize(writer.ToString().AsSpan());
+```
+
+Keep a corpus of real documents from production for this — the shapes that break interop are the ones nobody thought to write a POCO for.
+
+**4. Nothing downstream depends on the exact bytes.** Grep for golden-file comparisons, XML stored as a string and compared for equality, checksums over serialized payloads, and schema validation that expects the `xsd`/`xsi` declarations. See [Where the output differs](#where-the-output-differs-from-systemxmlserialization) — this is the failure that shows up in someone else's test suite, not yours.
 
 ## Serialization/deserialization class
 
