@@ -2,7 +2,7 @@
 
 Allocation-free XML serializer/deserializer based on C# incremental source generators (ISG). Because generation happens at compile time, there is no runtime reflection cost and no performance degradation as the number of serialized types grows.
 
-XmlSerDe's purpose is **POCO ↔ XML data binding**: mapping plain C# classes to XML and back, format-compatible with `System.Xml.Serialization` for the primitives, collections, and `xsi:type` polymorphism it supports. It targets that data-binding scenario specifically rather than being a general-purpose XML processor — see [Out of scope by design](#out-of-scope-by-design) for what that excludes and why.
+XmlSerDe's purpose is **POCO ↔ XML data binding**: mapping plain C# classes to XML and back, format-compatible with `System.Xml.Serialization` for the primitives, collections, and `xsi:type` polymorphism it supports. It targets that data-binding scenario specifically rather than being a general-purpose XML processor — see [Out of scope by design](#out-of-scope-by-design) for what that excludes and why. Existing `XmlSerializer` code can be moved over one project at a time without being rewritten — see [Drop-in mode](#drop-in-mode-xmlserdecompat), and note what it deliberately does not accelerate.
 
 ## Status
 
@@ -233,6 +233,7 @@ public partial class XmlSerializerDeserializer
 | **XmlSerDe.Common** | netstandard2.0; net8.0; net10.0 | Attributes, `IInjector` / `IExhauster` contracts, `XmlScan`/`XmlTextDecoder`, and `XmlNode2` — a low-allocation XML node parser over `ReadOnlySpan<char>`. |
 | **XmlSerDe.Components** | netstandard2.0; net8.0; net10.0 | Default runtime implementations: injectors and exhausters. |
 | **XmlSerDe.Generator** | netstandard2.0 (Roslyn analyzer) | Incremental source generator that emits serialization/deserialization code at compile time. |
+| **XmlSerDe.Compat** | netstandard2.0; net8.0; net10.0 | Optional. A facade that *is* a `System.Xml.Serialization.XmlSerializer` — see [Drop-in mode](#drop-in-mode-xmlserdecompat). Referenced only if you want it; nothing else depends on it. |
 | **XmlSerDe.Tests** | net472; net8.0; net10.0 | Functional tests (xUnit). |
 | **XmlSerDe.PerformanceTests** | net472; net8.0; net10.0 | BenchmarkDotNet benchmarks vs `System.Xml.Serialization`. |
 
@@ -307,6 +308,78 @@ If the input includes an XML declaration (`<?xml ...?>`), strip it first:
 var body = BuiltinCodeHelper.CutXmlHead(fullXml.AsSpan());
 OrderSerializer.Deserialize(DefaultInjector.Instance, body, out Order result);
 ```
+
+## Drop-in mode: `XmlSerDe.Compat`
+
+The route above is the native one: you declare the serializer class, and every call site names it. `XmlSerDe.Compat` is the other route — for code that already calls `System.Xml.Serialization.XmlSerializer` and would rather not be rewritten. It is **not** a full drop-in replacement; see [What it does not accelerate](#what-it-does-not-accelerate) and [Limitations](#limitations) before reaching for it. In particular, it inherits the untrusted-input caveat: the facade does not add well-formedness validation, so an accelerated type is no safer on hostile input than the native route.
+
+Reference the extra project and add one line to your own:
+
+```xml
+<ProjectReference Include="..\XmlSerDe.Compat\XmlSerDe.Compat.csproj" />
+```
+
+```csharp
+global using XmlSerializer = XmlSerDe.Compat.XmlSerializer;
+```
+
+That is the whole setup. There is no serializer class to declare and no registration to write: the generator finds every `new XmlSerializer(typeof(T))` whose argument is a literal `typeof`, walks the object graph from `T` transitively — members, collection element types, `[XmlInclude]` derived types, none of which the call site names — and registers the generated delegates from a `[ModuleInitializer]`, before your first line of code runs.
+
+`XmlSerDe.Compat.XmlSerializer` derives from `System.Xml.Serialization.XmlSerializer`, so an instance can be handed to DI, to a field, or to third-party code that has never heard of XmlSerDe:
+
+```csharp
+var serializer = new XmlSerializer(typeof(Order));   // resolves to the facade
+
+// fast path: the static type at the call site is the facade
+string xml = serializer.SerializeToString(order);
+var back = (Order)serializer.Deserialize(xml.AsSpan());
+
+// also works, at a cost — see below
+System.Xml.Serialization.XmlSerializer asBcl = serializer;
+asBcl.Serialize(Console.Out, order);
+```
+
+### What it does not accelerate
+
+A type that the generator will not serve is not an error: it falls back to `System.Xml.Serialization.XmlSerializer` and keeps working, just without the speed-up. The generator refuses a type **whole** rather than emitting almost-correct code for it, so a refusal is triggered by any of:
+
+- any type in the graph is not a class (a `struct` is refused, though the BCL supports it), or is generic, or — unless `abstract` — has no accessible parameterless constructor;
+- an `abstract` type declares no `[XmlInclude]`, or is the root itself: dispatch by `xsi:type` at the top of the document is not supported;
+- a member type is a collection other than `List<T>` or `T[]` (a `HashSet<T>` is refused, though the BCL supports it), or a nested collection (`List<List<int>>`), or any other generic.
+
+Some *call sites* aren't accelerated either: `new XmlSerializer(someTypeVariable)` cannot be resolved at build time and is not seen at all. Some *paths* aren't either — see the table below. `XmlSerDe.Compat.XmlSerializer.IsAccelerated` answers the question for an instance you already hold.
+
+Every refusal is reported, because "why didn't mine get faster" should have an answer:
+
+| Diagnostic | Meaning | Default severity |
+|---|---|---|
+| `XMLSERDE001` | this type falls back, with the reason and the call-site location | `Info` |
+| `XMLSERDE002` | code generation was abandoned after the graph walk had accepted the type — a gap in the generator, not a refusal by design | `Warning` |
+
+Refusing one type never affects the others. If your project depends on the acceleration, make the fallback loud:
+
+```xml
+<PropertyGroup><XmlSerDeCompatStrict>error</XmlSerDeCompatStrict></PropertyGroup>
+<ItemGroup><CompilerVisibleProperty Include="XmlSerDeCompatStrict" /></ItemGroup>
+```
+
+`warning` and `true` raise `XMLSERDE001` to a warning; `error` fails the build. The strict setting changes only the volume, never the decision — the same types are accelerated either way. `CompilerVisibleProperty` is required: without it the generator cannot see the property.
+
+### What the fast path costs elsewhere
+
+The allocation figures in [Performance](#performance) are for the span API, and the facade does not extend them to every overload:
+
+| Call | Path |
+|---|---|
+| `SerializeToString`, `Deserialize(ReadOnlySpan<char>)` | generated code only — nothing else is materialized |
+| `Serialize(TextWriter)`, `Serialize(Stream)` | the document is built as a string first, then written (and encoded, for a stream) |
+| `Deserialize(TextReader)`, `Deserialize(Stream)` | the input is read to a string first (`ReadToEnd`), then parsed from its span |
+| `Serialize(XmlWriter)`, `Deserialize(XmlReader)` — i.e. any call through the base type | same materialization, plus the `XmlWriter`/`XmlReader` themselves: the document goes out through `WriteRaw` and comes in through `ReadOuterXml` |
+| `Serialize(…, XmlSerializerNamespaces)`, `CanDeserialize` | handed to `System.Xml.Serialization` in full |
+
+The `XmlSerializerNamespaces` overloads are given away rather than approximated: XmlSerDe writes namespace declarations as fixed literals and cannot honor a caller-supplied set, so producing a document without the requested declarations would be worse than being slow.
+
+If you have no reference to `XmlSerDe.Compat`, none of this exists: the generator emits nothing for compatibility, which is asserted by a test rather than promised.
 
 ## Serialization/deserialization class
 
@@ -618,6 +691,10 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | `SerDeFixtureV2` | Same feature set as `SerDeFixture`, exercised through a second serializer declaration to catch cross-class code-gen issues |
 | `CoverageExpansionFixture` | All primitive types incl. `decimal`/`Guid` round-trips, nullable value-type omission on serialize, length-estimator accuracy, empty/null collections, CDATA strings (including concatenated blocks), HTML-entity-encoded string serialization |
 | `SpecComplianceFixture` | XML 1.0 edge cases: unescaped `>` in attribute values (including a foreign-producer-style extra attribute during polymorphic deserialize), prolog processing instructions / `DOCTYPE` (incl. internal subset) being skipped, attribute-value whitespace normalization vs. character references |
+| `Interop/*` | Differential harness: 36 POCO shapes run through both XmlSerDe and `System.Xml.Serialization` in all three directions (each reads the other's output; the two documents are compared). Divergences are pinned by tests as well, so closing one turns a test red on purpose. A compatibility table is written to `interop-report.md` next to the test assembly |
+| `Interop/BinaryLexicalFixture` | `base64Binary` lexical edges that neither side writes and the differential runs therefore cannot produce: empty and self-closing elements decoding to `byte[0]` rather than `null`, whitespace inside the lexeme, a corrupt lexeme. Each is asserted as "both sides agree", not as "ours works" |
+| `Compat/CompatFixture` | The facade at runtime: it *is* a `System.Xml.Serialization.XmlSerializer`, a refused type still round-trips through the fallback, a transitive graph is accelerated from a single call site, and every overload — including calls through the base-typed reference — produces a document the BCL can read |
+| `Compat/CompatGeneratorFixture` | The facade at build time, driven through `CSharpGeneratorDriver`: which types are refused and why, that a refusal of one root leaves the others accelerated, that `XmlSerDeCompatStrict` changes severity only, and that a project without `XmlSerDe.Compat` gets no generated code at all |
 
 ## Alternatives
 
