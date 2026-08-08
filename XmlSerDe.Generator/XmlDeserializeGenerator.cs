@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading;
 using XmlSerDe.Generator.Producer;
 using XmlSerDe.Generator.Helper;
+using XmlSerDe.Generator.Compat;
 using XmlSerDe.Common;
 using System.IO;
 
@@ -32,18 +33,48 @@ namespace XmlSerDe.Generator
                     transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx)) // select the class with the [XmlSubjectAttribute] attribute
                 .Where(static m => m is not null)!; // filter out attributed classes that we don't care about
 
+            //точки вызова new XmlSerializer(typeof(T)) для фасада совместимости.
+            //Проект, не подключивший XmlSerDe.Compat, не платит за это ничего:
+            //ни один узел не пройдёт проверку имени типа в transform
+            IncrementalValuesProvider<ObjectCreationExpressionSyntax> compatCallSites = context.SyntaxProvider
+                .CreateSyntaxProvider(
+                    predicate: static (s, _) => CompatCallSiteCollector.IsCandidate(s),
+                    transform: static (ctx, _) => GetCompatCallSite(ctx))
+                .Where(static m => m is not null)!;
+
+            var strict = context.AnalyzerConfigOptionsProvider.Select(
+                static (provider, _) =>
+                {
+                    provider.GlobalOptions.TryGetValue(CompatDiagnostics.StrictPropertyName, out var value);
+                    return value;
+                });
+
             // Combine the selected classes with the `Compilation`
-            IncrementalValueProvider<(Compilation, ImmutableArray<ClassDeclarationSyntax>)> compilationAndClasses
-                = context.CompilationProvider.Combine(classDeclarations.Collect());
+            var compilationAndClasses = context.CompilationProvider
+                .Combine(classDeclarations.Collect())
+                .Combine(compatCallSites.Collect())
+                .Combine(strict);
 
             // Generate the source using the compilation and classes
             context.RegisterSourceOutput(
                 compilationAndClasses,
-                static (spc, source) => Execute(spc, source.Item1, source.Item2)
+                static (spc, source) => Execute(
+                    spc,
+                    source.Left.Left.Left,
+                    source.Left.Left.Right,
+                    source.Left.Right,
+                    source.Right
+                    )
                 );
         }
 
-        private static void Execute(SourceProductionContext context, Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classesSyntax)
+        private static void Execute(
+            SourceProductionContext context,
+            Compilation compilation,
+            ImmutableArray<ClassDeclarationSyntax> classesSyntax,
+            ImmutableArray<ObjectCreationExpressionSyntax> compatCallSites,
+            string? strictOption
+            )
         {
             try
             {
@@ -66,6 +97,8 @@ namespace XmlSerDe.Generator
                     );
 
                 GenerateSources(adder, compilation, classesSyntax);
+
+                CompatGenerator.Generate(adder, compilation, compatCallSites, strictOption);
             }
             catch (Exception excp)
             {
@@ -198,6 +231,15 @@ namespace XmlSerDe.Generator
             return result;
         }
 
+        private static ObjectCreationExpressionSyntax? GetCompatCallSite(GeneratorSyntaxContext context)
+        {
+            var oce = (ObjectCreationExpressionSyntax)context.Node;
+
+            return CompatCallSiteCollector.TryGetRootType(context.SemanticModel, oce) is null
+                ? null
+                : oce;
+        }
+
         private static bool IsSyntaxTargetForGeneration(SyntaxNode node)
             => node is ClassDeclarationSyntax cds && cds.AttributeLists.Count > 0;
 
@@ -223,7 +265,7 @@ namespace XmlSerDe.Generator
             return null;
         }
 
-        private readonly struct DocumentAdder
+        internal readonly struct DocumentAdder
         {
             public readonly SourceProductionContext Context;
 

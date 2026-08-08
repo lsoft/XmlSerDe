@@ -1,15 +1,14 @@
 #nullable disable
 
-using System;
 using System.Collections.Generic;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
-using XmlSerDe.Components.Injector;
+using System.Xml.Serialization;
 
 namespace XmlSerDe.Tests.Compat
 {
     /// <summary>
-    /// Тип, который фасад умеет обслуживать быстрым путём.
+    /// Тип, который фасад обслуживает быстрым путём. Никакого <c>[XmlSubject]</c>
+    /// на нём нет и класса-сериализатора рядом тоже: всё, что видит генератор, -
+    /// это <c>new XmlSerializer(typeof(CompatSubject))</c> в тестах.
     /// </summary>
     public class CompatSubject
     {
@@ -19,40 +18,56 @@ namespace XmlSerDe.Tests.Compat
     }
 
     /// <summary>
-    /// Тип, который в реестре не объявлен вовсе: на нём проверяется обещание
-    /// "незарегистрированный тип не ломается, а просто не ускоряется".
+    /// Граф глубже одного типа: обход обязан дойти до <see cref="CompatChild"/>
+    /// и до наследников, объявленных <see cref="XmlIncludeAttribute"/>, - ни того,
+    /// ни другого в точке вызова не названо.
     /// </summary>
-    public class UnregisteredSubject
+    public class CompatHolder
+    {
+        public CompatChild Child { get; set; }
+        public List<CompatChild> Children { get; set; }
+        public CompatBase Polymorphic { get; set; }
+    }
+
+    public class CompatChild
+    {
+        public string Title { get; set; }
+
+        [XmlAttribute("n")]
+        public int Number { get; set; }
+    }
+
+    [XmlInclude(typeof(CompatDerived))]
+    public class CompatBase
+    {
+        public int BaseNumber { get; set; }
+    }
+
+    public class CompatDerived : CompatBase
+    {
+        public string DerivedName { get; set; }
+    }
+
+    /// <summary>
+    /// Структура: <see cref="System.Xml.Serialization.XmlSerializer"/> её умеет
+    /// (проверено), а XmlSerDe - нет, потому что сложному типу генератор пишет
+    /// <c>new T()</c> и присваивает члены по одному. Обходчик обязан отказаться
+    /// от неё целиком, и тип от этого не ломается: он просто идёт штатным путём.
+    /// </summary>
+    public struct UnacceleratedStruct
     {
         public int Number { get; set; }
         public string Name { get; set; }
     }
 
-    //using System здесь обязателен - см. комментарий в Interop/InteropSerializer.cs
-    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
-    [XmlSubject(typeof(CompatSubject), true)]
-    public partial class CompatSerializer
+    /// <summary>
+    /// Тот же отказ, но по другой причине: <c>HashSet&lt;T&gt;</c> BCL сериализует
+    /// (проверено), а из обобщённых коллекций XmlSerDe знает только
+    /// <c>List&lt;T&gt;</c>. Угадывать здесь нечего - это отказ.
+    /// </summary>
+    public class UnacceleratedCollectionSubject
     {
-        /// <summary>
-        /// То, что в готовом виде будет порождать генератор по точке вызова
-        /// <c>new XmlSerializer(typeof(T))</c>: пара делегатов в реестр.
-        /// Пока это ручная регистрация - ровно затем, чтобы рантайм фасада можно
-        /// было проверить отдельно от разбора call-site'ов.
-        /// </summary>
-        public static void Register()
-        {
-            XmlSerDe.Compat.XmlSerDeRegistry.Register<CompatSubject>(
-                (exhauster, obj, appendXmlHead) => Serialize(
-                    (DefaultStringBuilderExhauster)exhauster,
-                    (CompatSubject)obj,
-                    appendXmlHead
-                    ),
-                xml =>
-                {
-                    Deserialize(DefaultInjector.Instance, xml, out CompatSubject result);
-                    return result;
-                }
-                );
-        }
+        public HashSet<int> Set { get; set; }
+        public int After { get; set; }
     }
 }

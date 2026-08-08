@@ -39,6 +39,12 @@
 
     <ProjectReference Include="..\XmlSerDe.Generator\XmlSerDe.Generator.csproj" SetTargetFramework="TargetFramework=netstandard2.0" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <!--
+      Вторая ссылка на тот же генератор, уже обычная: CompatGeneratorFixture гоняет
+      его сам через CSharpGeneratorDriver, чтобы увидеть диагностику отказа. Без
+      этой ссылки виден только результат работы генератора, но не его решения.
+    -->
+    <ProjectReference Include="..\XmlSerDe.Generator\XmlSerDe.Generator.csproj" SetTargetFramework="TargetFramework=netstandard2.0" ReferenceOutputAssembly="true" Private="true" />
+    <!--
       У XmlSerDe.Common две несвязанные роли, и таргеты у них разные.
       1) Зависимость генератора: её грузит компилятор, поэтому она обязана быть
          netstandard2.0 - и в ссылки самого проекта не попадает.

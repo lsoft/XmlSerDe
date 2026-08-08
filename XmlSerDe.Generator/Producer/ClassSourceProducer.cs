@@ -45,9 +45,25 @@ namespace XmlSerDe.Generator.Producer
         public static readonly string BuiltinSerializeHeadlessFullMethodName = BuiltinFullClassName + "." + HeadlessSerializeMethodName;
 
         private readonly Compilation _compilation;
-        private readonly INamedTypeSymbol _deSubject;
-        private readonly string _deSubjectGlobalType;
-        private readonly string _deSubjectReflectionFormat1;
+
+        /// <summary>
+        /// Класс, объявленный пользователем, - или null, если весь класс порождает
+        /// генератор и объявления в исходниках нет вовсе (фасад совместимости).
+        /// Нужен ровно для одного: перенести в сгенерированный файл список using'ов
+        /// того файла, где класс написан. Всё остальное про целевой класс живёт
+        /// в трёх строках ниже, и им безразлично, откуда они взялись.
+        /// </summary>
+        private readonly INamedTypeSymbol? _deSubject;
+
+        private readonly string? _targetNamespace;
+        private readonly string _targetDeclarationName;
+        private readonly string _targetGlobalName;
+
+        /// <summary>
+        /// using'и, которые надо дописать сверх снятых с пользовательского файла.
+        /// </summary>
+        private readonly IReadOnlyList<string> _extraUsings;
+
         public readonly SerializationInfoCollection SerializationInfoCollection;
 
         private StringBuilder _sb;
@@ -69,12 +85,57 @@ namespace XmlSerDe.Generator.Producer
 
             _compilation = compilation;
             _deSubject = deSubject;
-            _deSubjectGlobalType = _deSubject.ToGlobalDisplayString();
-            _deSubjectReflectionFormat1 = _deSubject.ToReflectionFormat(false);
+            _targetNamespace = deSubject.ContainingNamespace.IsGlobalNamespace
+                ? null
+                : deSubject.ContainingNamespace.ToFullDisplayString();
+            _targetDeclarationName = deSubject.ToReflectionFormat(false);
+            _targetGlobalName = deSubject.ToGlobalDisplayString();
+            _extraUsings = new List<string>();
 
             _sb = new StringBuilder();
 
             SerializationInfoCollection = ParseAttributes(compilation, _deSubject);
+        }
+
+        /// <summary>
+        /// Тот же producer, но состав сериализуемых типов приходит готовым, а не
+        /// вычитывается из атрибутов на классе: класса в исходниках может не быть
+        /// вовсе. Так работает фасад совместимости - там состав считается обходом
+        /// графа от типа, названного в <c>new XmlSerializer(typeof(T))</c>.
+        /// </summary>
+        public ClassSourceProducer(
+            Compilation compilation,
+            string? targetNamespace,
+            string targetClassName,
+            IReadOnlyList<string> extraUsings,
+            SerializationInfoCollection serializationInfoCollection
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+            if (string.IsNullOrEmpty(targetClassName))
+            {
+                throw new ArgumentException($"'{nameof(targetClassName)}' cannot be null or empty.", nameof(targetClassName));
+            }
+            if (extraUsings is null)
+            {
+                throw new ArgumentNullException(nameof(extraUsings));
+            }
+
+            _compilation = compilation;
+            _deSubject = null;
+            _targetNamespace = string.IsNullOrEmpty(targetNamespace) ? null : targetNamespace;
+            _targetDeclarationName = targetClassName;
+            _targetGlobalName = _targetNamespace is null
+                ? "global::" + targetClassName
+                : "global::" + _targetNamespace + "." + targetClassName;
+            _extraUsings = extraUsings;
+
+            _sb = new StringBuilder();
+
+            SerializationInfoCollection = serializationInfoCollection;
         }
 
         public string GenerateClass(
@@ -85,15 +146,15 @@ namespace XmlSerDe.Generator.Producer
             GenerateUsings();
             _sb.AppendLine("using roschar = System.ReadOnlySpan<char>;");
 
-            if (!_deSubject.ContainingNamespace.IsGlobalNamespace)
+            if (_targetNamespace is not null)
             {
                 _sb.AppendLine($@"
-namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
+namespace {_targetNamespace}");
             }
 
             _sb.AppendLine($$"""
 {
-    public partial class {{_deSubjectReflectionFormat1}}
+    public partial class {{_targetDeclarationName}}
     {
 
 """);
@@ -1855,9 +1916,27 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         /// </summary>
         private readonly List<ISymbol> FilterMembers(
             List<ISymbol> members
+            ) => FilterMembers(_compilation, members);
+
+        /// <summary>
+        /// Тот же состав членов, что увидит генерация, - но без самого продюсера.
+        /// Обходчику графа фасада нужен ровно он: разойдись эти два перечисления,
+        /// фасад зарегистрировал бы тип, чей граф обошёл не полностью.
+        /// </summary>
+        public static List<ISymbol> SelectSerializableMembers(
+            Compilation compilation,
+            INamedTypeSymbol type
             )
         {
-            var result = new List<ISymbol>(SelectMembers(members));
+            return FilterMembers(compilation, GetMembersBaseFirst(type));
+        }
+
+        private static List<ISymbol> FilterMembers(
+            Compilation compilation,
+            List<ISymbol> members
+            )
+        {
+            var result = new List<ISymbol>(SelectMembers(compilation, members));
 
             //Order задаёт порядок элементов явно. Сортировка устойчивая, поэтому
             //члены без Order остаются там же, где были объявлены, а список, в котором
@@ -1882,9 +1961,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         /// Строку и сложный тип без сеттера он тоже пропускает. Проверено прогоном
         /// по типу со всеми четырьмя случаями сразу.
         /// </summary>
-        private readonly bool IsFillableWithoutSetter(ISymbol member)
+        private static bool IsFillableWithoutSetter(Compilation compilation, ISymbol member)
         {
-            return ParseMember(member).IsList(out _);
+            return ParseMember(compilation, member).IsList(out _);
         }
 
         /// <summary>
@@ -1976,7 +2055,8 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 );
         }
 
-        private readonly IEnumerable<ISymbol> SelectMembers(
+        private static IEnumerable<ISymbol> SelectMembers(
+            Compilation compilation,
             List<ISymbol> members
             )
         {
@@ -1988,7 +2068,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 }
                 if (member is IPropertySymbol property)
                 {
-                    if (property.SetMethod == null && !IsFillableWithoutSetter(member))
+                    if (property.SetMethod == null && !IsFillableWithoutSetter(compilation, member))
                     {
                         continue;
                     }
@@ -2054,19 +2134,24 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
             else
             {
-                return _deSubject.ToGlobalDisplayString();
+                return _targetGlobalName;
             }
         }
 
         private readonly void GenerateUsings()
         {
-            var foundUsings = new List<UsingDirectiveSyntax>();
+            var set = new HashSet<string>(_extraUsings);
 
-            GrabUsings(_deSubject, ref foundUsings);
+            if (_deSubject is not null)
+            {
+                var foundUsings = new List<UsingDirectiveSyntax>();
 
-            var set = new HashSet<string>(
-                foundUsings.ConvertAll(u => u.WithoutTrivia().ToFullString())
-                );
+                GrabUsings(_deSubject, ref foundUsings);
+
+                set.UnionWith(
+                    foundUsings.ConvertAll(u => u.WithoutTrivia().ToFullString())
+                    );
+            }
 
             foreach(var unit in set)
             {
@@ -2098,19 +2183,21 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             }
         }
 
-        private readonly TypeSymbol ParseMember(ISymbol member)
+        private readonly TypeSymbol ParseMember(ISymbol member) => ParseMember(_compilation, member);
+
+        public static TypeSymbol ParseMember(Compilation compilation, ISymbol member)
         {
             if (member is IPropertySymbol property)
             {
                 return new TypeSymbol(
-                    _compilation,
+                    compilation,
                     property.Type
                     );
             }
             else if (member is IFieldSymbol field)
             {
                 return new TypeSymbol(
-                    _compilation,
+                    compilation,
                     field.Type
                     );
             }
@@ -2418,7 +2505,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         /// всё равно вручную. Обход рекурсивный - наследник вправе объявлять уже
         /// своих наследников.
         /// </summary>
-        private static void ExpandXmlIncludes(
+        public static void ExpandXmlIncludes(
             Dictionary<string, SerializationInfo> sinfos
             )
         {

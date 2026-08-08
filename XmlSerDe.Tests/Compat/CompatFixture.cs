@@ -26,11 +26,9 @@ namespace XmlSerDe.Tests.Compat
     /// </summary>
     public class CompatFixture
     {
-        static CompatFixture()
-        {
-            //место будущего [ModuleInitializer] из генератора
-            CompatSerializer.Register();
-        }
+        //регистрации здесь нет вовсе: её пишет генератор в [ModuleInitializer],
+        //а всё, что он для этого видит, - вызовы new XmlSerializer(typeof(T))
+        //прямо в этих тестах
 
         private static CompatSubject CreateSubject() =>
             new CompatSubject
@@ -49,23 +47,100 @@ namespace XmlSerDe.Tests.Compat
             Assert.True(serializer.IsAccelerated, "тип зарегистрирован, значит должен обслуживаться быстрым путём");
         }
 
+        /// <summary>
+        /// Обещание, ради которого генератору позволено отказываться: отказ ничего
+        /// не ломает. Структуру XmlSerDe не умеет, и это видно по
+        /// <see cref="XmlSerDe.Compat.XmlSerializer.IsAccelerated"/>, - но
+        /// round-trip через фасад всё равно проходит, просто штатным путём.
+        /// </summary>
         [Fact]
-        public void UnregisteredType_FallsBackInsteadOfBreaking_Test()
+        public void UnacceleratedStruct_FallsBackInsteadOfBreaking_Test()
         {
-            var serializer = new XmlSerializer(typeof(UnregisteredSubject));
+            var serializer = new XmlSerializer(typeof(UnacceleratedStruct));
 
-            Assert.False(serializer.IsAccelerated, "тип не регистрировали - ускорения быть не должно");
+            Assert.False(serializer.IsAccelerated, "структуру генератор обслуживать не умеет");
 
-            var subject = new UnregisteredSubject { Number = 7, Name = "plain" };
+            var subject = new UnacceleratedStruct { Number = 7, Name = "plain" };
 
             var writer = new StringWriter();
             serializer.Serialize(writer, subject);
             var xml = writer.ToString();
 
-            var back = (UnregisteredSubject)serializer.Deserialize(new StringReader(xml));
+            var back = (UnacceleratedStruct)serializer.Deserialize(new StringReader(xml));
 
             Assert.Equal(7, back.Number);
             Assert.Equal("plain", back.Name);
+        }
+
+        /// <summary>
+        /// Тот же отказ, но виноват член, а не сам корень: неподдержанная коллекция
+        /// вглубь графа снимает ускорение со всего типа целиком.
+        /// </summary>
+        [Fact]
+        public void UnacceleratedCollection_FallsBackInsteadOfBreaking_Test()
+        {
+            var serializer = new XmlSerializer(typeof(UnacceleratedCollectionSubject));
+
+            Assert.False(serializer.IsAccelerated, "HashSet<T> генератор обслуживать не умеет");
+
+            var subject = new UnacceleratedCollectionSubject
+            {
+                Set = new HashSet<int> { 1, 2, },
+                After = 3,
+            };
+
+            var writer = new StringWriter();
+            serializer.Serialize(writer, subject);
+
+            var back = (UnacceleratedCollectionSubject)serializer.Deserialize(
+                new StringReader(writer.ToString())
+                );
+
+            Assert.Equal(new HashSet<int> { 1, 2, }, back.Set);
+            Assert.Equal(3, back.After);
+        }
+
+        /// <summary>
+        /// Граф глубже одного типа: в точке вызова назван только
+        /// <see cref="CompatHolder"/>, а сгенерировать пришлось и ребёнка,
+        /// и элемент коллекции, и наследника из <c>[XmlInclude]</c>.
+        /// </summary>
+        [Fact]
+        public void TransitiveGraph_IsWalkedFromTheCallSite_Test()
+        {
+            var serializer = new XmlSerializer(typeof(CompatHolder));
+
+            Assert.True(serializer.IsAccelerated, "весь граф поддержан, значит тип должен быть ускорен");
+
+            var subject = new CompatHolder
+            {
+                Child = new CompatChild { Title = "child", Number = 1, },
+                Children = new List<CompatChild>
+                {
+                    new CompatChild { Title = "first", Number = 2, },
+                    new CompatChild { Title = "second", Number = 3, },
+                },
+                Polymorphic = new CompatDerived { BaseNumber = 4, DerivedName = "derived", },
+            };
+
+            var xml = serializer.SerializeToString(subject, appendXmlDeclaration: false);
+
+            //документ обязан читаться штатным сериализатором: иначе ускорение
+            //куплено ценой совместимости, ради которой всё и затевалось
+            var bclBack = (CompatHolder)new BclXmlSerializer(typeof(CompatHolder))
+                .Deserialize(new StringReader(xml));
+
+            Assert.Equal("child", bclBack.Child.Title);
+            Assert.Equal(1, bclBack.Child.Number);
+            Assert.Equal(2, bclBack.Children.Count);
+            Assert.Equal("second", bclBack.Children[1].Title);
+            Assert.Equal("derived", ((CompatDerived)bclBack.Polymorphic).DerivedName);
+
+            var back = (CompatHolder)serializer.Deserialize(xml.AsSpan());
+
+            Assert.Equal("child", back.Child.Title);
+            Assert.Equal(3, back.Children[1].Number);
+            Assert.Equal("derived", ((CompatDerived)back.Polymorphic).DerivedName);
         }
 
         [Fact]
