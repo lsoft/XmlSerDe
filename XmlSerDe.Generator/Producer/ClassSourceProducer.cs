@@ -494,6 +494,12 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             XmlPlacement placement
             )
         {
+            if (IsBase64Binary(member, memberType))
+            {
+                //одна и та же лексема годится обоим местам: экранировать в base64 нечего
+                return $"exh.{nameof(IExhauster.AppendBase64)}(obj.{member.Name});";
+            }
+
             if (placement == XmlPlacement.Attribute && memberType.Symbol.SpecialType == SpecialType.System_String)
             {
                 return $"exh.{nameof(IExhauster.AppendAttributeEncoded)}(obj.{member.Name});";
@@ -541,6 +547,33 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
             SplitMembers(named, out _, out var attributes, out _);
             return attributes.Count > 0;
+        }
+
+        /// <summary>
+        /// Пишется ли член одной лексемой base64Binary вместо коллекции элементов.
+        ///
+        /// Правило замерено на System.Xml.Serialization и оказалось узким: оно про
+        /// сам <c>byte[]</c>, а не про байт и не про коллекцию байтов. <c>List&lt;byte&gt;</c>
+        /// остаётся коллекцией <c>&lt;unsignedByte&gt;</c>, и <c>byte[]</c> с явной
+        /// обёрткой <see cref="XmlArrayAttribute"/> - тоже: обёртка возвращает массиву
+        /// вид обычной коллекции. Поэтому проверка стоит здесь, на паре "член + его тип",
+        /// а не среди builtin'ов, где о члене ничего не известно.
+        /// </summary>
+        private readonly bool IsBase64Binary(
+            ISymbol member,
+            TypeSymbol memberType
+            )
+        {
+            if (!memberType.IsArray(out var itemType))
+            {
+                return false;
+            }
+            if (itemType!.SpecialType != SpecialType.System_Byte)
+            {
+                return false;
+            }
+
+            return !member.HasXmlArrayAttribute();
         }
 
         private readonly void GenerateSerializeMember(
@@ -593,6 +626,16 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 var gses = GenerateSerializeEnum((INamedTypeSymbol)memberType.Symbol, elementName, member.Name);
                 _sb.AppendLine(gses);
+            }
+            else if (IsBase64Binary(member, memberType))
+            {
+                //одна лексема в теле собственного элемента - ровно как у строки,
+                //только без экранирования: в алфавите base64 разметки нет
+                _sb.AppendLine($$"""
+                exh.{{nameof(IExhauster.Append)}}("<{{elementName}}>");
+                exh.{{nameof(IExhauster.AppendBase64)}}(obj.{{member.Name}});
+                exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
+""");
             }
             //TODO other collections?
             else if (memberType.IsCollection(out var collectionItemType))
@@ -907,6 +950,7 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
 
         private static readonly string XmlHeadFullName = typeof(XmlHead).FullName;
         private static readonly string XmlScanFullName = typeof(XmlScan).FullName;
+        private static readonly string XmlBase64FullName = typeof(XmlBase64).FullName;
 
         //FullName у открытого обобщённого типа несёт хвост арности
         //("...PooledArrayBuilder`1"), которого в исходном коде быть не должно
@@ -1020,6 +1064,10 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                 if (memberType.IsEnum)
                 {
                     assignment = $"result.{member.Name} = {GenerateEnumParseStatement(memberType, valueExpression)};";
+                }
+                else if (IsBase64Binary(member, memberType))
+                {
+                    assignment = $"result.{member.Name} = {XmlBase64FullName}.{nameof(XmlBase64.Decode)}({valueExpression});";
                 }
                 else if (memberType.Symbol.SpecialType == SpecialType.System_String)
                 {
@@ -1325,10 +1373,21 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
             var memberType = ParseMember(member);
 
-            var assignment = memberType.IsEnum
-                ? $"result.{member.Name} = {GenerateEnumParseStatement(memberType, "bodyText")};"
-                : $"inj.{nameof(IInjector.ParseBody)}(bodyText, out {memberType.GlobalName} bodyParsed);\r\n"
-                  + $"                result.{member.Name} = bodyParsed;";
+            string assignment;
+            if (memberType.IsEnum)
+            {
+                assignment = $"result.{member.Name} = {GenerateEnumParseStatement(memberType, "bodyText")};";
+            }
+            else if (IsBase64Binary(member, memberType))
+            {
+                assignment = $"result.{member.Name} = {XmlBase64FullName}.{nameof(XmlBase64.Decode)}(bodyText);";
+            }
+            else
+            {
+                assignment =
+                    $"inj.{nameof(IInjector.ParseBody)}(bodyText, out {memberType.GlobalName} bodyParsed);\r\n"
+                    + $"                result.{member.Name} = bodyParsed;";
+            }
 
             _sb.AppendLine($$"""
             //{{typeof(XmlTextAttribute).Name}} {{memberType.ToGlobalDisplayString()}} {{member.Name}}
@@ -1436,6 +1495,28 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
                     }
 """);
 
+            }
+            else if (IsBase64Binary(member, memberType))
+            {
+                _sb.AppendLine($$"""
+                    //base64Binary {{memberType.ToGlobalDisplayString()}}  {{member.Name}}
+                    {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
+                    {
+                        {{specifiedAssignment}}
+                        if(child.{{nameof(XmlHead.IsBodyless)}} && child.{{nameof(XmlHead.IsNil)}}())
+                        {
+                            //<Foo xsi:nil="true"/> - массива нет вовсе, а не пустой массив
+                            childConsumed = 0;
+                        }
+                        else
+                        {
+                            //пустое тело - это byte[0], а не null: и <Foo/>, и <Foo></Foo>
+                            //BCL читает именно в пустой массив (проверено)
+                            {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
+                            result.{{member.Name}} = {{XmlBase64FullName}}.{{nameof(XmlBase64.Decode)}}(childText);
+                        }
+                    }
+""");
             }
             //TODO other collections?
             else if (memberType.IsCollection(out var collectionItemType))
@@ -1882,6 +1963,12 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
             {
                 return;
             }
+            if (IsBase64Binary(member, memberType))
+            {
+                //массив, но лексема у него всё-таки есть - одна строка base64.
+                //BCL пропускает byte[] в атрибут и в текст ровно по той же причине
+                return;
+            }
 
             throw new InvalidOperationException(
                 $"{attributeType.Name} on {member.Name} is not supported:"
@@ -1937,7 +2024,9 @@ namespace {_deSubject.ContainingNamespace.ToFullDisplayString()}");
         {
             var memberType = ParseMember(member);
 
-            if (!memberType.IsCollection(out _))
+            //byte[] без явной обёртки коллекцией не считается: в документе это одна
+            //лексема, и имя ему задаёт XmlElement, как всякому простому члену
+            if (!memberType.IsCollection(out _) || IsBase64Binary(member, memberType))
             {
                 return member.GetXmlElementName();
             }

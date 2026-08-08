@@ -43,6 +43,13 @@ namespace XmlSerDe.Tests.Interop
     [XmlSubject(typeof(EmptyCollectionsSubject), true)]
     [XmlSubject(typeof(GetOnlyCollectionSubject), true)]
 
+    //byte[] - коллекция, которая пишется не коллекцией
+    [XmlSubject(typeof(BinarySubject), true)]
+    [XmlSubject(typeof(BinaryAttributeSubject), true)]
+    [XmlSubject(typeof(BinaryTextSubject), true)]
+    [XmlSubject(typeof(BinaryArraySubject), true)]
+    [XmlSubject(typeof(ByteListSubject), true)]
+
     //наследование и полиморфизм.
     //Наследники здесь не объявлены вовсе: и PolyBase, и ConcreteBase несут штатный
     //XmlInclude, а генератор читает его сам - вместе с регистрацией самих наследников

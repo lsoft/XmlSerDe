@@ -422,6 +422,7 @@ An **exhauster** (`IExhauster`) is the output sink for serialized data. For each
 - `Append(string? value)` — raw append.
 - `AppendEncoded(string? value)` — validates then HTML-encodes then appends (used for `string` builtins in element text).
 - `AppendAttributeEncoded(string? value)` — the same for an attribute value, which needs a wider escape set: see the well-formedness note below.
+- `AppendBase64(byte[]? value)` — a `byte[]` as one `base64Binary` token. No escaping at all: the base64 alphabet contains no markup and no whitespace, so the same token serves both element text and attribute values. The length estimator is the only exhauster that does not call the encoder here — it computes the encoded length arithmetically rather than building a string only to measure it.
 
 Null nullable values (including nullable value types like `int?`, `DateTime?`) are skipped entirely on serialize rather than emitting an empty tag.
 
@@ -506,14 +507,14 @@ Three of these have a lexical form that does not follow from the type, and each 
 - **`char` is written as its code point**, not as the character: `'A'` becomes `65`. XSD has no type for a single character, and the BCL uses one of its own from `http://microsoft.com/wsdl/types/`.
 - **`TimeSpan`** is an ISO-8601 duration (`P1DT2H3M4.005S`, `PT0S` for zero, leading minus when negative). Note that `XmlSerializer` only gained `TimeSpan` support in .NET Core — on .NET Framework it writes an empty element and loses the value, so XmlSerDe's output is not byte-compatible with it there. XmlSerDe writes the duration on every target.
 
-`byte[]` is *not* a builtin: it is handled as a collection of bytes, whereas `System.Xml.Serialization` writes it as a single `base64Binary` string.
+`byte[]` is not in the table because it is not decided by type alone. It is written as a single `base64Binary` token — `<Bytes>AQL6</Bytes>`, not one element per byte — but only when the member carries no explicit `[XmlArray]` / `[XmlArrayItem]` wrapper; with one, the array goes back to being an ordinary collection. `List<byte>` is never base64: it stays a collection of `<unsignedByte>` elements. Both rules are `System.Xml.Serialization`'s, measured rather than assumed. An empty array is an empty element, a `null` array is no element at all, and both an empty and a self-closed element read back as `byte[0]`, never `null`.
 
 ### Complex types
 
 - Classes registered with `[XmlSubject]`
 - **Enums** — serialized as `<EnumTypeName>value</EnumTypeName>`. The generator knows every declared member at compile time, so it emits a `switch` over them on serialize and a chain of span `SequenceEqual` comparisons on deserialize, rather than `Enum.ToString()` / `Enum.Parse` — both of which go through reflection, and `Enum.Parse` additionally boxes its `object` return on every call. `Enum.ToString()` / `Enum.Parse` remain as the fallback arm for values that match no declared member (undefined numeric values, `[Flags]` combinations), so behavior is unchanged for those.
 - **Inheritance** — via `[XmlInclude]` and `xsi:type`
-- **Collections** — `List<T>` and `T[]` only
+- **Collections** — `List<T>` and `T[]` only. `byte[]` is the one array that is not written element-per-item — see the note under [Builtin primitives](#builtin-primitives). A collection *of* `byte[]` (`byte[][]`, `List<byte[]>`), which `System.Xml.Serialization` writes as one `<base64Binary>` element per inner array, is not supported.
 
 ### Members
 
@@ -523,7 +524,7 @@ Three of these have a lexical form that does not follow from the type, and each 
 - The `XxxSpecified` companion pattern is honored: a public `bool` named after the member plus `Specified` gates whether the member is written, and is set to `true` on read as soon as the element is seen
 - Private and protected members are skipped
 - XML names default to the C# type and member names, and are overridden by the `System.Xml.Serialization` naming attributes: `[XmlRoot]`, `[XmlType]`, `[XmlElement]`, `[XmlArray]`, `[XmlArrayItem]`, `[XmlEnum]`. `[XmlElement(Order = n)]` / `[XmlArray(Order = n)]` set the element order on write.
-- `[XmlAttribute]` moves a member into the owner's start tag (`<Owner id="7">`); `[XmlText]` makes it the owner's body, with no tag of its own. Both accept builtin primitives and enums only — a complex type has no plain lexical form, and `System.Xml.Serialization` refuses the same cases (including `Nullable<T>`) for the same reason. A `null` string attribute is not written at all, and an empty body leaves an `[XmlText]` member `null` — both matching the BCL. Attribute values get their own escaping: on top of the markup characters, a literal CR, LF or TAB is written as a character reference (`&#xD;` `&#xA;` `&#x9;`), because a reader is required to replace each of them with a space otherwise (XML 1.0 §3.3.3) — so a string with a newline in an attribute round-trips.
+- `[XmlAttribute]` moves a member into the owner's start tag (`<Owner id="7">`); `[XmlText]` makes it the owner's body, with no tag of its own. Both accept builtin primitives, enums and `byte[]` only — everything else has no plain lexical form, and `System.Xml.Serialization` refuses the same cases (including `Nullable<T>`) for the same reason. A `null` string attribute is not written at all, and an empty body leaves an `[XmlText]` member `null` — both matching the BCL. Attribute values get their own escaping: on top of the markup characters, a literal CR, LF or TAB is written as a character reference (`&#xD;` `&#xA;` `&#x9;`), because a reader is required to replace each of them with a space otherwise (XML 1.0 §3.3.3) — so a string with a newline in an attribute round-trips.
 
 ```csharp
 public class Message

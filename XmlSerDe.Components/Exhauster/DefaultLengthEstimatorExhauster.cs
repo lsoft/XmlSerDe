@@ -368,6 +368,17 @@ namespace XmlSerDe.Components.Exhauster
             _totalLength += value.Length + XmlAttributeEncoder.EstimateOverhead(value);
         }
 
+        /// <summary>
+        /// Единственное место, где оценщик не повторяет работу писателя, а считает:
+        /// длина base64 известна по длине массива, и кодировать его ради одной
+        /// только длины - выбросить строку сразу после того, как её построили.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendBase64(byte[]? value)
+        {
+            _totalLength += XmlBase64.EncodedLength(value);
+        }
+
         private static int CalculateOverheadFromXmlSpecialSymbol(string value)
         {
             const string XmlSpecialCharacters = "<>&`\"";

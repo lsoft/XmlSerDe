@@ -230,6 +230,39 @@ namespace XmlSerDe.Tests.Interop
             because: "XxxSpecified=false убирает член из документа на записи, а встреченный "
                 + "элемент взводит спутник на чтении");
 
+        [Fact]
+        public void Binary_Test() => AssertInterop(
+            InteropCorpus.Binary(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "byte[] - одна лексема base64Binary, а не коллекция байтов; пустой "
+                + "массив даёт пустой элемент, null не пишется вовсе");
+
+        [Fact]
+        public void BinaryAttribute_Test() => AssertInterop(
+            InteropCorpus.BinaryAttribute(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "в атрибут byte[] проходит той же лексемой: экранировать в base64 нечего");
+
+        [Fact]
+        public void BinaryText_Test() => AssertInterop(
+            InteropCorpus.BinaryText(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "XmlText на byte[] делает лексику base64 телом самого элемента");
+
+        [Fact]
+        public void BinaryArray_Test() => AssertInterop(
+            InteropCorpus.BinaryArray(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "явная обёртка XmlArray отменяет base64 и возвращает массиву вид "
+                + "обычной коллекции - так же поступает и BCL");
+
+        [Fact]
+        public void ByteList_Test() => AssertInterop(
+            InteropCorpus.ByteList(),
+            canReadSystemXml: true, systemXmlCanReadOurs: true, sameShape: true,
+            because: "base64 - свойство именно byte[], а не всего, что состоит из байтов: "
+                + "List<byte> остаётся коллекцией unsignedByte");
+
         #endregion
 
         #region расхождение унаследовано от BCL, а не наше

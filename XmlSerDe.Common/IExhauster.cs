@@ -70,5 +70,13 @@ namespace XmlSerDe.Common
         /// round-trip. См. <see cref="XmlAttributeEncoder"/>.
         /// </summary>
         void AppendAttributeEncoded(string? value);
+
+        /// <summary>
+        /// <c>byte[]</c> одной лексемой base64Binary. Экранирования здесь нет вовсе:
+        /// в алфавите base64 нет ни разметки, ни пробельных символов, поэтому одна
+        /// и та же лексема годится и в тело элемента, и в значение атрибута.
+        /// См. <see cref="XmlBase64"/>.
+        /// </summary>
+        void AppendBase64(byte[]? value);
     }
 }

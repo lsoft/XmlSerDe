@@ -524,5 +524,16 @@ namespace XmlSerDe.Components.Exhauster
 
             Append(XmlAttributeEncoder.Encode(value));
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendBase64(byte[]? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            Append(XmlBase64.Encode(value));
+        }
     }
 }

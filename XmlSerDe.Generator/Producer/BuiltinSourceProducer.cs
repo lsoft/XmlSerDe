@@ -96,9 +96,11 @@ namespace XmlSerDe.Generator.Producer
                         new Builtin(compilation.NTimeSpan(), "duration", false),
 
                         new Builtin(compilation.String(), "string", true),
-                        //byte[] сюда не входит намеренно: BCL пишет его одной строкой
-                        //base64Binary, а у XmlSerDe это коллекция байтов. Перехват
-                        //коллекции - отдельная работа, а не ещё один builtin
+                        //byte[] сюда не входит намеренно, хотя одной лексемой base64Binary
+                        //он теперь и пишется: решение зависит не от одного типа, а от пары
+                        //"член плюс его атрибуты" - явный XmlArray возвращает массиву вид
+                        //обычной коллекции, - а builtin о члене ничего не знает. Перехват
+                        //стоит в ClassSourceProducer.IsBase64Binary
                     }
                 );
         }

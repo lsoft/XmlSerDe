@@ -913,4 +913,80 @@ namespace XmlSerDe.Common
         }
     }
 
+    /// <summary>
+    /// <c>byte[]</c> в XML - это не коллекция байтов, а одна лексема base64Binary:
+    /// <c>&lt;Bytes&gt;AQL6&lt;/Bytes&gt;</c>, а не три элемента подряд. Так его пишет
+    /// System.Xml.Serialization, и правило у него узкое - оно про сам <c>byte[]</c>,
+    /// а не про байт и не про всякую коллекцию байтов: <c>List&lt;byte&gt;</c>
+    /// остаётся обычной коллекцией, и <c>byte[]</c> с явной обёрткой
+    /// <see cref="System.Xml.Serialization.XmlArrayAttribute"/> - тоже (проверено).
+    ///
+    /// Алфавит base64 - это буквы, цифры, <c>+</c>, <c>/</c> и <c>=</c>, поэтому
+    /// экранировать здесь нечего ни в теле элемента, ни в значении атрибута.
+    /// </summary>
+    public static class XmlBase64
+    {
+        public static string Encode(byte[] value)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            //без переносов строк: перегрузка с Base64FormattingOptions.InsertLineBreaks
+            //рвала бы лексему каждые 76 символов, а XmlWriter пишет её одной строкой
+            return Convert.ToBase64String(value);
+        }
+
+        /// <summary>
+        /// Сколько символов займёт <see cref="Encode"/>: четыре символа на каждые
+        /// три байта, с добиванием до кратности padding'ом. Считается точно, а не
+        /// сверху, - формат постоянной длины, приблизительность тут не нужна.
+        /// </summary>
+        public static int EncodedLength(byte[]? value)
+        {
+            if (value is null)
+            {
+                return 0;
+            }
+
+            return (value.Length + 2) / 3 * 4;
+        }
+
+        /// <summary>
+        /// Пробелы и переносы строк внутри лексемы игнорируются - так же, как их
+        /// игнорирует и читатель BCL (проверено на обеих реализациях). Пустое тело
+        /// даёт пустой массив, а не null: <c>&lt;Bytes/&gt;</c> у BCL читается
+        /// именно в <c>byte[0]</c>.
+        /// </summary>
+        public static byte[] Decode(ReadOnlySpan<char> value)
+        {
+#if NETSTANDARD2_0
+            return Convert.FromBase64String(value.ToString());
+#else
+            //четыре символа на три байта - оценка сверху: пробельные символы внутри
+            //лексемы делают её длиннее, а результат от этого только короче
+            var maxLength = value.Length / 4 * 3 + 3;
+            var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(maxLength);
+            try
+            {
+                if (!Convert.TryFromBase64Chars(value, buffer, out var written))
+                {
+                    throw new FormatException(
+                        "The input is not a valid base64Binary lexical form: '" + value.ToString() + "'"
+                        );
+                }
+
+                var result = new byte[written];
+                Array.Copy(buffer, result, written);
+                return result;
+            }
+            finally
+            {
+                System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+            }
+#endif
+        }
+    }
+
 }

@@ -86,6 +86,20 @@ namespace XmlSerDe.Generator.Helper
         }
 
         /// <summary>
+        /// Объявлена ли на члене явная обёртка коллекции - <see cref="XmlArrayAttribute"/>
+        /// либо <see cref="XmlArrayItemAttribute"/>. Для <c>byte[]</c> это вопрос не про
+        /// имя, а про саму форму: без обёртки System.Xml.Serialization пишет его одной
+        /// лексемой base64, а с обёрткой возвращает ему вид обычной коллекции.
+        /// </summary>
+        public static bool HasXmlArrayAttribute(this ISymbol member)
+        {
+            return
+                HasAttribute(member, typeof(XmlArrayAttribute).FullName)
+                || HasAttribute(member, typeof(XmlArrayItemAttribute).FullName)
+                ;
+        }
+
+        /// <summary>
         /// Имя члена перечисления в XML.
         /// </summary>
         public static string GetXmlEnumName(this IFieldSymbol field)

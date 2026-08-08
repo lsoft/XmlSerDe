@@ -309,6 +309,49 @@ namespace XmlSerDe.Tests.Interop
             (e, o) => InteropSerializer.Serialize(e, o, false),
             (ReadOnlySpan<char> xml, out AttributeTabSubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
 
+        public static InteropResult Binary() => Check(
+            new BinarySubject
+            {
+                Bytes = new byte[] { 1, 2, 250, },
+                Empty = new byte[0],
+                Missing = null,
+                After = 9,
+            },
+            (e, o) => InteropSerializer.Serialize(e, o, false),
+            (ReadOnlySpan<char> xml, out BinarySubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
+
+        public static InteropResult BinaryAttribute() => Check(
+            new BinaryAttributeSubject
+            {
+                Bytes = new byte[] { 1, 2, 250, },
+            },
+            (e, o) => InteropSerializer.Serialize(e, o, false),
+            (ReadOnlySpan<char> xml, out BinaryAttributeSubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
+
+        public static InteropResult BinaryText() => Check(
+            new BinaryTextSubject
+            {
+                Bytes = new byte[] { 1, 2, 250, },
+            },
+            (e, o) => InteropSerializer.Serialize(e, o, false),
+            (ReadOnlySpan<char> xml, out BinaryTextSubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
+
+        public static InteropResult BinaryArray() => Check(
+            new BinaryArraySubject
+            {
+                Bytes = new byte[] { 1, 2, 250, },
+            },
+            (e, o) => InteropSerializer.Serialize(e, o, false),
+            (ReadOnlySpan<char> xml, out BinaryArraySubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
+
+        public static InteropResult ByteList() => Check(
+            new ByteListSubject
+            {
+                Bytes = new List<byte> { 1, 2, 250, },
+            },
+            (e, o) => InteropSerializer.Serialize(e, o, false),
+            (ReadOnlySpan<char> xml, out ByteListSubject r) => InteropSerializer.Deserialize(DefaultInjector.Instance, xml, out r));
+
         public static InteropResult PolymorphicAttributes() => Check(
             new AttributeHolder
             {
@@ -408,6 +451,11 @@ namespace XmlSerDe.Tests.Interop
             new InteropCase(nameof(RenamedElement), RenamedElement),
             new InteropCase(nameof(XmlAttributeMember), XmlAttributeMember),
             new InteropCase(nameof(AttributeTab), AttributeTab),
+            new InteropCase(nameof(Binary), Binary),
+            new InteropCase(nameof(BinaryAttribute), BinaryAttribute),
+            new InteropCase(nameof(BinaryText), BinaryText),
+            new InteropCase(nameof(BinaryArray), BinaryArray),
+            new InteropCase(nameof(ByteList), ByteList),
             new InteropCase(nameof(PolymorphicAttributes), PolymorphicAttributes),
             new InteropCase(nameof(RenamedRoot), RenamedRoot),
             new InteropCase(nameof(RenamedType), RenamedType),
