@@ -1,12 +1,9 @@
 #if NETSTANDARD
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Text;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
 using XmlSerDe.Generator.Helper;
+using XmlSerDe.Generator.Incremental;
 using XmlSerDe.Generator.Producer;
 
 namespace XmlSerDe.Generator.Compat
@@ -24,11 +21,11 @@ namespace XmlSerDe.Generator.Compat
         internal static void Generate(
             XmlDeserializeGenerator.DocumentAdder adder,
             Compilation compilation,
-            ImmutableArray<ObjectCreationExpressionSyntax> callSites,
+            EquatableArray<CompatCallSiteRef> callSites,
             string? strictOption
             )
         {
-            if (callSites.IsDefaultOrEmpty)
+            if (callSites.Count == 0)
             {
                 //фасад не подключён или ни одного new XmlSerializer(typeof(T)) нет:
                 //не порождаем ни строки
@@ -75,12 +72,12 @@ namespace XmlSerDe.Generator.Compat
             {
                 //обходчик пропустил что-то, чего продюсер всё-таки не умеет. Это пробел
                 //в его белом списке, а не отказ по замыслу, поэтому видно всегда
-                adder.Context.ReportDiagnostic(
-                    Diagnostic.Create(
+                adder.Report(
+                    new DiagnosticInfo(
                         CompatDiagnostics.GenerationFailed(
                             severity == DiagnosticSeverity.Info ? DiagnosticSeverity.Warning : severity
                             ),
-                        Location.None,
+                        location: null,
                         failure
                         )
                     );
@@ -222,28 +219,28 @@ namespace XmlSerDe.Generator.Compat
             {
                 adder.AddDocumentToCompilation(
                     $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{exhaustType.Name}.g.cs",
-                    SourceText.From(bsg.GenerateSerializationBody(exhaustType), Encoding.UTF8)
+                    bsg.GenerateSerializationBody(exhaustType)
                     );
             }
             foreach (var injectorType in sources.Collection.InjectorList)
             {
                 adder.AddDocumentToCompilation(
                     $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{injectorType.Name}.g.cs",
-                    SourceText.From(bsg.GenerateDeserializationBody(injectorType), Encoding.UTF8)
+                    bsg.GenerateDeserializationBody(injectorType)
                     );
             }
 
             adder.AddDocumentToCompilation(
                 "XmlSerDe.Compat.Serializer.g.cs",
-                SourceText.From(sources.SerializerClass, Encoding.UTF8)
+                sources.SerializerClass
                 );
             adder.AddDocumentToCompilation(
                 "XmlSerDe.Compat.Registration.g.cs",
-                SourceText.From(sources.Registration, Encoding.UTF8)
+                sources.Registration
                 );
             adder.AddDocumentToCompilation(
                 "XmlSerDe.ModuleInitializerAttribute.g.cs",
-                SourceText.From(CompatSourceProducer.GenerateModuleInitializerPolyfill(), Encoding.UTF8)
+                CompatSourceProducer.GenerateModuleInitializerPolyfill()
                 );
         }
 
@@ -254,8 +251,8 @@ namespace XmlSerDe.Generator.Compat
             string refusal
             )
         {
-            adder.Context.ReportDiagnostic(
-                Diagnostic.Create(
+            adder.Report(
+                new DiagnosticInfo(
                     CompatDiagnostics.NotAccelerated(severity),
                     root.Location,
                     root.Type.ToGlobalDisplayString(),
@@ -265,32 +262,30 @@ namespace XmlSerDe.Generator.Compat
         }
 
         /// <summary>
-        /// Один и тот же тип обычно называют в нескольких точках вызова; для отказа
-        /// берётся первая - показывать одно и то же в каждой было бы шумом.
+        /// Точки вызова приходят уже без повторов - одна на тип, - но названный там
+        /// тип надо разрешить заново: по конвейеру ехало его имя, а не символ,
+        /// и символ должен быть от нынешней компиляции, а не от позапрошлой.
+        ///
+        /// Имя может и не разрешиться: тип успели переименовать или удалить, а точка
+        /// вызова осталась от дерева, которое с тех пор не трогали. Тогда молчим -
+        /// в компиляции и без нас есть ошибка про несуществующий тип.
         /// </summary>
         private static List<CompatRoot> CollectRoots(
             Compilation compilation,
-            ImmutableArray<ObjectCreationExpressionSyntax> callSites
+            EquatableArray<CompatCallSiteRef> callSites
             )
         {
-            var seen = new HashSet<string>();
             var result = new List<CompatRoot>();
 
             foreach (var callSite in callSites)
             {
-                var semanticModel = compilation.GetSemanticModel(callSite.SyntaxTree);
-
-                var type = CompatCallSiteCollector.TryGetRootType(semanticModel, callSite);
+                var type = compilation.ResolveByMetadataName(callSite.TypeMetadataName);
                 if (type is null)
                 {
                     continue;
                 }
-                if (!seen.Add(type.ToGlobalDisplayString()))
-                {
-                    continue;
-                }
 
-                result.Add(new CompatRoot(type, callSite.GetLocation()));
+                result.Add(new CompatRoot(type, callSite.Location));
             }
 
             return result;
@@ -299,9 +294,9 @@ namespace XmlSerDe.Generator.Compat
         private readonly struct CompatRoot
         {
             public readonly INamedTypeSymbol Type;
-            public readonly Location Location;
+            public readonly LocationInfo? Location;
 
-            public CompatRoot(INamedTypeSymbol type, Location location)
+            public CompatRoot(INamedTypeSymbol type, LocationInfo? location)
             {
                 Type = type;
                 Location = location;

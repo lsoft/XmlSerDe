@@ -816,6 +816,10 @@ For each serializer class it emits:
 
 **Deserialize:** walks child nodes, dispatches on element name (`SequenceEqual` on spans), resolves polymorphism via `xsi:type`, constructs objects with `new T()` or the `XmlFactory` expression.
 
+**Incrementality.** The usual advice for incremental generators — never put a `Compilation` in the pipeline, drive generation from the annotated declaration alone — does not apply here unchanged. `[XmlSubject(typeof(T))]` sits on the host class, but the emitted code is derived from the *transitive type graph* rooted at `T`, and those types live in other files. Since Roslyn re-runs a syntax provider's transform only for trees that changed, a generator keyed on the host's syntax node would be perfectly incremental and would happily serve stale code after a member is renamed elsewhere.
+
+So the `Compilation` stays an input, and symbol binding runs on every edit. Caching comes from *output equality* instead: the pipeline's last step yields plain strings and diagnostic descriptions with no symbols, syntax nodes, or compilations in them, so whenever an edit doesn't change the generated text, the source-output step is reported as `Cached` and Roslyn reuses the already-parsed generated trees rather than re-parsing and re-binding them. That reuse, not the generator's own work, is the dominant cost in the IDE. Both halves of the contract — cache hits on irrelevant edits, cache *misses* on cross-file changes that matter — are covered by `GeneratorIncrementalityFixture`.
+
 ## Building and testing
 
 ```bash

@@ -7,6 +7,44 @@ namespace XmlSerDe.Generator.Helper
 {
     public static class CompilationHelper
     {
+        /// <summary>
+        /// Обратная сторона <see cref="SymbolHelper.ToMetadataName"/>: символ
+        /// по имени, снятому с прошлой компиляции.
+        ///
+        /// Сначала спрашиваем собственную сборку: имя, пришедшее из исходников,
+        /// почти всегда её и означает, а <see cref="Compilation.GetTypeByMetadataName"/>
+        /// вернул бы null, если такое же имя нашлось бы ещё и в ссылках.
+        /// </summary>
+        public static INamedTypeSymbol? ResolveByMetadataName(
+            this Compilation compilation,
+            string metadataName
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            var own = compilation.Assembly.GetTypeByMetadataName(metadataName);
+            if (own is not null)
+            {
+                return own;
+            }
+
+            var single = compilation.GetTypeByMetadataName(metadataName);
+            if (single is not null)
+            {
+                return single;
+            }
+
+            foreach (var candidate in compilation.GetTypesByMetadataName(metadataName))
+            {
+                return candidate;
+            }
+
+            return null;
+        }
+
         public static INamedTypeSymbol DefaultInjector(
             this Compilation compilation
             )
