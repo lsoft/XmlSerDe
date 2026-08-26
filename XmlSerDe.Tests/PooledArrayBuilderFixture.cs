@@ -162,6 +162,33 @@ namespace XmlSerDe.Tests
             Assert.Equal(new[] { "c" }, builder.ToArrayAndRelease());
         }
 
+        [Fact]
+        public void Builder_ToListAndRelease_HasExactCount()
+        {
+            var builder = new PooledArrayBuilder<int>();
+            for (var i = 0; i < 33; i++)
+            {
+                builder.Add(i);
+            }
+
+            var list = builder.ToListAndRelease();
+
+            Assert.Equal(33, list.Count);
+            Assert.Equal(33, list.Capacity);
+            Assert.Equal(Enumerable.Range(0, 33), list);
+            Assert.Equal(0, builder.Count);
+        }
+
+        [Fact]
+        public void Builder_ToListAndRelease_WithoutItems_IsEmpty()
+        {
+            var builder = new PooledArrayBuilder<string>();
+
+            var list = builder.ToListAndRelease();
+
+            Assert.Empty(list);
+        }
+
         #endregion
     }
 }

@@ -17,7 +17,10 @@ namespace XmlSerDe.Generator.Compat
     /// раньше, просто без ускорения. Молча выданный неверный код сломал бы всё.
     ///
     /// Поэтому здесь всё написано «белым списком»: неизвестная конструкция - отказ,
-    /// а не попытка догадаться.
+    /// а не попытка догадаться. Про типы решает сам обходчик, про атрибуты -
+    /// <see cref="CompatAttributeProbe"/>: атрибут, который генератор молча
+    /// игнорирует, опаснее неподдержанного типа - тот роняет генерацию, а этот
+    /// выдаёт валидный код и другой документ.
     /// </summary>
     public static class CompatGraphWalker
     {
@@ -72,6 +75,13 @@ namespace XmlSerDe.Generator.Compat
 
                 foreach (var member in ClassSourceProducer.SelectSerializableMembers(compilation, subject))
                 {
+                    //атрибуты члена - раньше его типа: непонятый атрибут это отказ
+                    //независимо от того, поддержан ли сам тип
+                    if (CompatAttributeProbe.TryFindRefusal(member, out refusal))
+                    {
+                        return false;
+                    }
+
                     var memberType = ClassSourceProducer.ParseMember(compilation, member);
 
                     if (!TryAcceptMemberType(compilation, member, memberType.Symbol, allowCollection: true, out var next, out refusal))
@@ -126,7 +136,9 @@ namespace XmlSerDe.Generator.Compat
             var typeSymbol = new ClassSourceProducer.TypeSymbol(compilation, type);
             if (typeSymbol.IsEnum)
             {
-                return true;
+                //проверяется после IsEnum, а не вместо: обычное перечисление
+                //поддержано полностью, отказ только по [Flags]
+                return !CompatAttributeProbe.IsUnsupportedEnum(typeSymbol.Symbol, out refusal);
             }
 
             if (type is IArrayTypeSymbol array)
@@ -223,6 +235,10 @@ namespace XmlSerDe.Generator.Compat
             if (!type.IsAbstract && !HasAccessibleParameterlessConstructor(type))
             {
                 refusal = $"{type.ToGlobalDisplayString()} has no accessible parameterless constructor";
+                return false;
+            }
+            if (CompatAttributeProbe.TryFindRefusal(type, out refusal))
+            {
                 return false;
             }
 

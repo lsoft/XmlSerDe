@@ -1,18 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+﻿using XmlSerDe.Components.Exhauster;
 
 namespace XmlSerDe.Tests.Complex.Subject
 {
+    /// <summary>
+    /// UTF-8 без I/O: кодирование то же, <see cref="Write"/> только считает
+    /// байты, чтобы результат нельзя было выкинуть как мёртвый код.
+    /// </summary>
     public class Utf8BinaryExhausterEmpty : Utf8BinaryExhauster
     {
+        public int Written { get; private set; }
+
         protected override void Write(byte[] data, int length)
         {
-            //nothing to do in tests
+            Written += length;
         }
     }
 }

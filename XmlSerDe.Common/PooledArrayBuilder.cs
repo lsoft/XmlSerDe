@@ -1,20 +1,24 @@
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+#if NET8_0_OR_GREATER
+using System.Runtime.InteropServices;
+#endif
 
 namespace XmlSerDe.Common
 {
     /// <summary>
-    /// Накопитель элементов для члена типа <c>T[]</c>. Заменяет собой связку
-    /// <c>new List&lt;T&gt;()</c> + <c>ToArray()</c>, у которой до результата
-    /// не доживает ничего, кроме последней копии: аллоцируется сам список,
+    /// Накопитель элементов для члена типа <c>T[]</c> или <c>List&lt;T&gt;</c>
+    /// с сеттером. Заменяет собой связку <c>new List&lt;T&gt;()</c> +
+    /// <c>ToArray()</c> (или рост списка 0→4→8): аллоцируется сам список,
     /// затем внутренний массив, затем ещё по массиву на каждое удвоение,
-    /// и только потом финальный <c>T[]</c>. Замер на <c>int[]</c> давал от
+    /// и только потом финальный буфер. Замер на <c>int[]</c> давал от
     /// 3.1 до 4.75 размеров результата в зависимости от длины.
     ///
     /// Здесь промежуточные буферы берутся из <see cref="ArrayPool{T}"/> и
     /// возвращаются туда же, так что на выходе остаётся ровно одна
-    /// аллокация - сам массив нужного размера.
+    /// аллокация - массив нужного размера (у списка - его внутренний).
     ///
     /// Это структура, и это важно: она живёт как локальная переменная
     /// генерируемого метода и не должна стоить ещё одного объекта в куче.
@@ -107,6 +111,45 @@ namespace XmlSerDe.Common
 
             var result = new T[_count];
             Array.Copy(buffer, 0, result, 0, _count);
+
+            ArrayPool<T>.Shared.Return(buffer, ClearOnReturn);
+            _buffer = null;
+            _count = 0;
+
+            return result;
+        }
+
+        /// <summary>
+        /// То же для <c>List&lt;T&gt;</c>: один массив ровно на <see cref="Count"/>,
+        /// без промежуточного 0→4→8.
+        /// </summary>
+        public List<T> ToListAndRelease()
+        {
+            var buffer = _buffer;
+            if (buffer is null)
+            {
+                return new List<T>();
+            }
+
+            var count = _count;
+            if (count == 0)
+            {
+                ArrayPool<T>.Shared.Return(buffer, ClearOnReturn);
+                _buffer = null;
+                _count = 0;
+                return new List<T>();
+            }
+#if NET8_0_OR_GREATER
+            var result = new List<T>(count);
+            CollectionsMarshal.SetCount(result, count);
+            buffer.AsSpan(0, count).CopyTo(CollectionsMarshal.AsSpan(result));
+#else
+            var result = new List<T>(count);
+            for (var i = 0; i < count; i++)
+            {
+                result.Add(buffer[i]);
+            }
+#endif
 
             ArrayPool<T>.Shared.Return(buffer, ClearOnReturn);
             _buffer = null;

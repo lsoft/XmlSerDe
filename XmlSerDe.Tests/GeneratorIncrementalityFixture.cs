@@ -38,7 +38,7 @@ using XmlSerializer = XmlSerDe.Compat.XmlSerializer;
 
 namespace Sample
 {
-    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
+    [XmlExhauster(typeof(StringBuilderExhauster))]
     [XmlSubject(typeof(Node), true)]
     public partial class Host
     {

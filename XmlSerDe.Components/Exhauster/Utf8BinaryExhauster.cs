@@ -18,11 +18,15 @@ namespace XmlSerDe.Components.Exhauster
 
         private readonly string _dateTimeFormat;
 
-        private const int CharCountBufferSize = 36; //36 = char count in Guid.ToString()
-        private readonly byte[] _internalBuffer = new byte[CharCountBufferSize * 2];
+        /// <summary>
+        /// Голова с <c>xsi:type</c> длиннее Guid (36). 256 символов покрывает
+        /// типичный тег, и UTF-8 тогда всегда помещается в <see cref="_internalBuffer"/>.
+        /// </summary>
+        private const int CharCountBufferSize = 256;
+        private readonly byte[] _internalBuffer;
 
         /// <param name="dateTimeFormat">
-        /// См. <see cref="DefaultStringBuilderExhauster"/>: <c>FFFFFFF</c> даёт ту же
+        /// См. <see cref="StringBuilderExhauster"/>: <c>FFFFFFF</c> даёт ту же
         /// лексическую форму, что и System.Xml.Serialization.
         /// </param>
         public Utf8BinaryExhauster(
@@ -35,6 +39,7 @@ namespace XmlSerDe.Components.Exhauster
             }
 
             _dateTimeFormat = dateTimeFormat;
+            _internalBuffer = new byte[Encoding.UTF8.GetMaxByteCount(CharCountBufferSize)];
         }
 
         /// <summary>
@@ -371,7 +376,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         /// <summary>
-        /// Формат "R", а не по умолчанию: см. <see cref="DefaultStringBuilderExhauster"/>.
+        /// Формат "R", а не по умолчанию: см. <see cref="StringBuilderExhauster"/>.
         /// </summary>
 #if NET8_0_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -464,7 +469,9 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(TimeSpan value)
         {
-            WriteChars(XmlNumberLexis.ToDurationString(value).AsSpan());
+            Span<char> buffer = stackalloc char[32];
+            XmlNumberLexis.TryFormat(buffer, value, out var written);
+            WriteChars(buffer.Slice(0, written));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -494,9 +501,10 @@ namespace XmlSerDe.Components.Exhauster
             }
             else
             {
-                var rented = ArrayPool<byte>.Shared.Rent(valueLength * 2);
-                var byteCount = Encoding.UTF8.GetBytes(value, 0, valueLength, rented, 0);
-                Write(rented, byteCount);
+                var byteCount = Encoding.UTF8.GetByteCount(value);
+                var rented = ArrayPool<byte>.Shared.Rent(byteCount);
+                var written = Encoding.UTF8.GetBytes(value, 0, valueLength, rented, 0);
+                Write(rented, written);
                 ArrayPool<byte>.Shared.Return(rented); //nothing catastrophic happens if there will be an exception before this line; please read the doc of renting
             }
         }
@@ -510,8 +518,8 @@ namespace XmlSerDe.Components.Exhauster
             }
 
             XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
-            var encoded = global::System.Net.WebUtility.HtmlEncode(value);
-            Append(encoded);
+            var dest = new EncodeSink(this);
+            XmlTextEncoder.EncodeTo(value, ref dest);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -522,7 +530,8 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            Append(XmlAttributeEncoder.Encode(value));
+            var dest = new EncodeSink(this);
+            XmlAttributeEncoder.WriteTo(value, ref dest);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -533,7 +542,53 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            Append(XmlBase64.Encode(value));
+            var byteCount = XmlBase64.EncodedLength(value);
+            if (byteCount == 0)
+            {
+                return;
+            }
+
+            if (byteCount <= _internalBuffer.Length)
+            {
+                var written = XmlBase64.EncodeToUtf8(value, _internalBuffer);
+                Write(_internalBuffer, written);
+                return;
+            }
+
+            var rented = ArrayPool<byte>.Shared.Rent(byteCount);
+            var writtenRented = XmlBase64.EncodeToUtf8(value, rented);
+            Write(rented, writtenRented);
+            ArrayPool<byte>.Shared.Return(rented); //nothing catastrophic happens if there will be an exception before this line; please read the doc of renting
+        }
+
+        private readonly struct EncodeSink : IXmlEncodeDestination
+        {
+            private readonly Utf8BinaryExhauster _exhauster;
+
+            public EncodeSink(Utf8BinaryExhauster exhauster)
+            {
+                _exhauster = exhauster;
+            }
+
+            public void WriteSlice(string value, int start, int count)
+            {
+                if (count == 0)
+                {
+                    return;
+                }
+
+                _exhauster.WriteChars(value.AsSpan(start, count));
+            }
+
+            public void WriteLiteral(string literal)
+            {
+                _exhauster.Append(literal);
+            }
+
+            public void WriteChars(ReadOnlySpan<char> chars)
+            {
+                _exhauster.WriteChars(chars);
+            }
         }
     }
 }

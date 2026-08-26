@@ -64,7 +64,7 @@ namespace XmlSerDe.Generator.Helper
             return result;
         }
 
-        public static INamedTypeSymbol DefaultStringBuilderExhauster(
+        public static INamedTypeSymbol StringBuilderExhauster(
             this Compilation compilation
             )
         {
@@ -73,11 +73,68 @@ namespace XmlSerDe.Generator.Helper
                 throw new ArgumentNullException(nameof(compilation));
             }
 
-            var result =  compilation.GetTypeByMetadataName("XmlSerDe.Components.Exhauster.DefaultStringBuilderExhauster");
+            var result = compilation.GetTypeByMetadataName("XmlSerDe.Components.Exhauster.StringBuilderExhauster");
 
             if (result is null)
             {
-                throw new InvalidOperationException($"Cannot find {nameof(DefaultStringBuilderExhauster)} in Compilation");
+                throw new InvalidOperationException($"Cannot find {nameof(StringBuilderExhauster)} in Compilation");
+            }
+
+            return result;
+        }
+
+        public static INamedTypeSymbol PooledCharExhauster(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            var result = compilation.GetTypeByMetadataName("XmlSerDe.Components.Exhauster.PooledCharExhauster");
+
+            if (result is null)
+            {
+                throw new InvalidOperationException($"Cannot find {nameof(PooledCharExhauster)} in Compilation");
+            }
+
+            return result;
+        }
+
+        public static INamedTypeSymbol LengthEstimatorExhauster(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            var result = compilation.GetTypeByMetadataName("XmlSerDe.Components.Exhauster.LengthEstimatorExhauster");
+
+            if (result is null)
+            {
+                throw new InvalidOperationException($"Cannot find {nameof(LengthEstimatorExhauster)} in Compilation");
+            }
+
+            return result;
+        }
+
+        public static INamedTypeSymbol Utf8StreamExhauster(
+            this Compilation compilation
+            )
+        {
+            if (compilation is null)
+            {
+                throw new ArgumentNullException(nameof(compilation));
+            }
+
+            var result = compilation.GetTypeByMetadataName("XmlSerDe.Components.Exhauster.Utf8StreamExhauster");
+
+            if (result is null)
+            {
+                throw new InvalidOperationException($"Cannot find {nameof(Utf8StreamExhauster)} in Compilation");
             }
 
             return result;

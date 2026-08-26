@@ -2,11 +2,16 @@
 using System;
 using XmlSerDe.Common;
 using XmlSerDe.Components.Exhauster;
+using XmlSerDe.Tests.Complex.Subject;
 using XmlSerDe.Tests.Deep.Subject;
 
 namespace XmlSerDe.Tests.Deep
 {
-    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
+    [XmlExhauster(typeof(LengthEstimatorExhauster))]
+    [XmlExhauster(typeof(PooledCharExhauster))]
+    [XmlExhauster(typeof(StringBuilderExhauster))]
+    [XmlExhauster(typeof(Utf8BinaryExhausterEmpty))]
+    [XmlExhauster(typeof(Utf8BinaryExhausterStream))]
     [XmlSubject(typeof(DeepNode), true)]
     public partial class DeepXmlSerializerDeserializer
     {

@@ -1,4 +1,4 @@
-﻿#if NETSTANDARD
+#if NETSTANDARD
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1757,11 +1757,10 @@ namespace {_targetNamespace}");
         }
 
         /// <summary>
-        /// Член типа <c>List&lt;T&gt;</c> отдаётся вызывающему как есть, поэтому
-        /// накапливать его больше не во что - список и есть результат.
-        /// А вот <c>T[]</c> всё равно придётся копировать в массив точного
-        /// размера, так что промежуточный список - чистые потери: его буферы
-        /// берутся из пула (см. <see cref="PooledArrayBuilder{T}"/>).
+        /// Член типа <c>List&lt;T&gt;</c> с сеттером и <c>T[]</c> копятся в
+        /// <see cref="PooledArrayBuilder{T}"/>: промежуточные буферы из пула,
+        /// на выходе один массив нужной длины (у списка - его внутренний).
+        /// Без сеттера наполняется экземпляр, который создал конструктор.
         /// </summary>
         private readonly string GeneratePoolDeclarationStatement(
             ISymbol member,
@@ -1782,7 +1781,7 @@ namespace {_targetNamespace}");
                         + $" ?? new global::System.Collections.Generic.List<{listItemType.ToGlobalDisplayString()}>();";
                 }
 
-                return $"var {poolVarName} = new global::System.Collections.Generic.List<{listItemType.ToGlobalDisplayString()}>();";
+                return $"var {poolVarName} = new {PooledArrayBuilderFullName}<{listItemType.ToGlobalDisplayString()}>();";
             }
             else if (memberType.IsArray(out _))
             {
@@ -1806,7 +1805,7 @@ namespace {_targetNamespace}");
                     return "";
                 }
 
-                return $"result.{member.Name} = {poolVarName};";
+                return $"result.{member.Name} = {poolVarName}.{nameof(PooledArrayBuilder<int>.ToListAndRelease)}();";
             }
             else if (memberType.IsArray(out _))
             {
@@ -2478,7 +2477,7 @@ namespace {_targetNamespace}");
             //add default exhauster if no one specified
             if (exhaustList.Count == 0)
             {
-                exhaustList.Add(compilation.DefaultStringBuilderExhauster());
+                exhaustList.Add(compilation.StringBuilderExhauster());
             }
 
             //add default injector if no one specified

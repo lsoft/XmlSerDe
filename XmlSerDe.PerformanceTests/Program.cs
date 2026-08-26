@@ -15,26 +15,16 @@ namespace XmlSerDe.PerformanceTests
         static void Main(string[] args)
         {
 #if DEBUG
-            new DeserializeFixture();
+            new DeserializeMatrixFixture();
+            new SerializeMatrixFixture();
 #else
 
-            //Оба класса в одном прогоне - BenchmarkDotNet соберёт по одному exe на
-            //каждую пару (класс, джоб) и выдаст отдельную таблицу на класс.
             BenchmarkDotNet.Running.BenchmarkRunner.Run(
                 new[]
                 {
-                    typeof(SerializeFixture),
-                    typeof(DeserializeFixture)
+                    typeof(DeserializeMatrixFixture),
+                    typeof(SerializeMatrixFixture)
                 });
-            //BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(OtherFixture));
-            //BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(XmlDecodeStringFixture));
-            //BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(AllocationHotspotsFixture));
-
-            //var span = DeserializeFixture.AuxXml.AsSpan();
-            //for (var cc = 0; cc < 250000; cc++)
-            //{
-            //    XmlSerializerDeserializer.Deserialize(span, out InfoContainer r);
-            //}
 #endif
         }
     }

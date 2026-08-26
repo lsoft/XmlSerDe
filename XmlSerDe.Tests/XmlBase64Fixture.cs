@@ -1,6 +1,7 @@
 #nullable disable
 
 using System;
+using System.Text;
 using XmlSerDe.Common;
 using Xunit;
 
@@ -26,6 +27,22 @@ namespace XmlSerDe.Tests
                 }
 
                 Assert.Equal(XmlBase64.Encode(value).Length, XmlBase64.EncodedLength(value));
+
+                var sb = new StringBuilder();
+                XmlBase64.Append(sb, value);
+                Assert.Equal(XmlBase64.Encode(value), sb.ToString());
+
+                var expectedUtf8 = Encoding.UTF8.GetBytes(XmlBase64.Encode(value));
+                var utf8 = new byte[XmlBase64.EncodedLength(value)];
+                var written = XmlBase64.EncodeToUtf8(value, utf8);
+                Assert.Equal(expectedUtf8.Length, written);
+                Assert.Equal(expectedUtf8, utf8);
+
+                var offset = 3;
+                var chars = new char[offset + XmlBase64.EncodedLength(value) + 2];
+                var charWritten = XmlBase64.EncodeToChars(value, chars, offset);
+                Assert.Equal(XmlBase64.EncodedLength(value), charWritten);
+                Assert.Equal(XmlBase64.Encode(value), new string(chars, offset, charWritten));
             }
         }
 
@@ -64,6 +81,8 @@ namespace XmlSerDe.Tests
             Assert.Equal(expected, XmlBase64.Decode("AQ\r\n L6".AsSpan()));
             Assert.Empty(XmlBase64.Decode("   ".AsSpan()));
             Assert.Empty(XmlBase64.Decode(ReadOnlySpan<char>.Empty));
+            Assert.Same(Array.Empty<byte>(), XmlBase64.Decode(ReadOnlySpan<char>.Empty));
+            Assert.Same(Array.Empty<byte>(), XmlBase64.Decode("   ".AsSpan()));
         }
 
         [Fact]

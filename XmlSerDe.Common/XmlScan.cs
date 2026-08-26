@@ -162,11 +162,11 @@ namespace XmlSerDe.Common
                 DeclaredNodeType.Length + 1,
                 roschar.Empty,
                 XmlScan.NilSpan,
-                roschar.Empty,
+                XmlScan.TrueSpan,
                 out var parsedAttribute
                 );
 
-            return parsedAttribute.Value.SequenceEqual(XmlScan.TrueSpan);
+            return !parsedAttribute.IsEmpty;
         }
     }
 
@@ -788,6 +788,14 @@ namespace XmlSerDe.Common
         {
             while (true)
             {
+                if (index < 0 || index >= internalsOfHead.Length)
+                {
+                    //голова кончилась, а искомый атрибут не встретился: это не ошибка,
+                    //отсутствующий атрибут - обычное дело
+                    result = new ParsedAttribute();
+                    return;
+                }
+
                 ParseFirstFoundAttribute(internalsOfHead, index, out var apr);
                 if (apr.Attribute.IsEmpty)
                 {
@@ -795,13 +803,30 @@ namespace XmlSerDe.Common
                     return;
                 }
 
+                if (apr.TotalLength <= 0)
+                {
+                    //курсор обязан двигаться вперёд: иначе цикл здесь вечный, а
+                    //документ, который его заводит, приходит снаружи
+                    throw new InvalidOperationException("Attribute parsing made no progress.");
+                }
+
                 if (requiredPrefix.IsEmpty || requiredPrefix.SequenceEqual(apr.Attribute.Prefix))
                 {
                     if (requiredName.IsEmpty || requiredName.SequenceEqual(apr.Attribute.Name))
                     {
-                        if (requiredValue.IsEmpty || requiredValue.SequenceEqual(apr.Attribute.Value))
+                        if (requiredValue.IsEmpty)
                         {
-                            //нашли что нужно
+                            //вызывающему нужно значение: раскрываем только найденный атрибут
+                            result = new ParsedAttribute(
+                                apr.Attribute.Prefix,
+                                apr.Attribute.Name,
+                                DecodeAttributeValue(apr.Attribute.Value)
+                                );
+                            return;
+                        }
+
+                        if (AttributeValueEquals(apr.Attribute.Value, requiredValue))
+                        {
                             result = apr.Attribute;
                             return;
                         }
@@ -812,6 +837,19 @@ namespace XmlSerDe.Common
             }
         }
 
+        /// <summary>
+        /// Разбирает один атрибут начиная с позиции <paramref name="iindex"/>.
+        ///
+        /// Каждый из четырёх поисков ниже проверяется на "не нашлось". Проверка
+        /// стоит ровно одно сравнение с уже посчитанным индексом - лишнего прохода
+        /// по спану ни одна из них не делает, - а без них отрицательный индекс шёл
+        /// прямо в индексатор или в Slice, и голова вида
+        /// <c>&lt;Foo a:b&gt;</c> или <c>&lt;Foo a=&gt;</c> роняла разбор
+        /// <see cref="IndexOutOfRangeException"/>. Документ приходит снаружи, и
+        /// такое исключение - это не диагностика битого документа, а сообщение
+        /// о собственной ошибке: поймать его по смыслу нельзя, отличить от чужого
+        /// бага в коде вызывающего - тоже.
+        /// </summary>
         private static void ParseFirstFoundAttribute(
             roschar internalsOfHead,
             int iindex,
@@ -827,6 +865,11 @@ namespace XmlSerDe.Common
 #else
             var iofa0 = trimmed.IndexOfAny("=/>:".AsSpan());
 #endif
+            if (iofa0 < 0)
+            {
+                throw new InvalidOperationException("Attribute name is not terminated.");
+            }
+
             var c = trimmed[iofa0];
             if (c == '/' || c == '>')
             {
@@ -844,6 +887,11 @@ namespace XmlSerDe.Common
                 trimmed = trimmed.Slice(iofa0 + 1);
 
                 var iofa1 = trimmed.IndexOf('=');
+                if (iofa1 < 0)
+                {
+                    throw new InvalidOperationException("'=' not found for prefixed attribute name.");
+                }
+
                 name = trimmed.Slice(0, iofa1);
                 trimmed = trimmed.Slice(iofa1 + 1);
             }
@@ -857,21 +905,57 @@ namespace XmlSerDe.Common
 
             //значение атрибута может быть в двойных или одинарных кавычках (XML 1.0 2.3, AttValue)
             var iofa2 = trimmed.IndexOfAny('"', '\'');
+            if (iofa2 < 0)
+            {
+                throw new InvalidOperationException("Opening quote not found for attribute value.");
+            }
+
             var quoteChar = trimmed[iofa2];
             //найдено начало значения
             trimmed = trimmed.Slice(iofa2 + 1);
 
             //закрывающая кавычка должна совпадать по типу с открывающей
             var iofa3 = trimmed.IndexOf(quoteChar);
+            if (iofa3 < 0)
+            {
+                throw new InvalidOperationException("Closing quote not found for attribute value.");
+            }
+
             //найден конец значения
             var rawValue = trimmed.Slice(0, iofa3);
 
             var totalLength = (internalsOfHead.Length - trimmed.Length) + iofa3 + 1 - iindex;
 
             result = new AttributeProcessResult(
-                new ParsedAttribute(prefix, name, DecodeAttributeValue(rawValue)),
+                new ParsedAttribute(prefix, name, rawValue),
                 totalLength
                 );
+        }
+
+        /// <summary>
+        /// Сравнение без материализации строки: сырой спан, если раскрывать нечего,
+        /// иначе stackalloc. Нужно, когда ищем xmlns/nil по значению и сам результат
+        /// атрибута дальше не храним.
+        /// </summary>
+        private static bool AttributeValueEquals(roschar rawValue, roschar required)
+        {
+#if NET8_0_OR_GREATER
+            if (rawValue.IndexOfAny(AttributeValueSpecials) < 0)
+#else
+            if (rawValue.IndexOfAny("&\t\r\n".AsSpan()) < 0)
+#endif
+            {
+                return rawValue.SequenceEqual(required);
+            }
+
+            if (rawValue.Length <= 256)
+            {
+                Span<char> buffer = stackalloc char[rawValue.Length];
+                var written = XmlTextDecoder.DecodeAttributeValueInto(rawValue, buffer);
+                return buffer.Slice(0, written).SequenceEqual(required);
+            }
+
+            return XmlTextDecoder.DecodeAttributeValue(rawValue).AsSpan().SequenceEqual(required);
         }
 
         /// <summary>

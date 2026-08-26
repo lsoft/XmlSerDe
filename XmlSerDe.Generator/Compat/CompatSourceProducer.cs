@@ -30,7 +30,9 @@ namespace XmlSerDe.Generator.Compat
         public static readonly string SerializerFullName = "global::" + GeneratedNamespace + "." + SerializerClassName;
 
         public const string RegistryFullName = "global::XmlSerDe.Compat.XmlSerDeRegistry";
-        public const string ExhausterFullName = "global::XmlSerDe.Components.Exhauster.DefaultStringBuilderExhauster";
+        public const string PooledCharExhausterFullName = "global::XmlSerDe.Components.Exhauster.PooledCharExhauster";
+        public const string LengthEstimatorExhausterFullName = "global::XmlSerDe.Components.Exhauster.LengthEstimatorExhauster";
+        public const string Utf8StreamExhausterFullName = "global::XmlSerDe.Components.Exhauster.Utf8StreamExhauster";
         public const string InjectorFullName = "global::XmlSerDe.Components.Injector.DefaultInjector";
 
         /// <summary>
@@ -66,8 +68,15 @@ namespace XmlSerDe.Generator.Compat
 
             var infos = new List<SerializationInfo>(sinfos.Values);
 
+            //три стока: оценщик и pooled char для string/TextWriter, UTF-8 для Stream.
+            //Размер документа в SerializeToString заранее неизвестен.
             return new SerializationInfoCollection(
-                new List<INamedTypeSymbol> { compilation.DefaultStringBuilderExhauster(), },
+                new List<INamedTypeSymbol>
+                {
+                    compilation.LengthEstimatorExhauster(),
+                    compilation.PooledCharExhauster(),
+                    compilation.Utf8StreamExhauster(),
+                },
                 new List<INamedTypeSymbol> { compilation.DefaultInjector(), },
                 infos
                 );
@@ -101,16 +110,34 @@ namespace {{GeneratedNamespace}}
                 sb.AppendLine($$"""
             {{RegistryFullName}}.Register(
                 typeof({{global}}),
-                (exhauster, obj, appendXmlHead) => {{SerializerFullName}}.{{ClassSourceProducer.HeadSerializeMethodName}}(
-                    ({{ExhausterFullName}})exhauster,
-                    ({{global}})obj,
-                    appendXmlHead
-                    ),
+                (exhauster, obj, appendXmlHead) =>
+                {
+                    var typed = ({{global}})obj;
+                    if (exhauster is {{PooledCharExhausterFullName}} pooled)
+                    {
+                        {{SerializerFullName}}.{{ClassSourceProducer.HeadSerializeMethodName}}(pooled, typed, appendXmlHead);
+                        return;
+                    }
+                    if (exhauster is {{LengthEstimatorExhausterFullName}} estimator)
+                    {
+                        {{SerializerFullName}}.{{ClassSourceProducer.HeadSerializeMethodName}}(estimator, typed, appendXmlHead);
+                        return;
+                    }
+                    if (exhauster is {{Utf8StreamExhausterFullName}} utf8)
+                    {
+                        {{SerializerFullName}}.{{ClassSourceProducer.HeadSerializeMethodName}}(utf8, typed, appendXmlHead);
+                        return;
+                    }
+                    throw new global::System.InvalidCastException(
+                        "XmlSerDe.Compat serialize path supports PooledCharExhauster, LengthEstimatorExhauster and Utf8StreamExhauster only."
+                        );
+                },
                 (roschar xml) =>
                 {
                     {{SerializerFullName}}.{{ClassSourceProducer.HeadDeserializeMethodName}}({{InjectorFullName}}.Instance, xml, out {{global}} result);
                     return result;
-                }
+                },
+                "{{root.GetXmlRootName()}}"
                 );
 """);
             }

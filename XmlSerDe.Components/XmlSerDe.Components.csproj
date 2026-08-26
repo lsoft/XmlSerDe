@@ -7,6 +7,16 @@
     <WarningsAsErrors>nullable;CS8766;CS8767</WarningsAsErrors>
   </PropertyGroup>
 
+  <!--
+    Span/ArrayPool на netstandard2.0 живут в отдельных пакетах; на net8.0+ они
+    в самом рантайме. PooledCharExhauster и Utf8BinaryExhauster используют их
+    напрямую, не только транзитивно через Common.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Buffers" Version="4.5.1" />
+    <PackageReference Include="System.Memory" Version="4.5.5" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" />
   </ItemGroup>

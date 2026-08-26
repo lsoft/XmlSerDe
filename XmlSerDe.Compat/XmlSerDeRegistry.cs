@@ -28,13 +28,30 @@ namespace XmlSerDe.Compat
         public readonly CompatSerialize Serialize;
         public readonly CompatDeserialize Deserialize;
 
+        /// <summary>
+        /// Имя корневого элемента - то самое, которое пишет и ждёт сгенерированный
+        /// код (<c>[XmlRoot]</c> перебивает имя типа). Лежит здесь ради
+        /// <see cref="XmlSerializer.CanDeserialize"/>: вопрос «твой ли это документ»
+        /// сводится к сравнению имени, и отвечать на него постройкой штатного
+        /// сериализатора - платить рефлексией за одно сравнение строк.
+        /// </summary>
+        public readonly string RootElementName;
+
         public XmlSerDeEntry(
             CompatSerialize serialize,
-            CompatDeserialize deserialize
+            CompatDeserialize deserialize,
+            string rootElementName
             )
         {
             Serialize = serialize ?? throw new ArgumentNullException(nameof(serialize));
             Deserialize = deserialize ?? throw new ArgumentNullException(nameof(deserialize));
+
+            if (string.IsNullOrEmpty(rootElementName))
+            {
+                throw new ArgumentException($"'{nameof(rootElementName)}' cannot be null or empty.", nameof(rootElementName));
+            }
+
+            RootElementName = rootElementName;
         }
     }
 
@@ -65,7 +82,8 @@ namespace XmlSerDe.Compat
         public static void Register(
             Type type,
             CompatSerialize serialize,
-            CompatDeserialize deserialize
+            CompatDeserialize deserialize,
+            string rootElementName
             )
         {
             if (type is null)
@@ -73,7 +91,7 @@ namespace XmlSerDe.Compat
                 throw new ArgumentNullException(nameof(type));
             }
 
-            var entry = new XmlSerDeEntry(serialize, deserialize);
+            var entry = new XmlSerDeEntry(serialize, deserialize, rootElementName);
 
             lock (_lock)
             {
@@ -88,10 +106,11 @@ namespace XmlSerDe.Compat
 
         public static void Register<T>(
             CompatSerialize serialize,
-            CompatDeserialize deserialize
+            CompatDeserialize deserialize,
+            string rootElementName
             )
         {
-            Register(typeof(T), serialize, deserialize);
+            Register(typeof(T), serialize, deserialize, rootElementName);
         }
 
         public static bool TryGet(

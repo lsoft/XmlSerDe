@@ -8,8 +8,10 @@ rem  log file. The console gets only the markdown tables BenchmarkDotNet exports
 rem  as *-report-github.md.
 rem
 rem  What is measured:
-rem    SerializeFixture     - net10.0 only
-rem    DeserializeFixture   - net472 + net8.0 + net10.0, categories DEEP/REGULAR
+rem    SerializeFixture       - net10.0 only
+rem    DeserializeFixture     - net472 + net8.0 + net10.0, categories DEEP/REGULAR
+rem    HugeSerializeFixture   - net10.0 only, ~100 MB mixed document
+rem    HugeDeserializeFixture - net472 + net8.0 + net10.0, same 100 MB document
 rem                           (net472 is how the netstandard2.0 assemblies run)
 rem
 rem  Takes several minutes. The full log is kept either way.

@@ -2,7 +2,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Xml;
 using XmlSerDe.Common;
 using roschar = System.ReadOnlySpan<char>;
 
@@ -17,10 +16,9 @@ namespace XmlSerDe.Components.Injector
         /// <c>Parse(roschar, …)</c> выбирается без единой аллокации; на JIT это
         /// no-op, который инлайнится в ничто.
         ///
-        /// В netstandard2.0 span-перегрузок Parse не существует вовсе (их нет ни в
-        /// корлибе, ни в System.Memory), поэтому вход приходится материализовать в
-        /// строку. Это единственное место, где различие между таргетами и живёт:
-        /// все 24 вызова Parse ниже написаны одинаково.
+        /// В netstandard2.0 span-перегрузок нет у DateTime/Guid/decimal, поэтому
+        /// вход там материализуется в строку. Целые, bool и duration разбираются
+        /// из спана на всех таргетах.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #if NET8_0_OR_GREATER
@@ -150,12 +148,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out bool result)
         {
-            result = bool.Parse(Parsable(body));
+            result = XmlSpanParse.ParseBoolean(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out bool? result)
         {
-            result = bool.Parse(Parsable(body));
+            result = XmlSpanParse.ParseBoolean(body);
         }
 
 
@@ -190,12 +188,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out sbyte result)
         {
-            result = sbyte.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseSByte(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out sbyte? result)
         {
-            result = sbyte.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseSByte(body);
         }
 
 
@@ -230,12 +228,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out byte result)
         {
-            result = byte.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseByte(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out byte? result)
         {
-            result = byte.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseByte(body);
         }
 
 
@@ -270,12 +268,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out ushort result)
         {
-            result = ushort.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseUInt16(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out ushort? result)
         {
-            result = ushort.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseUInt16(body);
         }
 
 
@@ -310,12 +308,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out short result)
         {
-            result = short.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseInt16(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out short? result)
         {
-            result = short.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseInt16(body);
         }
 
 
@@ -350,12 +348,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out uint result)
         {
-            result = uint.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseUInt32(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out uint? result)
         {
-            result = uint.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseUInt32(body);
         }
 
 
@@ -390,12 +388,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out int result)
         {
-            result = int.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseInt32(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out int? result)
         {
-            result = int.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseInt32(body);
         }
 
 
@@ -430,12 +428,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out ulong result)
         {
-            result = ulong.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseUInt64(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out ulong? result)
         {
-            result = ulong.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseUInt64(body);
         }
 
 
@@ -470,12 +468,12 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out long result)
         {
-            result = long.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseInt64(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out long? result)
         {
-            result = long.Parse(Parsable(body), CultureInfo.InvariantCulture);
+            result = XmlSpanParse.ParseInt64(body);
         }
 
 
@@ -637,7 +635,7 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out char result)
         {
-            result = (char)ushort.Parse(Parsable(body), NumberStyles.Integer, CultureInfo.InvariantCulture);
+            result = (char)XmlSpanParse.ParseUInt16(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out char? result)
@@ -677,15 +675,13 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         /// <summary>
-        /// Длительность ISO-8601 разбирается штатным <see cref="XmlConvert"/>:
-        /// грамматика у неё нетривиальная (годы и месяцы, дробные секунды,
-        /// знак), а писать её второй раз ради спана - цена, несоразмерная тому,
-        /// как часто TimeSpan встречается в документах.
+        /// Длительность ISO-8601: та же грамматика, что у XmlConvert.ToTimeSpan
+        /// (годы и месяцы, дробные секунды, знак), но без промежуточной строки.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out TimeSpan result)
         {
-            result = XmlConvert.ToTimeSpan(body.Trim().ToString());
+            result = XmlNumberLexis.ParseDuration(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ParseBody(roschar body, out TimeSpan? result)

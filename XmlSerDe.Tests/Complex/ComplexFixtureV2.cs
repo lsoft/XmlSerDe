@@ -29,7 +29,7 @@ namespace XmlSerDe.Tests.Complex
         [Fact]
         public void Serialize_WithXmlHead_V2_DeserializesAfterCut()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer.Serialize(sb, ComplexFixture.DefaultObject, appendXmlHead: true);
             var xml = sb.ToString();
 
@@ -46,8 +46,10 @@ namespace XmlSerDe.Tests.Complex
         public void Serialize_Stream_V2_RoundTrip()
         {
             using var ms = new MemoryStream();
-            var exhauster = new Utf8BinaryExhausterStream(ms);
-            XmlSerializerDeserializer.Serialize(exhauster, ComplexFixture.DefaultObject, false);
+            using (var exhauster = new Utf8BinaryExhausterStream(ms))
+            {
+                XmlSerializerDeserializer.Serialize(exhauster, ComplexFixture.DefaultObject, false);
+            }
 
             var xml = Encoding.UTF8.GetString(ms.ToArray());
             XmlSerializerDeserializer.Deserialize(

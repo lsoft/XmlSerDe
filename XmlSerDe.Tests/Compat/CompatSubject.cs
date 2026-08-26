@@ -49,6 +49,38 @@ namespace XmlSerDe.Tests.Compat
     }
 
     /// <summary>
+    /// Корень с собственным именем. Нужен ровно затем, чтобы <c>CanDeserialize</c>
+    /// проверялся не на типе, у которого имя элемента совпадает с именем типа:
+    /// <see cref="System.Xml.Serialization.XmlSerializer"/> отзывается здесь на
+    /// <c>&lt;purchase&gt;</c> и <b>не</b> отзывается на <c>&lt;CompatRenamedRoot&gt;</c>
+    /// (проверено прогоном).
+    /// </summary>
+    [XmlRoot("purchase")]
+    public class CompatRenamedRoot
+    {
+        public int Number { get; set; }
+    }
+
+    /// <summary>
+    /// Тип, который нигде не назван в <c>new XmlSerializer(typeof(...))</c>:
+    /// единственная его точка вызова - <c>XmlSerializer.FromTypes</c>. Если
+    /// коллектор точек вызова её не видит, тип молча не ускорится.
+    /// </summary>
+    public class CompatFromTypesSubject
+    {
+        public int Number { get; set; }
+    }
+
+    /// <summary>
+    /// То же самое, но точка вызова - фабрика
+    /// (<c>new XmlSerializerFactory().CreateSerializer(typeof(...))</c>).
+    /// </summary>
+    public class CompatFactorySubject
+    {
+        public int Number { get; set; }
+    }
+
+    /// <summary>
     /// Структура: <see cref="System.Xml.Serialization.XmlSerializer"/> её умеет
     /// (проверено), а XmlSerDe - нет, потому что сложному типу генератор пишет
     /// <c>new T()</c> и присваивает члены по одному. Обходчик обязан отказаться

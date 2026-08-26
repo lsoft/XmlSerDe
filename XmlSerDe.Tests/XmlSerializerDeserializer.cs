@@ -6,12 +6,13 @@ using System.Threading.Tasks;
 using System.Xml;
 using XmlSerDe.Common;
 using XmlSerDe.Components.Exhauster;
+using XmlSerDe.Tests.Complex.Subject;
 //using roschar = System.ReadOnlySpan<char>;
 
 namespace XmlSerDe.Tests
 {
-    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
-    [XmlExhauster(typeof(Utf8BinaryExhausterChild))]
+    [XmlExhauster(typeof(StringBuilderExhauster))]
+    [XmlExhauster(typeof(Utf8BinaryExhausterStream))]
     [XmlSubject(typeof(XmlObject1), true)]
     public partial class XmlSerializerDeserializer1
     {
@@ -72,8 +73,8 @@ namespace XmlSerDe.Tests
     {
     }
 
-    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
-    [XmlExhauster(typeof(Utf8BinaryExhausterChild))]
+    [XmlExhauster(typeof(StringBuilderExhauster))]
+    [XmlExhauster(typeof(Utf8BinaryExhausterStream))]
     [XmlSubject(typeof(XmlObject16), true)]
     [XmlSubject(typeof(XmlObject17), true)]
     public partial class XmlSerializerDeserializer16_17
@@ -123,8 +124,9 @@ namespace XmlSerDe.Tests
     {
     }
 
-    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
-    [XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
+    [XmlExhauster(typeof(StringBuilderExhauster))]
+    [XmlExhauster(typeof(LengthEstimatorExhauster))]
+    [XmlExhauster(typeof(PooledCharExhauster))]
     [XmlSubject(typeof(XmlObject31), true)]
     public partial class XmlSerializerDeserializer31
     {

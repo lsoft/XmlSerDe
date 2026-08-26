@@ -4,20 +4,14 @@ using XmlSerDe.Components.Exhauster;
 namespace XmlSerDe.Tests.Complex.Subject
 {
     /// <summary>
-    /// Utf8BinaryExhauster that writes to a MemoryStream for round-trip tests.
+    /// UTF-8 в <see cref="MemoryStream"/>: тот же буфер, что у
+    /// <see cref="Utf8StreamExhauster"/>. Отдельный тип нужен генератору.
     /// </summary>
-    public class Utf8BinaryExhausterStream : Utf8BinaryExhauster
+    public class Utf8BinaryExhausterStream : Utf8StreamExhauster
     {
-        private readonly MemoryStream _stream;
-
         public Utf8BinaryExhausterStream(MemoryStream stream)
+            : base(stream)
         {
-            _stream = stream ?? throw new System.ArgumentNullException(nameof(stream));
-        }
-
-        protected override void Write(byte[] data, int length)
-        {
-            _stream.Write(data, 0, length);
         }
     }
 }

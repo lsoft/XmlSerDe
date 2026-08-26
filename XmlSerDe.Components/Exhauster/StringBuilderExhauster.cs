@@ -10,7 +10,7 @@ namespace XmlSerDe.Components.Exhauster
     /// Exhauster that writes into StringBuilder.
     /// Class is NOT a thread-safe!
     /// </summary>
-    public class DefaultStringBuilderExhauster : IExhauster
+    public class StringBuilderExhauster : IExhauster
     {
         private readonly StringBuilder _sb;
         private readonly string _dateTimeFormat;
@@ -26,7 +26,7 @@ namespace XmlSerDe.Components.Exhauster
         /// <c>...T14:30:45.0000000Z</c> там, где BCL пишет <c>...T14:30:45Z</c>;
         /// оба варианта разбираются одинаково, но документы посимвольно не совпадали.
         /// </param>
-        public DefaultStringBuilderExhauster(
+        public StringBuilderExhauster(
             StringBuilder? sb = null,
             string dateTimeFormat = "yyyy-MM-ddTHH:mm:ss.FFFFFFFK"
             )
@@ -411,7 +411,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(TimeSpan value)
         {
-            _sb.Append(XmlNumberLexis.ToDurationString(value));
+            XmlNumberLexis.Append(_sb, value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -440,8 +440,7 @@ namespace XmlSerDe.Components.Exhauster
             }
 
             XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
-            var encoded = global::System.Net.WebUtility.HtmlEncode(value);
-            _sb.Append(encoded);
+            XmlTextEncoder.Append(_sb, value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -452,7 +451,7 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            _sb.Append(XmlAttributeEncoder.Encode(value));
+            XmlAttributeEncoder.Append(_sb, value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -463,7 +462,7 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            _sb.Append(XmlBase64.Encode(value));
+            XmlBase64.Append(_sb, value);
         }
     }
 }

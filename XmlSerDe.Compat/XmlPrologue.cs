@@ -38,6 +38,13 @@ namespace XmlSerDe.Compat
             {
                 var endOfHead = "?>".AsSpan();
                 var index = trimmedXml.IndexOf(endOfHead);
+                if (index < 0)
+                {
+                    //документ приходит снаружи, и незакрытое объявление - это про него,
+                    //а не про нас. Без проверки индекс -1 уходил в Slice(1) и разбор
+                    //продолжался с середины объявления: не исключение, а тихая чушь
+                    throw new InvalidOperationException("Closing '?>' not found for xml declaration.");
+                }
 
                 headless = trimmedXml.Slice(index + endOfHead.Length);
             }

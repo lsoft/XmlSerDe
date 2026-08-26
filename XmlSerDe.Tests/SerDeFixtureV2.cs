@@ -4,6 +4,7 @@ using System.Text;
 using XmlSerDe.Common;
 using XmlSerDe.Components.Exhauster;
 using XmlSerDe.Components.Injector;
+using XmlSerDe.Tests.Complex.Subject;
 using Xunit;
 
 namespace XmlSerDe.Tests
@@ -26,7 +27,7 @@ namespace XmlSerDe.Tests
                 StringProperty = "hello"
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer2.Serialize(sb, original, false);
             XmlSerializerDeserializer2.Deserialize(
                 DefaultInjector.Instance,
@@ -46,7 +47,7 @@ namespace XmlSerDe.Tests
                 StringProperty = RawString
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer2.Serialize(sb, original, false);
             XmlSerializerDeserializer2.Deserialize(
                 DefaultInjector.Instance,
@@ -69,7 +70,7 @@ namespace XmlSerDe.Tests
                 }
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer2_3.Serialize(sb, original, false);
             XmlSerializerDeserializer2_3.Deserialize(
                 DefaultInjector.Instance,
@@ -93,7 +94,7 @@ namespace XmlSerDe.Tests
                 }
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer4_5.Serialize(sb, original, false);
             XmlSerializerDeserializer4_5.Deserialize(
                 DefaultInjector.Instance,
@@ -117,7 +118,7 @@ namespace XmlSerDe.Tests
                 }
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer4_5.Serialize(sb, original, false);
             XmlSerializerDeserializer4_5.Deserialize(
                 DefaultInjector.Instance,
@@ -142,7 +143,7 @@ namespace XmlSerDe.Tests
                 }
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer6.Serialize(sb, original, false);
             XmlSerializerDeserializer6.Deserialize(
                 DefaultInjector.Instance,
@@ -166,7 +167,7 @@ namespace XmlSerDe.Tests
                 }
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer7_8.Serialize(sb, original, false);
             XmlSerializerDeserializer7_8.Deserialize(
                 DefaultInjector.Instance,
@@ -189,7 +190,7 @@ namespace XmlSerDe.Tests
                 }
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer9_10.Serialize(sb, original, false);
             XmlSerializerDeserializer9_10.Deserialize(
                 DefaultInjector.Instance,
@@ -210,7 +211,7 @@ namespace XmlSerDe.Tests
                 StringProperty = "visible"
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer13.Serialize(sb, original, false);
             var xml = sb.ToString();
 
@@ -235,7 +236,7 @@ namespace XmlSerDe.Tests
                 NullableGuid = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer14.Serialize(sb, original, false);
             XmlSerializerDeserializer14.Deserialize(
                 DefaultInjector.Instance,
@@ -255,7 +256,7 @@ namespace XmlSerDe.Tests
                 NullableGuid = null
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer14.Serialize(sb, original, false);
             var xml = sb.ToString();
 
@@ -278,7 +279,7 @@ namespace XmlSerDe.Tests
         {
             var original = new XmlObject15 { XmlEnum15 = XmlEnum15.EnumValue1 };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer15.Serialize(sb, original, false);
             XmlSerializerDeserializer15.Deserialize(
                 DefaultInjector.Instance,
@@ -291,7 +292,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1_Serialize_Test0_V2_WithXmlHead()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer1.Serialize(sb, new XmlObject1(), appendXmlHead: true);
             var xml = sb.ToString();
 
@@ -311,8 +312,10 @@ namespace XmlSerDe.Tests
         public void XmlObject1_SerializeStream_Test0_V2_RoundTrip()
         {
             using var ms = new MemoryStream();
-            var be = new Utf8BinaryExhausterChild(ms);
-            XmlSerializerDeserializer1.Serialize(be, new XmlObject1(), false);
+            using (var be = new Utf8BinaryExhausterStream(ms))
+            {
+                XmlSerializerDeserializer1.Serialize(be, new XmlObject1(), false);
+            }
 
             var xml = Encoding.UTF8.GetString(ms.ToArray());
             XmlSerializerDeserializer1.Deserialize(
@@ -336,7 +339,7 @@ namespace XmlSerDe.Tests
                 }
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer16_17.Serialize(sb, original, false);
             XmlSerializerDeserializer16_17.Deserialize(
                 DefaultInjector.Instance,
@@ -360,7 +363,7 @@ namespace XmlSerDe.Tests
                 }
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer25_26_27.Serialize(sb, original, false);
             XmlSerializerDeserializer25_26_27.Deserialize(
                 DefaultInjector.Instance,
@@ -384,7 +387,7 @@ namespace XmlSerDe.Tests
                 }
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer28_29_30.Serialize(sb, original, false);
             XmlSerializerDeserializer28_29_30.Deserialize(
                 DefaultInjector.Instance,

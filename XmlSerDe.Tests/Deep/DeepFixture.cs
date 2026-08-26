@@ -110,7 +110,7 @@ namespace XmlSerDe.Tests.Deep
         [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
         public static string Serialize_XmlSerDe(DeepNode node)
         {
-            var exhauster = new DefaultStringBuilderExhauster();
+            var exhauster = new StringBuilderExhauster();
             DeepXmlSerializerDeserializer.Serialize(exhauster, node, false);
             return exhauster.ToString();
         }

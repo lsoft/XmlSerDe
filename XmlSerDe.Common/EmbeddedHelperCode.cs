@@ -827,23 +827,84 @@ namespace XmlSerDe.Common
             }
 
             var sb = new System.Text.StringBuilder(value.Length + EscapedLength);
-            sb.Append(value, 0, first);
+            AppendEscaping(sb, value, first);
+            return sb.ToString();
+        }
 
+        /// <summary>
+        /// То же, что <see cref="Encode"/>, но сразу в <paramref name="sb"/>,
+        /// без промежуточной строки даже когда экранировать есть что.
+        /// </summary>
+        public static void Append(System.Text.StringBuilder sb, string value)
+        {
+            if (sb is null)
+            {
+                throw new ArgumentNullException(nameof(sb));
+            }
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
+
+            var first = IndexOfEscapable(value);
+            if (first < 0)
+            {
+                sb.Append(value);
+                return;
+            }
+
+            AppendEscaping(sb, value, first);
+        }
+
+        public static void WriteTo<T>(string value, ref T dest)
+            where T : struct, IXmlEncodeDestination
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
+
+            var first = IndexOfEscapable(value);
+            if (first < 0)
+            {
+                dest.WriteSlice(value, 0, value.Length);
+                return;
+            }
+
+            dest.WriteSlice(value, 0, first);
             for (var i = first; i < value.Length; i++)
             {
-                var c = value[i];
-                var replacement = ReplacementOrNull(c);
+                var replacement = ReplacementOrNull(value[i]);
                 if (replacement is null)
                 {
-                    sb.Append(c);
+                    dest.WriteSlice(value, i, 1);
+                }
+                else
+                {
+                    dest.WriteLiteral(replacement);
+                }
+            }
+        }
+
+        private static void AppendEscaping(System.Text.StringBuilder sb, string value, int first)
+        {
+            sb.Append(value, 0, first);
+            for (var i = first; i < value.Length; i++)
+            {
+                var replacement = ReplacementOrNull(value[i]);
+                if (replacement is null)
+                {
+                    sb.Append(value[i]);
                 }
                 else
                 {
                     sb.Append(replacement);
                 }
             }
-
-            return sb.ToString();
         }
 
         /// <summary>
@@ -939,6 +1000,104 @@ namespace XmlSerDe.Common
         }
 
         /// <summary>
+        /// Та же лексема, что <see cref="Encode"/>, сразу в <paramref name="sb"/>.
+        /// </summary>
+        public static void Append(System.Text.StringBuilder sb, byte[] value)
+        {
+            if (sb is null)
+            {
+                throw new ArgumentNullException(nameof(sb));
+            }
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            var charCount = EncodedLength(value);
+            if (charCount == 0)
+            {
+                return;
+            }
+
+            var rented = System.Buffers.ArrayPool<char>.Shared.Rent(charCount);
+            try
+            {
+                EncodeToChars(value, rented, 0);
+                sb.Append(rented, 0, charCount);
+            }
+            finally
+            {
+                System.Buffers.ArrayPool<char>.Shared.Return(rented);
+            }
+        }
+
+        /// <summary>
+        /// Та же лексема, что <see cref="Encode"/>, в <paramref name="destination"/>
+        /// начиная с <paramref name="destinationIndex"/>. Возвращает число записанных
+        /// символов.
+        /// </summary>
+        public static int EncodeToChars(byte[] value, char[] destination, int destinationIndex)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+            if (destination is null)
+            {
+                throw new ArgumentNullException(nameof(destination));
+            }
+
+            var charCount = EncodedLength(value);
+            if (charCount == 0)
+            {
+                return 0;
+            }
+
+            if ((uint)destinationIndex > (uint)destination.Length
+                || destination.Length - destinationIndex < charCount)
+            {
+                throw new ArgumentException("Destination is too small for the base64Binary token.", nameof(destination));
+            }
+
+#if NET8_0_OR_GREATER
+            if (!Convert.TryToBase64Chars(value, destination.AsSpan(destinationIndex), out var written)
+                || written != charCount)
+            {
+                throw new InvalidOperationException("Failed to encode base64Binary.");
+            }
+
+            return written;
+#else
+            return Convert.ToBase64CharArray(value, 0, value.Length, destination, destinationIndex);
+#endif
+        }
+
+        /// <summary>
+        /// Base64 - ASCII, байты совпадают с символами. Пишет ровно
+        /// <see cref="EncodedLength"/> байт в <paramref name="destination"/>.
+        /// </summary>
+        public static int EncodeToUtf8(byte[] value, Span<byte> destination)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            var status = System.Buffers.Text.Base64.EncodeToUtf8(
+                value,
+                destination,
+                out _,
+                out var written
+                );
+            if (status != System.Buffers.OperationStatus.Done)
+            {
+                throw new InvalidOperationException("Failed to encode base64Binary.");
+            }
+
+            return written;
+        }
+
+        /// <summary>
         /// Сколько символов займёт <see cref="Encode"/>: четыре символа на каждые
         /// три байта, с добиванием до кратности padding'ом. Считается точно, а не
         /// сверху, - формат постоянной длины, приблизительность тут не нужна.
@@ -961,6 +1120,11 @@ namespace XmlSerDe.Common
         /// </summary>
         public static byte[] Decode(ReadOnlySpan<char> value)
         {
+            if (value.IsEmpty || IsAsciiWhitespaceOnly(value))
+            {
+                return Array.Empty<byte>();
+            }
+
 #if NETSTANDARD2_0
             return Convert.FromBase64String(value.ToString());
 #else
@@ -977,6 +1141,11 @@ namespace XmlSerDe.Common
                         );
                 }
 
+                if (written == 0)
+                {
+                    return Array.Empty<byte>();
+                }
+
                 var result = new byte[written];
                 Array.Copy(buffer, result, written);
                 return result;
@@ -986,6 +1155,20 @@ namespace XmlSerDe.Common
                 System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
             }
 #endif
+        }
+
+        private static bool IsAsciiWhitespaceOnly(ReadOnlySpan<char> value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+                if (c != ' ' && c != '\t' && c != '\r' && c != '\n')
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 

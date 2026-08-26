@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace XmlSerDe.Common
 {
@@ -135,53 +136,616 @@ namespace XmlSerDe.Common
                 return "PT0S";
             }
 
-            var negative = value < TimeSpan.Zero;
-            //Negate() на TimeSpan.MinValue бросает, поэтому знак снимается на тиках
-            var ticks = negative ? -value.Ticks : value.Ticks;
+            Span<char> buffer = stackalloc char[32];
+            var written = WriteDuration(buffer, value);
+#if NET8_0_OR_GREATER
+            return new string(buffer.Slice(0, written));
+#else
+            return buffer.Slice(0, written).ToString();
+#endif
+        }
 
-            var days = ticks / TimeSpan.TicksPerDay;
-            var rest = ticks % TimeSpan.TicksPerDay;
-            var hours = rest / TimeSpan.TicksPerHour;
-            rest %= TimeSpan.TicksPerHour;
-            var minutes = rest / TimeSpan.TicksPerMinute;
-            rest %= TimeSpan.TicksPerMinute;
-            var seconds = rest / TimeSpan.TicksPerSecond;
-            var fraction = rest % TimeSpan.TicksPerSecond;
-
-            var sb = new System.Text.StringBuilder(24);
-            if (negative)
+        public static void Append(StringBuilder sb, TimeSpan value)
+        {
+            if (sb is null)
             {
-                sb.Append('-');
+                throw new ArgumentNullException(nameof(sb));
             }
-            sb.Append('P');
+
+            Span<char> buffer = stackalloc char[32];
+            var written = WriteDuration(buffer, value);
+            AppendSpan(sb, buffer.Slice(0, written));
+        }
+
+        public static bool TryFormat(Span<char> destination, TimeSpan value, out int charsWritten)
+        {
+            var needed = DurationCharCount(value);
+            if (destination.Length < needed)
+            {
+                charsWritten = 0;
+                return false;
+            }
+
+            charsWritten = WriteDuration(destination, value);
+            return true;
+        }
+
+        /// <summary>
+        /// Длина <see cref="ToDurationString"/> без построения строки.
+        /// <c>TimeSpan.MinValue</c> - 27 символов (<c>-P10675199DT2H48M5.4775808S</c>).
+        /// </summary>
+        public static int DurationCharCount(TimeSpan value)
+        {
+            if (value == TimeSpan.Zero)
+            {
+                return 4;
+            }
+
+            SplitDuration(value, out var negative, out var days, out var hours, out var minutes, out var seconds, out var fraction);
+            return DurationCharCount(negative, days, hours, minutes, seconds, fraction);
+        }
+
+        private static void SplitDuration(
+            TimeSpan value,
+            out bool negative,
+            out ulong days,
+            out ulong hours,
+            out ulong minutes,
+            out ulong seconds,
+            out ulong fraction)
+        {
+            negative = value < TimeSpan.Zero;
+            // TimeSpan.MinValue.Ticks не помещается в long после смены знака:
+            // модуль берётся как ulong, тот же трюк, что для int.MinValue.
+            var ticks = negative ? 0ul - (ulong)value.Ticks : (ulong)value.Ticks;
+
+            days = ticks / (ulong)TimeSpan.TicksPerDay;
+            var rest = ticks % (ulong)TimeSpan.TicksPerDay;
+            hours = rest / (ulong)TimeSpan.TicksPerHour;
+            rest %= (ulong)TimeSpan.TicksPerHour;
+            minutes = rest / (ulong)TimeSpan.TicksPerMinute;
+            rest %= (ulong)TimeSpan.TicksPerMinute;
+            seconds = rest / (ulong)TimeSpan.TicksPerSecond;
+            fraction = rest % (ulong)TimeSpan.TicksPerSecond;
+        }
+
+        private static int DurationCharCount(
+            bool negative,
+            ulong days,
+            ulong hours,
+            ulong minutes,
+            ulong seconds,
+            ulong fraction)
+        {
+            var n = negative ? 2 : 1; // '-' + 'P' или только 'P'
             if (days != 0)
             {
-                sb.Append(days.ToString(CultureInfo.InvariantCulture)).Append('D');
+                n += CountDigits(days) + 1;
             }
 
             if (hours != 0 || minutes != 0 || seconds != 0 || fraction != 0)
             {
-                sb.Append('T');
+                n += 1;
                 if (hours != 0)
                 {
-                    sb.Append(hours.ToString(CultureInfo.InvariantCulture)).Append('H');
+                    n += CountDigits(hours) + 1;
                 }
                 if (minutes != 0)
                 {
-                    sb.Append(minutes.ToString(CultureInfo.InvariantCulture)).Append('M');
+                    n += CountDigits(minutes) + 1;
                 }
                 if (seconds != 0 || fraction != 0)
                 {
-                    sb.Append(seconds.ToString(CultureInfo.InvariantCulture));
+                    n += CountDigits(seconds);
                     if (fraction != 0)
                     {
-                        sb.Append('.').Append(fraction.ToString("0000000", CultureInfo.InvariantCulture).TrimEnd('0'));
+                        n += 1 + CountTrimmedFractionDigits(fraction);
                     }
-                    sb.Append('S');
+                    n += 1;
                 }
             }
 
-            return sb.ToString();
+            return n;
+        }
+
+        /// <summary>
+        /// Дни длительности не длиннее 8 цифр (<c>10675199</c>).
+        /// </summary>
+        private static int CountDigits(ulong value)
+        {
+            if (value < 10) return 1;
+            if (value < 100) return 2;
+            if (value < 1000) return 3;
+            if (value < 10000) return 4;
+            if (value < 100000) return 5;
+            if (value < 1000000) return 6;
+            if (value < 10000000) return 7;
+            return 8;
+        }
+
+        private static int CountTrimmedFractionDigits(ulong fraction)
+        {
+            var digits = 7;
+            while (fraction % 10 == 0)
+            {
+                fraction /= 10;
+                digits--;
+            }
+
+            return digits;
+        }
+
+        /// <summary>
+        /// Потолок формы - 27 символов (<see cref="TimeSpan.MinValue"/>).
+        /// </summary>
+        private static int WriteDuration(Span<char> dest, TimeSpan value)
+        {
+            if (value == TimeSpan.Zero)
+            {
+                dest[0] = 'P';
+                dest[1] = 'T';
+                dest[2] = '0';
+                dest[3] = 'S';
+                return 4;
+            }
+
+            SplitDuration(value, out var negative, out var days, out var hours, out var minutes, out var seconds, out var fraction);
+
+            var n = 0;
+            if (negative)
+            {
+                dest[n++] = '-';
+            }
+
+            dest[n++] = 'P';
+            if (days != 0)
+            {
+                n += WriteUInt(dest, n, days);
+                dest[n++] = 'D';
+            }
+
+            if (hours != 0 || minutes != 0 || seconds != 0 || fraction != 0)
+            {
+                dest[n++] = 'T';
+                if (hours != 0)
+                {
+                    n += WriteUInt(dest, n, hours);
+                    dest[n++] = 'H';
+                }
+                if (minutes != 0)
+                {
+                    n += WriteUInt(dest, n, minutes);
+                    dest[n++] = 'M';
+                }
+                if (seconds != 0 || fraction != 0)
+                {
+                    n += WriteUInt(dest, n, seconds);
+                    if (fraction != 0)
+                    {
+                        dest[n++] = '.';
+                        n += WriteFraction(dest, n, fraction);
+                    }
+                    dest[n++] = 'S';
+                }
+            }
+
+            return n;
+        }
+
+        private static int WriteUInt(Span<char> dest, int offset, ulong value)
+        {
+            var digits = CountDigits(value);
+            var i = offset + digits;
+            do
+            {
+                i--;
+                dest[i] = (char)('0' + (int)(value % 10));
+                value /= 10;
+            }
+            while (i > offset);
+
+            return digits;
+        }
+
+        private static int WriteFraction(Span<char> dest, int offset, ulong fraction)
+        {
+            Span<char> padded = stackalloc char[7];
+            var rest = fraction;
+            for (var i = 6; i >= 0; i--)
+            {
+                padded[i] = (char)('0' + (int)(rest % 10));
+                rest /= 10;
+            }
+
+            var keep = CountTrimmedFractionDigits(fraction);
+            padded.Slice(0, keep).CopyTo(dest.Slice(offset));
+            return keep;
+        }
+
+        private static void AppendSpan(StringBuilder sb, ReadOnlySpan<char> chars)
+        {
+#if NET8_0_OR_GREATER
+            sb.Append(chars);
+#else
+            for (var i = 0; i < chars.Length; i++)
+            {
+                sb.Append(chars[i]);
+            }
+#endif
+        }
+
+        /// <summary>
+        /// Разбор xsd:duration, тот же, что <see cref="System.Xml.XmlConvert.ToTimeSpan(string)"/>:
+        /// год = 365 дней, месяц = 30. Без промежуточной строки.
+        /// </summary>
+        public static TimeSpan ParseDuration(ReadOnlySpan<char> body)
+        {
+            var trimmed = body.Trim();
+            if (!TryParseDuration(trimmed, out var value, out var overflow))
+            {
+                throw overflow
+                    ? new OverflowException("Duration overflowed TimeSpan.")
+                    : new FormatException("The input is not a valid xsd:duration lexical form.");
+            }
+
+            return value;
+        }
+
+        private static bool TryParseDuration(ReadOnlySpan<char> s, out TimeSpan value, out bool overflow)
+        {
+            value = default;
+            overflow = false;
+
+            if (s.IsEmpty)
+            {
+                return false;
+            }
+
+            var pos = 0;
+            var negative = false;
+            if (s[pos] == '-')
+            {
+                negative = true;
+                pos++;
+                if (pos >= s.Length)
+                {
+                    return false;
+                }
+            }
+
+            if (s[pos++] != 'P')
+            {
+                return false;
+            }
+
+            var years = 0;
+            var months = 0;
+            var days = 0;
+            var hours = 0;
+            var minutes = 0;
+            var seconds = 0;
+            var nanoseconds = 0;
+            var parts = 0;
+
+            if (!TryParseDurationDigits(s, ref pos, eatExtra: false, out var number, out var digits))
+            {
+                overflow = true;
+                return false;
+            }
+
+            if (pos >= s.Length)
+            {
+                return false;
+            }
+
+            if (s[pos] == 'Y')
+            {
+                if (digits == 0)
+                {
+                    return false;
+                }
+
+                parts |= 1;
+                years = number;
+                pos++;
+                if (pos == s.Length)
+                {
+                    goto Convert;
+                }
+
+                if (!TryParseDurationDigits(s, ref pos, eatExtra: false, out number, out digits))
+                {
+                    overflow = true;
+                    return false;
+                }
+
+                if (pos >= s.Length)
+                {
+                    return false;
+                }
+            }
+
+            if (s[pos] == 'M')
+            {
+                if (digits == 0)
+                {
+                    return false;
+                }
+
+                parts |= 2;
+                months = number;
+                pos++;
+                if (pos == s.Length)
+                {
+                    goto Convert;
+                }
+
+                if (!TryParseDurationDigits(s, ref pos, eatExtra: false, out number, out digits))
+                {
+                    overflow = true;
+                    return false;
+                }
+
+                if (pos >= s.Length)
+                {
+                    return false;
+                }
+            }
+
+            if (s[pos] == 'D')
+            {
+                if (digits == 0)
+                {
+                    return false;
+                }
+
+                parts |= 4;
+                days = number;
+                pos++;
+                if (pos == s.Length)
+                {
+                    goto Convert;
+                }
+
+                if (!TryParseDurationDigits(s, ref pos, eatExtra: false, out _, out digits))
+                {
+                    overflow = true;
+                    return false;
+                }
+
+                if (pos >= s.Length)
+                {
+                    return false;
+                }
+            }
+
+            if (s[pos] == 'T')
+            {
+                if (digits != 0)
+                {
+                    return false;
+                }
+
+                pos++;
+                if (!TryParseDurationDigits(s, ref pos, eatExtra: false, out number, out digits))
+                {
+                    overflow = true;
+                    return false;
+                }
+
+                if (pos >= s.Length)
+                {
+                    return false;
+                }
+
+                if (s[pos] == 'H')
+                {
+                    if (digits == 0)
+                    {
+                        return false;
+                    }
+
+                    parts |= 8;
+                    hours = number;
+                    pos++;
+                    if (pos == s.Length)
+                    {
+                        goto Convert;
+                    }
+
+                    if (!TryParseDurationDigits(s, ref pos, eatExtra: false, out number, out digits))
+                    {
+                        overflow = true;
+                        return false;
+                    }
+
+                    if (pos >= s.Length)
+                    {
+                        return false;
+                    }
+                }
+
+                if (s[pos] == 'M')
+                {
+                    if (digits == 0)
+                    {
+                        return false;
+                    }
+
+                    parts |= 16;
+                    minutes = number;
+                    pos++;
+                    if (pos == s.Length)
+                    {
+                        goto Convert;
+                    }
+
+                    if (!TryParseDurationDigits(s, ref pos, eatExtra: false, out number, out digits))
+                    {
+                        overflow = true;
+                        return false;
+                    }
+
+                    if (pos >= s.Length)
+                    {
+                        return false;
+                    }
+                }
+
+                if (s[pos] == '.')
+                {
+                    pos++;
+                    parts |= 32;
+                    seconds = number;
+
+                    if (!TryParseDurationDigits(s, ref pos, eatExtra: true, out number, out digits))
+                    {
+                        overflow = true;
+                        return false;
+                    }
+
+                    if (digits == 0)
+                    {
+                        number = 0;
+                    }
+
+                    while (digits > 9)
+                    {
+                        number /= 10;
+                        digits--;
+                    }
+
+                    while (digits < 9)
+                    {
+                        number *= 10;
+                        digits++;
+                    }
+
+                    nanoseconds = number;
+                    if (pos >= s.Length || s[pos] != 'S')
+                    {
+                        return false;
+                    }
+
+                    pos++;
+                    if (pos == s.Length)
+                    {
+                        goto Convert;
+                    }
+                }
+                else if (s[pos] == 'S')
+                {
+                    if (digits == 0)
+                    {
+                        return false;
+                    }
+
+                    parts |= 32;
+                    seconds = number;
+                    pos++;
+                    if (pos == s.Length)
+                    {
+                        goto Convert;
+                    }
+                }
+            }
+
+            if (digits != 0 || pos != s.Length)
+            {
+                return false;
+            }
+
+        Convert:
+            if (parts == 0)
+            {
+                return false;
+            }
+
+            try
+            {
+                checked
+                {
+                    ulong ticks = 0;
+                    ticks += ((ulong)years + (ulong)months / 12) * 365;
+                    ticks += ((ulong)months % 12) * 30;
+                    ticks += (ulong)days;
+                    ticks *= 24;
+                    ticks += (ulong)hours;
+                    ticks *= 60;
+                    ticks += (ulong)minutes;
+                    ticks *= 60;
+                    ticks += (ulong)seconds;
+                    ticks *= (ulong)TimeSpan.TicksPerSecond;
+                    ticks += (ulong)nanoseconds / 100;
+
+                    if (negative)
+                    {
+                        if (ticks == (ulong)long.MaxValue + 1)
+                        {
+                            value = TimeSpan.MinValue;
+                            return true;
+                        }
+
+                        value = new TimeSpan(-((long)ticks));
+                    }
+                    else
+                    {
+                        value = new TimeSpan((long)ticks);
+                    }
+
+                    return true;
+                }
+            }
+            catch (OverflowException)
+            {
+                overflow = true;
+                return false;
+            }
+        }
+
+        private static bool TryParseDurationDigits(
+            ReadOnlySpan<char> s,
+            ref int offset,
+            bool eatExtra,
+            out int result,
+            out int numDigits
+            )
+        {
+            var start = offset;
+            result = 0;
+            numDigits = 0;
+
+            while (offset < s.Length)
+            {
+                var c = s[offset];
+                if (c < '0' || c > '9')
+                {
+                    break;
+                }
+
+                var digit = c - '0';
+                if (result > (int.MaxValue - digit) / 10)
+                {
+                    if (!eatExtra)
+                    {
+                        return false;
+                    }
+
+                    numDigits = offset - start;
+                    while (offset < s.Length && s[offset] >= '0' && s[offset] <= '9')
+                    {
+                        offset++;
+                    }
+
+                    return true;
+                }
+
+                result = (result * 10) + digit;
+                offset++;
+            }
+
+            numDigits = offset - start;
+            return true;
         }
     }
 }

@@ -9,6 +9,7 @@ using System.Xml.Serialization;
 using XmlSerDe.Common;
 using XmlSerDe.Components.Exhauster;
 using XmlSerDe.Components.Injector;
+using XmlSerDe.Tests.Complex.Subject;
 using Xunit;
 
 namespace XmlSerDe.Tests
@@ -32,7 +33,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject1_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer1.Serialize(
                 sb,
                 new XmlObject1(),
@@ -46,12 +47,14 @@ namespace XmlSerDe.Tests
         public void XmlObject1_SerializeStream_Test0()
         {
             using var ms = new MemoryStream();
-            var be = new Utf8BinaryExhausterChild(ms);
-            XmlSerializerDeserializer1.Serialize(
-                be,
-                new XmlObject1(),
-                false
-                );
+            using (var be = new Utf8BinaryExhausterStream(ms))
+            {
+                XmlSerializerDeserializer1.Serialize(
+                    be,
+                    new XmlObject1(),
+                    false
+                    );
+            }
             var xml = Encoding.UTF8.GetString(ms.ToArray());
             Xunit.Assert.Equal("<XmlObject1></XmlObject1>", xml);
         }
@@ -144,7 +147,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject2_Serialize_Test1()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer2.Serialize(
                 sb,
                 new XmlObject2
@@ -398,7 +401,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject6_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer6.Serialize(
                 sb,
                 new XmlObject6
@@ -518,7 +521,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject9_10_Serialize_Test1()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer9_10.Serialize(
                 sb,
                 new XmlObject10()
@@ -592,7 +595,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject11_12_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer11_12.Serialize(
                 sb,
                 new XmlObject12()
@@ -716,7 +719,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject15_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer15.Serialize(
                 sb,
                 new XmlObject15()
@@ -765,7 +768,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject16_17_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer16_17.Serialize(
                 sb,
                 new XmlObject17()
@@ -789,19 +792,21 @@ namespace XmlSerDe.Tests
         public void XmlObject16_17_SerializeStream_Test0()
         {
             using var ms = new MemoryStream();
-            var be = new Utf8BinaryExhausterChild(ms);
-            XmlSerializerDeserializer16_17.Serialize(
-                be,
-                new XmlObject17()
-                {
-                    MyList = new List<XmlObject16>
+            using (var be = new Utf8BinaryExhausterStream(ms))
+            {
+                XmlSerializerDeserializer16_17.Serialize(
+                    be,
+                    new XmlObject17()
                     {
-                        new XmlObject16 { MyField = 1 },
-                        new XmlObject16 { MyField = 2 },
-                    }
-                },
-                false
-                );
+                        MyList = new List<XmlObject16>
+                        {
+                            new XmlObject16 { MyField = 1 },
+                            new XmlObject16 { MyField = 2 },
+                        }
+                    },
+                    false
+                    );
+            }
             var xml = Encoding.UTF8.GetString(ms.ToArray());
             Xunit.Assert.Equal(
                 @"<XmlObject17><MyList><XmlObject16><MyField>1</MyField></XmlObject16><XmlObject16><MyField>2</MyField></XmlObject16></MyList></XmlObject17>",
@@ -844,7 +849,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject18_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer18.Serialize(
                 sb,
                 new XmlObject18()
@@ -900,7 +905,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject19_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer19.Serialize(
                 sb,
                 new XmlObject19()
@@ -955,7 +960,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject20_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer20.Serialize(
                 sb,
                 new XmlObject20()
@@ -1010,7 +1015,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject21_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer21.Serialize(
                 sb,
                 new XmlObject21()
@@ -1066,7 +1071,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject22_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer22.Serialize(
                 sb,
                 new XmlObject22()
@@ -1123,7 +1128,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject23_24_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer23_24.Serialize(
                 sb,
                 new XmlObject23()
@@ -1178,7 +1183,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject25_26_27_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer25_26_27.Serialize(
                 sb,
                 new XmlObject25()
@@ -1246,7 +1251,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject28_29_30_Serialize_Test0()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer28_29_30.Serialize(
                 sb,
                 new XmlObject28()

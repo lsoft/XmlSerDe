@@ -39,7 +39,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void XmlObject31_AllPrimitives_Serialize_Test()
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer31.Serialize(sb, CreateFullPrimitivesObject(), false);
             var xml = sb.ToString();
 
@@ -55,7 +55,7 @@ namespace XmlSerDe.Tests
         {
             var original = CreateFullPrimitivesObject();
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer31.Serialize(sb, original, false);
             XmlSerializerDeserializer31.Deserialize(
                 DefaultInjector.Instance,
@@ -95,7 +95,7 @@ namespace XmlSerDe.Tests
                 IntProperty = 1
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer31.Serialize(sb, obj, false);
             var xml = sb.ToString();
 
@@ -125,18 +125,33 @@ namespace XmlSerDe.Tests
         {
             var original = CreateFullPrimitivesObject();
 
-            var estimator = new DefaultLengthEstimatorExhauster();
+            var estimator = new LengthEstimatorExhauster();
             XmlSerializerDeserializer31.Serialize(estimator, original, false);
 
-            var sb = new DefaultStringBuilderExhauster(new StringBuilder(estimator.EstimatedTotalLength));
+            var sb = new StringBuilderExhauster(new StringBuilder(estimator.EstimatedTotalLength));
             XmlSerializerDeserializer31.Serialize(sb, original, false);
 
-            // DefaultLengthEstimatorExhauster is documented to return an excessive
-            // (upper-bound) estimate, not an exact match, so the actual serialized
-            // length must never exceed the estimate.
             Assert.True(
                 sb.ToString().Length <= estimator.EstimatedTotalLength,
                 $"Actual length {sb.ToString().Length} exceeded estimated length {estimator.EstimatedTotalLength}");
+        }
+
+        [Fact]
+        public void XmlObject31_PooledChar_MatchesStringBuilder_Test()
+        {
+            var original = CreateFullPrimitivesObject();
+
+            var sb = new StringBuilderExhauster();
+            XmlSerializerDeserializer31.Serialize(sb, original, false);
+
+            var estimator = new LengthEstimatorExhauster();
+            XmlSerializerDeserializer31.Serialize(estimator, original, false);
+
+            using var pooled = new PooledCharExhauster(estimator.EstimatedTotalLength);
+            XmlSerializerDeserializer31.Serialize(pooled, original, false);
+
+            Assert.Equal(sb.ToString(), pooled.ToString());
+            Assert.Equal(sb.ToString().Length, pooled.Written);
         }
 
         [Fact]
@@ -148,7 +163,7 @@ namespace XmlSerDe.Tests
                 EmptyArray = Array.Empty<string>()
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer32.Serialize(sb, obj, false);
             var xml = sb.ToString();
 
@@ -165,7 +180,7 @@ namespace XmlSerDe.Tests
                 EmptyArray = Array.Empty<string>()
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer32.Serialize(sb, original, false);
             XmlSerializerDeserializer32.Deserialize(
                 DefaultInjector.Instance,
@@ -187,7 +202,7 @@ namespace XmlSerDe.Tests
                 NullArray = null
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer32.Serialize(sb, original, false);
             XmlSerializerDeserializer32.Deserialize(
                 DefaultInjector.Instance,
@@ -235,7 +250,7 @@ namespace XmlSerDe.Tests
                 CDataString = SerDeFixture.RawString
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer33.Serialize(sb, original, false);
             XmlSerializerDeserializer33.Deserialize(
                 DefaultInjector.Instance,
@@ -250,7 +265,7 @@ namespace XmlSerDe.Tests
         {
             var original = new XmlObject19 { Ints = new[] { 42 } };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer19.Serialize(sb, original, false);
             XmlSerializerDeserializer19.Deserialize(
                 DefaultInjector.Instance,
@@ -269,7 +284,7 @@ namespace XmlSerDe.Tests
                 Enums = new System.Collections.Generic.List<XmlEnum18> { XmlEnum18.B }
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer18.Serialize(sb, original, false);
             XmlSerializerDeserializer18.Deserialize(
                 DefaultInjector.Instance,
@@ -295,7 +310,7 @@ namespace XmlSerDe.Tests
                 }
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer11_12.Serialize(sb, original, false);
             XmlSerializerDeserializer11_12.Deserialize(
                 DefaultInjector.Instance,
@@ -316,7 +331,7 @@ namespace XmlSerDe.Tests
                 StringProperty = SerDeFixture.RawString
             };
 
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer2.Serialize(sb, original, false);
             var xml = sb.ToString();
 

@@ -30,16 +30,16 @@ namespace XmlSerDe.Tests.Interop
     /// </summary>
     public static class InteropCorpus
     {
-        private static string Write<T>(T obj, Action<DefaultStringBuilderExhauster, T> serialize)
+        private static string Write<T>(T obj, Action<StringBuilderExhauster, T> serialize)
         {
-            var exhauster = new DefaultStringBuilderExhauster();
+            var exhauster = new StringBuilderExhauster();
             serialize(exhauster, obj);
             return exhauster.ToString();
         }
 
         private static InteropResult Check<T>(
             T obj,
-            Action<DefaultStringBuilderExhauster, T> serialize,
+            Action<StringBuilderExhauster, T> serialize,
             XmlSerDeReader<T> deserialize
             )
         {

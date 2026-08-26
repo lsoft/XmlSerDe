@@ -23,7 +23,7 @@ namespace XmlSerDe.Tests.Interop
     /// не значим - раньше его требовал XmlDerivedSubject, искавший базу среди уже
     /// разобранных.
     /// </summary>
-    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
+    [XmlExhauster(typeof(StringBuilderExhauster))]
 
     //скаляры
     [XmlSubject(typeof(ScalarsSubject), true)]

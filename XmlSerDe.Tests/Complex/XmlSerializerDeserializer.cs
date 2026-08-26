@@ -12,8 +12,9 @@ using XmlSerDe.Tests.Complex.Subject;
 namespace XmlSerDe.Tests.Complex
 {
 
-    [XmlExhauster(typeof(DefaultLengthEstimatorExhauster))]
-    [XmlExhauster(typeof(DefaultStringBuilderExhauster))]
+    [XmlExhauster(typeof(LengthEstimatorExhauster))]
+    [XmlExhauster(typeof(PooledCharExhauster))]
+    [XmlExhauster(typeof(StringBuilderExhauster))]
     [XmlExhauster(typeof(Utf8BinaryExhausterEmpty))]
     [XmlExhauster(typeof(Utf8BinaryExhausterStream))]
     [XmlSubject(typeof(SerializeKeyValue), false)]

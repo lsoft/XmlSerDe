@@ -65,16 +65,17 @@ namespace XmlSerDe.Generator
                 .Select(static (names, _) => SortedDistinct(names!))
                 .WithTrackingName(HostsTrackingName);
 
-            //точки вызова new XmlSerializer(typeof(T)) для фасада совместимости.
+            //точки вызова фасада совместимости - new XmlSerializer(typeof(T)),
+            //XmlSerializer.FromTypes(...), factory.CreateSerializer(typeof(T)).
             //Проект, не подключивший XmlSerDe.Compat, не платит за это ничего:
             //ни один узел не пройдёт проверку имени типа в transform
             IncrementalValueProvider<EquatableArray<CompatCallSiteRef>> compatCallSites = context.SyntaxProvider
                 .CreateSyntaxProvider(
                     predicate: static (s, _) => CompatCallSiteCollector.IsCandidate(s),
-                    transform: static (ctx, _) => GetCompatCallSite(ctx))
-                .Where(static m => m is not null)
+                    transform: static (ctx, _) => GetCompatCallSites(ctx))
+                .SelectMany(static (sites, _) => sites)
                 .Collect()
-                .Select(static (sites, _) => SortedDistinct(sites!))
+                .Select(static (sites, _) => SortedDistinct(sites))
                 .WithTrackingName(CallSitesTrackingName);
 
             var strict = context.AnalyzerConfigOptionsProvider.Select(
@@ -287,20 +288,33 @@ namespace XmlSerDe.Generator
             return result;
         }
 
-        private static CompatCallSiteRef? GetCompatCallSite(GeneratorSyntaxContext context)
+        /// <summary>
+        /// Типов на одну точку вызова бывает больше одного: <c>FromTypes</c>
+        /// принимает массив. Поэтому transform отдаёт массив, а не одну ссылку -
+        /// пустой там, где узел оказался чужим.
+        /// </summary>
+        private static ImmutableArray<CompatCallSiteRef> GetCompatCallSites(GeneratorSyntaxContext context)
         {
-            var oce = (ObjectCreationExpressionSyntax)context.Node;
-
-            var type = CompatCallSiteCollector.TryGetRootType(context.SemanticModel, oce);
-            if (type is null)
+            var types = CompatCallSiteCollector.CollectRootTypes(context.SemanticModel, context.Node);
+            if (types.Count == 0)
             {
-                return null;
+                return ImmutableArray<CompatCallSiteRef>.Empty;
             }
 
-            return new CompatCallSiteRef(
-                type.ToMetadataName(),
-                LocationInfo.From(oce)
-                );
+            var location = LocationInfo.From(context.Node);
+
+            var builder = ImmutableArray.CreateBuilder<CompatCallSiteRef>(types.Count);
+            foreach (var type in types)
+            {
+                builder.Add(
+                    new CompatCallSiteRef(
+                        type.ToMetadataName(),
+                        location
+                        )
+                    );
+            }
+
+            return builder.MoveToImmutable();
         }
 
         private static string? GetHostMetadataName(GeneratorAttributeSyntaxContext context)

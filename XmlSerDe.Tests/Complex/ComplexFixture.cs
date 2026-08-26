@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -291,7 +291,7 @@ namespace XmlSerDe.Tests.Complex
             InfoContainer infoContainer
             )
         {
-            var sb = new DefaultStringBuilderExhauster();
+            var sb = new StringBuilderExhauster();
             XmlSerializerDeserializer.Serialize(sb, infoContainer, false);
             var xml = sb.ToString();
             return xml;

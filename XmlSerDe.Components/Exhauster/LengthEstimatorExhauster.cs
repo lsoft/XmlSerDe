@@ -1,33 +1,52 @@
-﻿using System;
+using System;
 using System.Runtime.CompilerServices;
 using XmlSerDe.Common;
 
 namespace XmlSerDe.Components.Exhauster
 {
     /// <summary>
-    /// Estimator of total XML string length.
-    /// It is designed to return excessive estimation,
-    /// because it's better to allocate 10% more, that reallocate
-    /// if few bytes had not been enough in the buffer.
-    /// Class is NOT a thread-safe!
+    /// XML length estimator: integers via a log2 digit table,
+    /// DateTime / TimeSpan / decimal via exact lexical width
+    /// (<see cref="XmlLexicalLength"/>). Used to size
+    /// <see cref="PooledCharExhauster"/> before the write pass.
+    /// Not thread-safe.
     /// </summary>
-    public class DefaultLengthEstimatorExhauster : IExhauster
+    public sealed class LengthEstimatorExhauster : IExhauster
     {
         private int _totalLength;
-        private readonly int _dateTimeLength;
 
-        /// <summary>
-        /// Estimated total char count (not bytes!).
-        /// </summary>
         public int EstimatedTotalLength => _totalLength;
 
-        public DefaultLengthEstimatorExhauster(
-            int dateTimeLength = 33
-            )
-        {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int CountUInt32(uint value)
+            => DecimalDigitsLog.AtLeast(value);
 
-            _dateTimeLength = dateTimeLength;
-            _totalLength = 0;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int CountUInt64(ulong value)
+            => DecimalDigitsLog.AtLeast(value);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int CountSigned32(int value)
+        {
+            var u = (uint)value;
+            if (value < 0)
+            {
+                return 1 + CountUInt32(0u - u);
+            }
+
+            return CountUInt32(u);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int CountSigned64(long value)
+        {
+            var u = (ulong)value;
+            if (value < 0)
+            {
+                return 1 + CountUInt64(0ul - u);
+            }
+
+            return CountUInt64(u);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -39,7 +58,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(DateTime value)
         {
-            _totalLength += _dateTimeLength;
+            _totalLength += XmlLexicalLength.DateTime(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -50,7 +69,7 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            _totalLength += _dateTimeLength;
+            Append(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -90,8 +109,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(sbyte value)
         {
-            //estimate at top limit
-            _totalLength += 4;
+            _totalLength += CountSigned32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -102,15 +120,13 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            //estimate at top limit
-            _totalLength += 4;
+            _totalLength += CountSigned32(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(byte value)
         {
-            //estimate at top limit
-            _totalLength += 3;
+            _totalLength += CountUInt32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -121,15 +137,13 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            //estimate at top limit
-            _totalLength += 3;
+            _totalLength += CountUInt32(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(ushort value)
         {
-            //estimate at top limit
-            _totalLength += 5;
+            _totalLength += CountUInt32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -140,15 +154,13 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            //estimate at top limit
-            _totalLength += 5;
+            _totalLength += CountUInt32(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(short value)
         {
-            //estimate at top limit
-            _totalLength += 6;
+            _totalLength += CountSigned32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -159,15 +171,13 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            //estimate at top limit
-            _totalLength += 6;
+            _totalLength += CountSigned32(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(uint value)
         {
-            //estimate at top limit
-            _totalLength += 10;
+            _totalLength += CountUInt32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -178,15 +188,13 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            //estimate at top limit
-            _totalLength += 10;
+            _totalLength += CountUInt32(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(int value)
         {
-            //estimate at top limit
-            _totalLength += 11;
+            _totalLength += CountSigned32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -197,15 +205,13 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            //estimate at top limit
-            _totalLength += 11;
+            _totalLength += CountSigned32(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(ulong value)
         {
-            //estimate at top limit
-            _totalLength += 20;
+            _totalLength += CountUInt64(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -216,15 +222,13 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            //estimate at top limit
-            _totalLength += 20;
+            _totalLength += CountUInt64(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(long value)
         {
-            //estimate at top limit
-            _totalLength += 21;
+            _totalLength += CountSigned64(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -235,15 +239,13 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            //estimate at top limit
-            _totalLength += 21;
+            _totalLength += CountSigned64(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(decimal value)
         {
-            //estimate at top limit
-            _totalLength += 30;
+            _totalLength += XmlLexicalLength.Decimal(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -254,15 +256,12 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            //estimate at top limit
-            _totalLength += 30;
+            Append(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(float value)
         {
-            //кратчайшее round-trippable представление float не длиннее 14 символов
-            //("-3.4028235E+38"), запас взят с потолка вверх
             _totalLength += 20;
         }
 
@@ -280,7 +279,6 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(double value)
         {
-            //"-1.7976931348623157E+308" - 24 символа, дальше запас
             _totalLength += 30;
         }
 
@@ -298,8 +296,7 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(char value)
         {
-            //пишется кодовой точкой: не больше пяти цифр
-            _totalLength += 5;
+            _totalLength += CountUInt32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -310,14 +307,13 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            _totalLength += 5;
+            _totalLength += CountUInt32(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Append(TimeSpan value)
         {
-            //"-P10675199DT2H48M5.4775808S" - 26 символов на TimeSpan.MinValue
-            _totalLength += 30;
+            _totalLength += XmlLexicalLength.TimeSpan(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -328,7 +324,7 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            _totalLength += 30;
+            Append(value.Value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -350,11 +346,7 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            var specialSymbolOverhead = CalculateOverheadFromXmlSpecialSymbol(
-                value
-                );
-
-            _totalLength += value!.Length + specialSymbolOverhead;
+            _totalLength += value.Length + CalculateOverheadFromXmlSpecialSymbol(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -368,11 +360,6 @@ namespace XmlSerDe.Components.Exhauster
             _totalLength += value.Length + XmlAttributeEncoder.EstimateOverhead(value);
         }
 
-        /// <summary>
-        /// Единственное место, где оценщик не повторяет работу писателя, а считает:
-        /// длина base64 известна по длине массива, и кодировать его ради одной
-        /// только длины - выбросить строку сразу после того, как её построили.
-        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AppendBase64(byte[]? value)
         {
@@ -381,7 +368,9 @@ namespace XmlSerDe.Components.Exhauster
 
         private static int CalculateOverheadFromXmlSpecialSymbol(string value)
         {
-            const string XmlSpecialCharacters = "<>&`\"";
+            // HtmlEncode пишет апостроф как &#39; (+4); без него оценка
+            // проседает ровно на эти 4 символа на REGULAR (RawString).
+            const string XmlSpecialCharacters = "<>&`'\"";
 
             var span = value.AsSpan();
             var sspan = XmlSpecialCharacters.AsSpan();
@@ -395,9 +384,7 @@ namespace XmlSerDe.Components.Exhauster
                     break;
                 }
 
-                //estimate at top limit (must be 5, but -1 symbol here due to we have an one symbol per every special symbol in the incoming string)
                 specialSymbolOverhead += (5 - 1);
-
                 span = span.Slice(index + 1);
             }
 
