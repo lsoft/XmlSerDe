@@ -93,6 +93,46 @@ namespace XmlSerDe.Tests
         }
 
         /// <summary>
+        /// У доступа к <c>xsi:type</c> оси две: фича
+        /// <see cref="XmlFeature.FlexibleXsiPrefix"/> и наличие у типа
+        /// наследников. Вторая - не фича хоста, а факт про граф типов, поэтому
+        /// приходит параметром, а не читается из флагов; но выбор имени всё
+        /// равно живёт здесь, а не в интерполяциях producer'а (§4.5).
+        ///
+        /// Смысл фильтрованной формы - в промахе: у типа без наследников
+        /// <c>xsi:type</c> ничего не диспетчеризует, в документах его обычно
+        /// нет, и отрицательный фильтр экономит полный обход головы. У типа
+        /// с наследниками атрибут обычно на месте, и фильтр заставил бы читать
+        /// голову дважды - поэтому там остаётся нефильтрованная форма.
+        /// </summary>
+        [Fact]
+        public void PreciseNodeTypeAccessor_FiltersOnlyWhenNoDerivedTypes()
+        {
+            var plain = HostFeatureBinding.From(XmlFeature.None);
+
+            Assert.Equal(nameof(XmlHead.GetXsiType), plain.PreciseNodeTypeAccessor(true));
+            Assert.Equal(nameof(XmlHead.GetXsiTypePrefiltered), plain.PreciseNodeTypeAccessor(false));
+
+            var flexible = HostFeatureBinding.From(XmlFeature.FlexibleXsiPrefix);
+
+            Assert.Equal(nameof(XmlHead.GetPreciseNodeType), flexible.PreciseNodeTypeAccessor(true));
+            Assert.Equal(nameof(XmlHead.GetPreciseNodeTypePrefiltered), flexible.PreciseNodeTypeAccessor(false));
+        }
+
+        [Fact]
+        public void PreciseNodeTypeAccessor_WithDerived_MatchesTheUnfilteredField()
+        {
+            //поле и метод не должны разъехаться: генератор зовёт метод,
+            //а остальные call site читают поле
+            foreach (var features in new[] { XmlFeature.None, XmlFeature.FlexibleXsiPrefix, XmlFeature.SystemXmlCompatible })
+            {
+                var b = HostFeatureBinding.From(features);
+
+                Assert.Equal(b.GetPreciseNodeType, b.PreciseNodeTypeAccessor(true));
+            }
+        }
+
+        /// <summary>
         /// Строка без CData по-прежнему идёт через инжектор; обход декодером
         /// появляется только вместе с фичей.
         /// </summary>

@@ -1325,7 +1325,7 @@ namespace {_targetNamespace}");
             _sb.AppendLine($$"""
         private static void {{HeadedDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, ref {{XmlHeadFullName}} xmlNode, roschar body, out {{ssGlobalName}} result, out int bodyConsumed)
         {
-            var xmlNodePreciseType = xmlNode.{{_binding.GetPreciseNodeType}}();
+            var xmlNodePreciseType = xmlNode.{{_binding.PreciseNodeTypeAccessor(derived.Count > 0)}}();
             if(xmlNodePreciseType.IsEmpty)
             {
                 xmlNodePreciseType = xmlNode.{{nameof(XmlHead.DeclaredNodeType)}};

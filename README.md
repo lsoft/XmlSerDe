@@ -904,6 +904,30 @@ Two honest notes about this table:
 - the full set on REGULAR is **~1.25×**, not the "5–10%" that `docs/opt-in-xml-guards.md` §3 estimated before the work, and two thirds of that is `UniqueAttributes` alone. The estimate assumed heads with short attributes; REGULAR's heads carry a 41-character namespace URI, and enumerating the attributes means stepping over it. It is still nowhere near the 2× that would mean a forbidden full document scan, and a document with no attributes (DEEP) pays nothing;
 - the numbers are ratios measured **inside one round-robin**. Absolute times drift several percent between processes on this machine, so a cross-process A/B of the default host is not evidence of anything — which is exactly why the always-on attribute check and the scalar closing-tag check are not in this table.
 
+### Cost of the `xsi:type` lookup
+
+```bash
+dotnet run -c Release -f net10.0 --project XmlSerDe.PerformanceTests -- --attr-cost
+```
+
+Neither of the tables above says anything about a POCO whose attributes carry *data*: REGULAR has attributes on three heads out of twenty-six and all of them are plumbing (`xmlns:xsi`, `xsi:type`), with no `[XmlAttribute]` members anywhere. So there is a third document, **ATTRS** — thirty nodes, three `[XmlAttribute]` members each.
+
+That shape is walked repeatedly. Per head the generated code emits `ReadHead` (its own scan to the unescaped `>`), then the `xsi:type` lookup, then one lookup per `[XmlAttribute]` member, each starting over from the front of the head. Measured by making one walk happen twice — which keeps correctness and control flow identical, unlike removing it — a single walk costs **9%** of deserialization on REGULAR and **20%** on ATTRS, and all the lookups together cost **64%** on ATTRS.
+
+The first slice of that is now gone. On a type with **no derived types** an `xsi:type` attribute cannot dispatch anything: it can only repeat the type's own name or be an error, so in real documents it is simply absent — and the lookup walks the whole head to discover that. The generator therefore emits a filtered accessor for such types, which checks `IndexOf("xsi:type")` first. QNames admit no breaks, so "no substring" proves "no such attribute"; a false positive (the substring inside somebody else's value) falls through to the same honest parse, which is why the observable result is unchanged rather than nearly unchanged.
+
+| Document | Before | After |
+|---|---:|---:|
+| ATTRS (30 nodes × 3 attribute members) | 9206 ns | **7753 ns — ×0.842** |
+| REGULAR (control) | 2158 ns | 2206 ns — within drift |
+| WIDE (control) | 3238 ns | 3322 ns — within drift |
+
+Medians of six runs per build; the ATTRS ranges do not overlap (8996–9506 against 7551–7845), the two control ranges overlap almost completely, which is what the mechanism predicts — no head in those documents reaches the filter.
+
+A type **with** derived types keeps the unfiltered accessor on purpose: there the attribute is usually present, the filter would find it, and the parse would then read the head a second time — about 2% on documents that actually use polymorphism. Making the choice in the generator rather than at runtime is what lets both cases win; the axis is not a feature flag but a fact about the type graph, so it is a parameter of `HostFeatureBinding.PreciseNodeTypeAccessor`, not a new `XmlFeature`.
+
+What remains unclaimed is the larger half: the `[XmlAttribute]` member lookups still walk the head once per member.
+
 ### Example: polymorphic serializer
 
 ```csharp
@@ -1169,6 +1193,7 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | `XmlFeatureFixture` | Per-flag matrix from `docs/opt-in-xml-features.md`: default rejects comments/CDATA/PI/DOCTYPE/`p3:type`/single quotes; each flag accepts its document and rejects a neighbour |
 | `XmlFeatureGeneratorFixture` / `HostFeatureBindingFixture` | Generated text has no document-wide heuristics on default hosts; flags → primitive names without Roslyn; two hosts in one compilation stay distinct; compat injects the full set without a user `[XmlFeatures]` |
 | `XmlGuardFixture` | Per-guard matrix from `docs/opt-in-xml-guards.md`: the same document goes to a host without the attribute (which must **accept** it) and to a host with exactly one flag (which must refuse it, and only on its own violation). Includes the traps a guard must not fall into - `&lt;Foo/&gt;`, an empty body, an empty collection, a skipped foreign subtree, a head with ten distinct attributes |
+| `XsiTypePrefilterFixture` | Both edges of the `IndexOf("xsi:type")` negative filter that a type without derived types is compiled with: a foreign `xsi:type` still throws and one naming the type itself is still accepted (the filter may not swallow a real attribute), while the substring sitting inside somebody else's attribute value stays harmless (a false positive may not become a parse error). Both variants covered — literal `xsi` and the runtime prefix of `FlexibleXsiPrefix` |
 | `XmlGuardGeneratorFixture` / `HostGuardBindingFixture` | A default host mentions no guard primitive and carries no extra parameter; `XmlGuard.None` is textually identical to no attribute; one flag emits only its own primitive; flags → snippets without Roslyn; compat gets the full set with no user `[XmlGuards]` and does not change the native host next to it |
 | `AttributeSyntaxFixture` | `Attribute ::= Name Eq AttValue` on both host families: legal whitespace around `=` is read (it used to be dropped), a missing quote or `=` throws instead of stealing the neighbour&#39;s value |
 | `Compat/CompatGuardFixture` | The facade against the BCL on the malformed-document matrix: outer type and message (without the position), inner `XmlException`, expectation taken from the BCL inside the test. Plus Misc after the root, which must **not** start failing, and a native host in the same assembly that still accepts a foreign closing tag |

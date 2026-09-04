@@ -169,6 +169,77 @@ namespace XmlSerDe.Common
         }
 
         /// <summary>
+        /// То же, что <see cref="GetXsiType"/>, но перед разбором стоит
+        /// отрицательный фильтр: нет в голове подстроки <c>xsi:type</c> - нет
+        /// и такого атрибута, потому что QName разрывов не допускает. Ложное
+        /// срабатывание (подстрока внутри чужого значения) проваливается
+        /// в честный разбор, поэтому результат совпадает с
+        /// <see cref="GetXsiType"/> всегда, а не почти всегда.
+        ///
+        /// Генератор ставит эту форму типу <b>без наследников</b>: там
+        /// <c>xsi:type</c> ничего не диспетчеризует и может только совпасть
+        /// с собственным именем типа либо стать ошибкой, то есть в подавляющем
+        /// большинстве документов фильтр промахивается - а промах здесь и есть
+        /// выигрыш. Типу с наследниками ставится <see cref="GetXsiType"/>:
+        /// там атрибут обычно на месте, фильтр нашёл бы его и разбор всё равно
+        /// пошёл бы следом, то есть голова читалась бы дважды.
+        ///
+        /// Замерено (probe <c>--head-walk</c>): на документе из тридцати нод
+        /// с тремя атрибутами каждая фильтр даёт x0.81; там, где
+        /// <c>xsi:type</c> реально стоит, он стоил бы x1.02. Отсюда и разделение
+        /// по наличию наследников, а не один общий метод.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public readonly roschar GetXsiTypePrefiltered()
+        {
+            if (!HasAttributes || FullHead.IndexOf(XmlScan.XsiTypeSpan) < 0)
+            {
+                return roschar.Empty;
+            }
+
+            XmlScan.ParseAttribute(
+                FullHead,
+                DeclaredNodeType.Length + 1,
+                XmlScan.XsiSpan,
+                XmlScan.TypeSpan,
+                roschar.Empty,
+                out var parsedAttribute
+                );
+
+            return parsedAttribute.Value;
+        }
+
+        /// <summary>
+        /// <see cref="GetPreciseNodeType"/> с тем же отрицательным фильтром,
+        /// что и <see cref="GetXsiTypePrefiltered"/>. Префикс здесь известен
+        /// только в рантайме, склеить его с <c>":type"</c> без аллокации
+        /// нельзя - но подходящий атрибут в любом случае содержит <c>:type</c>,
+        /// и этого хватает: фильтр обязан быть строгим только в одну сторону.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public readonly roschar GetPreciseNodeTypePrefiltered()
+        {
+            if (!HasAttributes
+                || XmlnsAttributeName.IsEmpty
+                || FullHead.IndexOf(XmlScan.ColonTypeSpan) < 0
+                )
+            {
+                return roschar.Empty;
+            }
+
+            XmlScan.ParseAttribute(
+                FullHead,
+                DeclaredNodeType.Length + 1,
+                XmlnsAttributeName,
+                XmlScan.TypeSpan,
+                roschar.Empty,
+                out var parsedAttribute
+                );
+
+            return parsedAttribute.Value;
+        }
+
+        /// <summary>
         /// Стоит ли на теге xsi:nil="true". Opt-in
         /// <see cref="XmlFeature.FlexibleXsiPrefix"/>: подойдёт любой атрибут
         /// с именем nil. Default - <see cref="IsXsiNil"/>.
@@ -251,6 +322,29 @@ namespace XmlSerDe.Common
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => "type".AsSpan();
+        }
+
+        /// <summary>
+        /// Отрицательный фильтр для <see cref="XmlHead.GetXsiTypePrefiltered"/>:
+        /// QName разрывов не допускает, поэтому атрибут с префиксом <c>xsi</c>
+        /// и именем <c>type</c> обязан лежать в голове этой подстрокой.
+        /// </summary>
+        public static roschar XsiTypeSpan
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => "xsi:type".AsSpan();
+        }
+
+        /// <summary>
+        /// То же для <see cref="XmlHead.GetPreciseNodeTypePrefiltered"/>, где
+        /// префикс известен только в рантайме: склеить его со спаном без
+        /// аллокации нельзя, но любой подходящий атрибут всё равно кончается
+        /// на <c>:type</c>.
+        /// </summary>
+        public static roschar ColonTypeSpan
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => ":type".AsSpan();
         }
 
         public static roschar NilSpan

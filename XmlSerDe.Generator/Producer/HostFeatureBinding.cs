@@ -174,6 +174,33 @@ namespace XmlSerDe.Generator.Producer
         }
 
         /// <summary>
+        /// Каким методом доставать <c>xsi:type</c>. Ось здесь вторая, помимо
+        /// <see cref="XmlFeature.FlexibleXsiPrefix"/>: есть ли у типа наследники.
+        ///
+        /// Есть - <c>xsi:type</c> по нему диспетчеризуют, атрибут в документе
+        /// обычно стоит, и отрицательный фильтр только заставил бы читать
+        /// голову дважды. Нет - атрибут не диспетчеризует ничего, он может лишь
+        /// совпасть с собственным именем типа или стать ошибкой; в реальных
+        /// документах его там не бывает, и фильтр промахивается, то есть
+        /// выигрывает. Замер - probe <c>--head-walk</c>, x0.81 против x1.02.
+        ///
+        /// Наблюдаемое поведение у всех четырёх вариантов одинаковое:
+        /// фильтр строг в одну сторону, ложное срабатывание проваливается
+        /// в тот же разбор.
+        /// </summary>
+        public string PreciseNodeTypeAccessor(bool hasDerived)
+        {
+            if (hasDerived)
+            {
+                return GetPreciseNodeType;
+            }
+
+            return Has(Features, XmlFeature.FlexibleXsiPrefix)
+                ? nameof(XmlHead.GetPreciseNodeTypePrefiltered)
+                : nameof(XmlHead.GetXsiTypePrefiltered);
+        }
+
+        /// <summary>
         /// Оператор, объявляющий <paramref name="varName"/> с разобранным телом
         /// builtin-члена.
         ///
