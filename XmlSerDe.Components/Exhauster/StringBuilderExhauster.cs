@@ -444,7 +444,29 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendEncodedUnchecked(string? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            XmlTextEncoder.Append(_sb, value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AppendAttributeEncoded(string? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            XmlAttributeEncoder.AppendChecked(_sb, value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendAttributeEncodedUnchecked(string? value)
         {
             if (value is null)
             {

@@ -1155,5 +1155,47 @@ namespace XmlSerDe.Tests.Compat
             Assert.Equal(42, actual.Number);
             Assert.Equal("compat", actual.Name);
         }
+
+        [Fact]
+        public void Facade_ReadsOptInXmlWithoutUserAttribute_Test()
+        {
+            var serializer = new XmlSerializer(typeof(CompatSubject));
+            Assert.True(serializer.IsAccelerated, "тип зарегистрирован, значит должен обслуживаться быстрым путём");
+
+            var withCData = (CompatSubject)serializer.Deserialize(
+                "<CompatSubject><Number>1</Number><Name><![CDATA[hello]]></Name></CompatSubject>".AsSpan()
+                );
+            Assert.Equal("hello", withCData.Name);
+
+            var withComment = (CompatSubject)serializer.Deserialize(
+                "<CompatSubject><!-- c --><Number>2</Number><Name>y</Name></CompatSubject>".AsSpan()
+                );
+            Assert.Equal(2, withComment.Number);
+            Assert.Equal("y", withComment.Name);
+
+            var withQuote = (CompatSubject)serializer.Deserialize(
+                "<CompatSubject><Nope attr=\"1>2\"/><Number>3</Number><Name>z</Name></CompatSubject>".AsSpan()
+                );
+            Assert.Equal(3, withQuote.Number);
+
+            var holder = new XmlSerializer(typeof(CompatHolder));
+            Assert.True(holder.IsAccelerated);
+
+            var p3 = (CompatHolder)holder.Deserialize(
+                ("<CompatHolder><Polymorphic xmlns:p3=\"http://www.w3.org/2001/XMLSchema-instance\" p3:type=\"CompatDerived\"><BaseNumber>1</BaseNumber><DerivedName>d</DerivedName></Polymorphic><Child n='7'><Title>t</Title></Child></CompatHolder>").AsSpan()
+                );
+            var derived = Assert.IsType<CompatDerived>(p3.Polymorphic);
+            Assert.Equal("d", derived.DerivedName);
+            Assert.Equal(7, p3.Child.Number);
+            Assert.Equal("t", p3.Child.Title);
+
+            Assert.Throws<InvalidOperationException>(
+                () => XmlSerDe.Tests.XmlSerializerDeserializer2.Deserialize(
+                    XmlSerDe.Components.Injector.DefaultInjector.Instance,
+                    "<XmlObject2><IntProperty>1</IntProperty><StringProperty><![CDATA[x]]></StringProperty></XmlObject2>".AsSpan(),
+                    out XmlSerDe.Tests.XmlObject2 _
+                    )
+                );
+        }
     }
 }

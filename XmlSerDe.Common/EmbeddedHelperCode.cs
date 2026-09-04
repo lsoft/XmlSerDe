@@ -555,14 +555,37 @@ namespace XmlSerDe.Common
 
         /// <summary>
         /// Skips everything the XML 1.0 §2.8 prolog grammar allows after an optional
-        /// XMLDecl: prolog ::= XMLDecl? Misc* (doctypedecl Misc*)?  where
-        /// Misc ::= Comment | PI | S. Handles processing instructions with any target
-        /// (not just the XML declaration itself) and a DOCTYPE declaration, including
-        /// one with an internal subset containing its own '&gt;' characters.
+        /// XMLDecl, according to <paramref name="features"/>. Without
+        /// <see cref="XmlFeature.Markup"/> nothing but whitespace is skipped, and
+        /// the construction becomes a parse error for a default host.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static roschar SkipPrologMisc(
+            XmlFeature features,
+            roschar span
+            )
+        {
+            var markup = (features & XmlFeature.Markup) != 0;
+
+            return SkipPrologMiscCore(markup, markup, span);
+        }
+
+        /// <summary>
+        /// Full-subset skip used by <see cref="XmlNode2"/>: comments according to
+        /// the heuristic, PI and DOCTYPE always.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static roschar SkipPrologMisc(
             bool containsXmlComments,
+            roschar span
+            )
+        {
+            return SkipPrologMiscCore(containsXmlComments, true, span);
+        }
+
+        private static roschar SkipPrologMiscCore(
+            bool comments,
+            bool piAndDoctype,
             roschar span
             )
         {
@@ -574,14 +597,18 @@ namespace XmlSerDe.Common
                     return span;
                 }
 
-                var lcl = GetLeadingCommentLengthIfExists(containsXmlComments, span);
-                if (lcl > 0)
+                if (comments)
                 {
-                    span = span.Slice(lcl);
-                    continue;
+                    var lcl = GetLeadingCommentLengthIfExists(true, span);
+                    if (lcl > 0)
+                    {
+                        span = span.Slice(lcl);
+                        continue;
+                    }
                 }
 
-                if (span.StartsWith("<?".AsSpan()))
+                if (piAndDoctype
+                    && span.StartsWith("<?".AsSpan()))
                 {
                     var endIndex = span.IndexOf("?>".AsSpan());
                     if (endIndex < 0)
@@ -594,7 +621,8 @@ namespace XmlSerDe.Common
                 }
 
                 var doctypeHead = "<!DOCTYPE".AsSpan();
-                if (span.StartsWith(doctypeHead))
+                if (piAndDoctype
+                    && span.StartsWith(doctypeHead))
                 {
                     span = SkipDoctypeDeclaration(span.Slice(doctypeHead.Length));
                     continue;
@@ -818,8 +846,6 @@ namespace XmlSerDe.Common
                 throw new ArgumentNullException(nameof(value));
             }
 
-            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
-
             var first = IndexOfEscapable(value);
             if (first < 0)
             {
@@ -829,6 +855,21 @@ namespace XmlSerDe.Common
             var sb = new System.Text.StringBuilder(value.Length + EscapedLength);
             AppendEscaping(sb, value, first);
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// <see cref="Encode"/> plus <see cref="XmlCharGuard"/> (opt-in
+        /// <see cref="XmlFeature.CharGuard"/>).
+        /// </summary>
+        public static string EncodeChecked(string value)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
+            return Encode(value);
         }
 
         /// <summary>
@@ -846,8 +887,6 @@ namespace XmlSerDe.Common
                 throw new ArgumentNullException(nameof(value));
             }
 
-            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
-
             var first = IndexOfEscapable(value);
             if (first < 0)
             {
@@ -858,6 +897,24 @@ namespace XmlSerDe.Common
             AppendEscaping(sb, value, first);
         }
 
+        /// <summary>
+        /// <see cref="Append"/> plus <see cref="XmlCharGuard"/>.
+        /// </summary>
+        public static void AppendChecked(System.Text.StringBuilder sb, string value)
+        {
+            if (sb is null)
+            {
+                throw new ArgumentNullException(nameof(sb));
+            }
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
+            Append(sb, value);
+        }
+
         public static void WriteTo<T>(string value, ref T dest)
             where T : struct, IXmlEncodeDestination
         {
@@ -865,8 +922,6 @@ namespace XmlSerDe.Common
             {
                 throw new ArgumentNullException(nameof(value));
             }
-
-            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
 
             var first = IndexOfEscapable(value);
             if (first < 0)
@@ -888,6 +943,18 @@ namespace XmlSerDe.Common
                     dest.WriteLiteral(replacement);
                 }
             }
+        }
+
+        public static void WriteToChecked<T>(string value, ref T dest)
+            where T : struct, IXmlEncodeDestination
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
+            WriteTo(value, ref dest);
         }
 
         private static void AppendEscaping(System.Text.StringBuilder sb, string value, int first)

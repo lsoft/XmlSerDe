@@ -67,6 +67,33 @@ namespace Sample
 }
 ";
 
+        private const string HostWithCData = @"
+using System;
+using XmlSerDe.Common;
+using XmlSerDe.Components.Exhauster;
+using XmlSerializer = XmlSerDe.Compat.XmlSerializer;
+
+namespace Sample
+{
+    [XmlExhauster(typeof(StringBuilderExhauster))]
+    [XmlFeatures(XmlFeature.CData)]
+    [XmlSubject(typeof(Node), true)]
+    public partial class Host
+    {
+    }
+
+    public static class Entry
+    {
+        public static object Make() => new XmlSerializer(typeof(Node));
+    }
+
+    public static class Unrelated
+    {
+        public static int Value() => 1;
+    }
+}
+";
+
         /// <summary>
         /// Комментарий в файле с хостом: разобрано заново будет дерево, но состав
         /// генерации от этого не меняется ни на строчку.
@@ -112,6 +139,36 @@ namespace Sample
             Assert.NotEqual(run.FirstSources, run.SecondSources);
             Assert.Contains("Name", run.FirstSources, StringComparison.Ordinal);
             Assert.Contains("Title", run.SecondSources, StringComparison.Ordinal);
+
+            Assert.Contains(
+                OutputReasons(run.Second),
+                reason => reason != IncrementalStepRunReason.Cached
+                );
+        }
+
+        [Fact]
+        public void XmlFeatures_Added_RegeneratesOutput_Test()
+        {
+            var run = Run(editedHost: HostWithCData);
+
+            Assert.NotEqual(run.FirstHost, run.SecondHost);
+            Assert.Contains("DecodeElementTextWithCData", run.SecondHost, StringComparison.Ordinal);
+            Assert.DoesNotContain("DecodeElementTextWithCData", run.FirstHost, StringComparison.Ordinal);
+
+            Assert.Contains(
+                OutputReasons(run.Second),
+                reason => reason != IncrementalStepRunReason.Cached
+                );
+        }
+
+        [Fact]
+        public void XmlFeatures_Removed_RegeneratesOutput_Test()
+        {
+            var run = Run(initialHost: HostWithCData, editedHost: Host);
+
+            Assert.NotEqual(run.FirstHost, run.SecondHost);
+            Assert.Contains("DecodeElementTextWithCData", run.FirstHost, StringComparison.Ordinal);
+            Assert.DoesNotContain("DecodeElementTextWithCData", run.SecondHost, StringComparison.Ordinal);
 
             Assert.Contains(
                 OutputReasons(run.Second),
@@ -178,6 +235,8 @@ namespace Sample
             public GeneratorDriverRunResult Second { get; set; } = null!;
             public string FirstSources { get; set; } = "";
             public string SecondSources { get; set; } = "";
+            public string FirstHost { get; set; } = "";
+            public string SecondHost { get; set; } = "";
         }
 
         /// <summary>
@@ -188,10 +247,11 @@ namespace Sample
         /// </summary>
         private static IncrementalRun Run(
             string? editedHost = null,
-            string? editedSubject = null
+            string? editedSubject = null,
+            string? initialHost = null
             )
         {
-            var hostTree = CSharpSyntaxTree.ParseText(Host, path: HostFileName);
+            var hostTree = CSharpSyntaxTree.ParseText(initialHost ?? Host, path: HostFileName);
             var subjectTree = CSharpSyntaxTree.ParseText(Subject, path: SubjectFileName);
 
             var compilation = CSharpCompilation.Create(
@@ -232,6 +292,8 @@ namespace Sample
                 Second = second,
                 FirstSources = Sources(first),
                 SecondSources = Sources(second),
+                FirstHost = HostFile(first),
+                SecondHost = HostFile(second),
             };
         }
 
@@ -246,6 +308,14 @@ namespace Sample
             Assert.NotEqual("", text);
 
             return text;
+        }
+
+        private static string HostFile(GeneratorDriverRunResult result)
+        {
+            var source = result.Results.Single().GeneratedSources
+                .Single(s => s.HintName.Equals("Host.g.cs", StringComparison.Ordinal));
+
+            return source.SourceText.ToString();
         }
 
         #endregion

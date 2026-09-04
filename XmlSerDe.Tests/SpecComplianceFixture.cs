@@ -50,7 +50,7 @@ namespace XmlSerDe.Tests
             // value contains an unescaped '>'.
             XmlSerializerDeserializer4_5.Deserialize(
                 DefaultInjector.Instance,
-                (@"<XmlObject5><XmlObjectProperty data-note=""1>2"" xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""XmlObject4Specific1""> <StringProperty>MyString</StringProperty><IntProperty>123</IntProperty>   </XmlObjectProperty></XmlObject5>").AsSpan(),
+                (@"<XmlObject5><XmlObjectProperty data-note=""1>2"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject4Specific1""> <StringProperty>MyString</StringProperty><IntProperty>123</IntProperty>   </XmlObjectProperty></XmlObject5>").AsSpan(),
                 out XmlObject5 xo
                 );
 
@@ -67,9 +67,10 @@ namespace XmlSerDe.Tests
         [Fact]
         public void Prolog_StylesheetProcessingInstruction_IsSkipped_Test()
         {
-            XmlSerializerDeserializer2.Deserialize(
+            XmlSerializerDeserializerMarkup.Deserialize(
                 DefaultInjector.Instance,
                 XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                    true,
                     (@"<?xml version=""1.0"" encoding=""utf-8""?><?xml-stylesheet type=""text/xsl"" href=""s.xsl""?><XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
                     ),
                 out XmlObject2 xo
@@ -82,9 +83,10 @@ namespace XmlSerDe.Tests
         [Fact]
         public void Prolog_Doctype_IsSkipped_Test()
         {
-            XmlSerializerDeserializer2.Deserialize(
+            XmlSerializerDeserializerMarkup.Deserialize(
                 DefaultInjector.Instance,
                 XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                    true,
                     (@"<?xml version=""1.0"" encoding=""utf-8""?><!DOCTYPE XmlObject2 [<!ELEMENT XmlObject2 (#PCDATA)>]><XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
                     ),
                 out XmlObject2 xo
@@ -97,9 +99,10 @@ namespace XmlSerDe.Tests
         [Fact]
         public void Prolog_DoctypeWithoutInternalSubset_IsSkipped_Test()
         {
-            XmlSerializerDeserializer2.Deserialize(
+            XmlSerializerDeserializerMarkup.Deserialize(
                 DefaultInjector.Instance,
                 XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                    true,
                     (@"<?xml version=""1.0"" encoding=""utf-8""?><!DOCTYPE XmlObject2 SYSTEM ""XmlObject2.dtd""><XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
                     ),
                 out XmlObject2 xo
@@ -112,9 +115,10 @@ namespace XmlSerDe.Tests
         [Fact]
         public void Prolog_CommentsPiAndDoctypeInterleaved_IsSkipped_Test()
         {
-            XmlSerializerDeserializer2.Deserialize(
+            XmlSerializerDeserializerFull.Deserialize(
                 DefaultInjector.Instance,
                 XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                    true,
                     (@"<?xml version=""1.0"" encoding=""utf-8""?><!-- comment --><?xml-stylesheet type=""text/xsl"" href=""s.xsl""?><!DOCTYPE XmlObject2 [<!ELEMENT XmlObject2 (#PCDATA)>]><!-- another comment --><XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
                     ),
                 out XmlObject2 xo

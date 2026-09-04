@@ -117,6 +117,12 @@ namespace XmlSerDe.Common
         /// Для
         /// &lt;BaseType xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="ChildType"&gt;
         /// возвращает ChildType. Если xmlns или type нет - roschar.Empty.
+        /// Opt-in <see cref="XmlFeature.FlexibleXsiPrefix"/>; default -
+        /// <see cref="GetXsiType"/>.
+        ///
+        /// Кавычки значения отдельной осью больше не являются: разбор атрибутов
+        /// всегда quote-aware, поэтому вариантов у пары type/nil два, а не
+        /// четыре.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly roschar GetPreciseNodeType()
@@ -139,15 +145,33 @@ namespace XmlSerDe.Common
         }
 
         /// <summary>
-        /// Стоит ли на теге xsi:nil="true". Отличает &lt;Foo xsi:nil="true"/&gt; ("значения
-        /// нет") от &lt;Foo/&gt; ("значение пустое"): System.Xml.Serialization пишет так
-        /// null-члена, а пустую строку и пустую коллекцию - вторым способом, и без этой
-        /// проверки обе формы читались бы одинаково.
-        ///
-        /// Префикс не проверяется: годится любой атрибут с именем nil. Строго по спецификации
-        /// значащим был бы только префикс, привязанный к XMLSchema-instance, но привязка
-        /// в документе может и отсутствовать (xsi считают общеизвестным и объявить забывают),
-        /// а атрибут с именем nil и другим смыслом - случай, которого на практике не бывает.
+        /// Literal prefix <c>xsi</c> and local name <c>type</c>. Default path
+        /// without <see cref="XmlFeature.FlexibleXsiPrefix"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public readonly roschar GetXsiType()
+        {
+            if (!HasAttributes)
+            {
+                return roschar.Empty;
+            }
+
+            XmlScan.ParseAttribute(
+                FullHead,
+                DeclaredNodeType.Length + 1,
+                XmlScan.XsiSpan,
+                XmlScan.TypeSpan,
+                roschar.Empty,
+                out var parsedAttribute
+                );
+
+            return parsedAttribute.Value;
+        }
+
+        /// <summary>
+        /// Стоит ли на теге xsi:nil="true". Opt-in
+        /// <see cref="XmlFeature.FlexibleXsiPrefix"/>: подойдёт любой атрибут
+        /// с именем nil. Default - <see cref="IsXsiNil"/>.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly bool IsNil()
@@ -168,17 +192,46 @@ namespace XmlSerDe.Common
 
             return !parsedAttribute.IsEmpty;
         }
+
+        /// <summary>
+        /// Literal <c>xsi:nil="true"</c>. Default path without
+        /// <see cref="XmlFeature.FlexibleXsiPrefix"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public readonly bool IsXsiNil()
+        {
+            if (!HasAttributes)
+            {
+                return false;
+            }
+
+            XmlScan.ParseAttribute(
+                FullHead,
+                DeclaredNodeType.Length + 1,
+                XmlScan.XsiSpan,
+                XmlScan.NilSpan,
+                XmlScan.TrueSpan,
+                out var parsedAttribute
+                );
+
+            return !parsedAttribute.IsEmpty;
+        }
     }
 
     /// <summary>
     /// Сканирующие примитивы. Общие для устаревшего <see cref="XmlNode2"/>
     /// и для однопроходного разбора.
     ///
-    /// Ни один метод здесь не принимает <see cref="XmlDeserializeSettings"/>:
-    /// эвристики передаются двумя bool. Это не стилистика, а обход CS8352 -
-    /// спан, отданный через out из метода, у которого есть ref-параметр
-    /// ref-структурного типа, компилятор обязан считать потенциально
-    /// ссылающимся на него, и положить такой спан в поле ref struct уже нельзя.
+    /// Ни один метод здесь не принимает <see cref="XmlDeserializeSettings"/>.
+    /// Это не стилистика, а обход CS8352 - спан, отданный через out из метода,
+    /// у которого есть ref-параметр ref-структурного типа, компилятор обязан
+    /// считать потенциально ссылающимся на него, и положить такой спан в поле
+    /// ref struct уже нельзя.
+    ///
+    /// Набор фич тоже не параметр: какие конструкции хост понимает, решено на
+    /// этапе генерации, и хост зовёт соответствующую перегрузку
+    /// (docs/opt-in-xml-features.md §9.1). Булевы параметры остались только у
+    /// разметочных вариантов - это не POCO-hot-path.
     /// </summary>
     public static class XmlScan
     {
@@ -210,6 +263,12 @@ namespace XmlSerDe.Common
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => "true".AsSpan();
+        }
+
+        public static roschar XsiSpan
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => "xsi".AsSpan();
         }
 
         private static roschar CDataHeadSpan
@@ -274,28 +333,23 @@ namespace XmlSerDe.Common
         #region однопроходный разбор
 
         /// <summary>
-        /// Читает ровно одну голову в позиции курсора и ничего больше: пропускает
-        /// пробелы, комментарии, PI, CDATA и текст между элементами, после чего
-        /// разбирает открывающий либо закрывающий тег.
+        /// Default head: S and inter-element text only. A <c>&lt;!</c> or
+        /// <c>&lt;?</c> is an error. No xmlns-URI scan.
         ///
-        /// Поддерево НЕ обходится. Именно этим метод отличается от
-        /// <see cref="XmlNode2.GetFirst"/>, которому, чтобы отдать ноду, нужно
-        /// сначала найти её конец, а для этого - рекурсивно разобрать всё, что
-        /// внутри. Из-за этого стоимость разбора там растёт как O(размер x глубина);
-        /// здесь - один разбор головы на элемент.
-        ///
-        /// Где нода заканчивается, вызывающая сторона узнаёт из разбора её тела:
-        /// цикл по детям останавливается на <see cref="XmlHeadKind.EndTag"/>.
+        /// Две default-перегрузки ниже - это два разных тела, а не один core
+        /// с булевым параметром: core оказался бы слишком велик для инлайна,
+        /// константы вызывающей стороны уехали бы в аргументы, и на каждый тег
+        /// POCO-документа исполнялось бы ветвление по выключенной фиче
+        /// (docs/opt-in-xml-features.md §9.1). Разметочный вариант - один,
+        /// с булевыми параметрами: он по определению не default-путь (§4.5).
         /// </summary>
         public static void ReadHead(
-            bool containsXmlComments,
-            bool containsCDataBlocks,
             roschar cursor,
             roschar xmlnsAttributeName,
             ref XmlHead result
             )
         {
-            var index = SkipToTag(cursor, 0);
+            var index = SkipToTagStrict(cursor, 0);
             if (index < 0)
             {
                 result = new XmlHead();
@@ -303,38 +357,171 @@ namespace XmlSerDe.Common
             }
 
             var span = cursor.Slice(index);
-
-            if (span.Length > 1 && span[1] == '/')
+            if (TryReadEndTag(span, index, xmlnsAttributeName, ref result))
             {
-                //закрывающий тег
-                var gt = span.IndexOf('>');
-                if (gt < 0)
-                {
-                    throw new InvalidOperationException("Closing '>' not found for end tag.");
-                }
+                return;
+            }
 
-                result = new XmlHead(
-                    XmlHeadKind.EndTag,
-                    true,
-                    false,
-                    index + gt + 1,
-                    span.Slice(2, gt - 2),
-                    span.Slice(0, gt + 1),
-                    xmlnsAttributeName
-                    );
+            ScanHead(span, out var endOfName, out var endOfHead);
+            FinishStartTag(span, index, endOfName, endOfHead, xmlnsAttributeName, ref result);
+        }
+
+        /// <summary>
+        /// Default skip + xmlns-URI scan (<see cref="XmlFeature.FlexibleXsiPrefix"/>).
+        /// </summary>
+        public static void ReadHeadFlexibleXsi(
+            roschar cursor,
+            roschar xmlnsAttributeName,
+            ref XmlHead result
+            )
+        {
+            var index = SkipToTagStrict(cursor, 0);
+            if (index < 0)
+            {
+                result = new XmlHead();
+                return;
+            }
+
+            var span = cursor.Slice(index);
+            if (TryReadEndTag(span, index, xmlnsAttributeName, ref result))
+            {
+                return;
+            }
+
+            ScanHead(span, out var endOfName, out var endOfHead);
+            FinishStartTagFlexibleXsi(
+                span,
+                index,
+                endOfName,
+                endOfHead,
+                xmlnsAttributeName,
+                ref result
+                );
+        }
+
+        /// <summary>
+        /// Opt-in markup between elements (<see cref="XmlFeature.Markup"/>).
+        /// This is not the default POCO hot path, so the two remaining axes live
+        /// in parameters instead of in a clone per combination.
+        ///
+        /// Комментарии, PI и DOCTYPE здесь пропускаются безусловно: на этот
+        /// метод хост попадает только с включённым <see cref="XmlFeature.Markup"/>.
+        /// Отдельным параметром осталась CDATA - у неё своя цена (разворачивание
+        /// в текст) и свой флаг.
+        /// </summary>
+        public static void ReadHeadMarkup(
+            bool cdata,
+            bool flexibleXsiPrefix,
+            roschar cursor,
+            roschar xmlnsAttributeName,
+            ref XmlHead result
+            )
+        {
+            var index = SkipToTagMarkup(cursor, 0, cdata);
+            if (index < 0)
+            {
+                result = new XmlHead();
+                return;
+            }
+
+            var span = cursor.Slice(index);
+            if (TryReadEndTag(span, index, xmlnsAttributeName, ref result))
+            {
                 return;
             }
 
             ScanHead(span, out var endOfName, out var endOfHead);
 
-            var isBodyless = span[endOfHead - 1] == '/';
+            if (flexibleXsiPrefix)
+            {
+                FinishStartTagFlexibleXsi(
+                    span,
+                    index,
+                    endOfName,
+                    endOfHead,
+                    xmlnsAttributeName,
+                    ref result
+                    );
+                return;
+            }
+
+            FinishStartTag(span, index, endOfName, endOfHead, xmlnsAttributeName, ref result);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool TryReadEndTag(
+            roschar span,
+            int index,
+            roschar xmlnsAttributeName,
+            ref XmlHead result
+            )
+        {
+            if (span.Length <= 1 || span[1] != '/')
+            {
+                return false;
+            }
+
+            var gt = span.IndexOf('>');
+            if (gt < 0)
+            {
+                throw new InvalidOperationException("Closing '>' not found for end tag.");
+            }
+
+            result = new XmlHead(
+                XmlHeadKind.EndTag,
+                true,
+                false,
+                index + gt + 1,
+                span.Slice(2, gt - 2),
+                span.Slice(0, gt + 1),
+                xmlnsAttributeName
+                );
+            return true;
+        }
+
+        /// <summary>
+        /// Голова без гибкого префикса: объявление xsi либо унаследовано, либо
+        /// его нет вовсе - атрибуты ради xmlns не сканируются.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void FinishStartTag(
+            roschar span,
+            int index,
+            int endOfName,
+            int endOfHead,
+            roschar xmlnsAttributeName,
+            ref XmlHead result
+            )
+        {
+            var hasAttributes = HeadHasAttributes(span, endOfName, endOfHead, out var isBodyless);
+
+            result = new XmlHead(
+                XmlHeadKind.StartTag,
+                isBodyless,
+                hasAttributes,
+                index + endOfHead + 1,
+                span.Slice(1, endOfName - 1),
+                span.Slice(0, endOfHead + 1),
+                xmlnsAttributeName
+                );
+        }
+
+        /// <summary>
+        /// Голова с <see cref="XmlFeature.FlexibleXsiPrefix"/>: если префикс не
+        /// унаследован, он ищется по URI XMLSchema-instance.
+        /// </summary>
+        private static void FinishStartTagFlexibleXsi(
+            roschar span,
+            int index,
+            int endOfName,
+            int endOfHead,
+            roschar xmlnsAttributeName,
+            ref XmlHead result
+            )
+        {
+            var hasAttributes = HeadHasAttributes(span, endOfName, endOfHead, out var isBodyless);
             var declaredNodeType = span.Slice(1, endOfName - 1);
             var fullHead = span.Slice(0, endOfHead + 1);
-
-            //имя упёрлось прямо в '>' (или в '/' самозакрывающегося тега) - атрибутов нет
-            var hasAttributes =
-                endOfName != endOfHead
-                && !(isBodyless && endOfHead == endOfName + 1);
 
             roschar xmlns;
             if (!xmlnsAttributeName.IsEmpty)
@@ -369,19 +556,25 @@ namespace XmlSerDe.Common
                 );
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool HeadHasAttributes(
+            roschar span,
+            int endOfName,
+            int endOfHead,
+            out bool isBodyless
+            )
+        {
+            isBodyless = span[endOfHead - 1] == '/';
+
+            return endOfName != endOfHead
+                && !(isBodyless && endOfHead == endOfName + 1);
+        }
+
         /// <summary>
-        /// Тело ноды со встроенным типом - это текст. Отдаёт его и сообщает,
-        /// сколько съедено вместе с закрывающим тегом.
-        ///
-        /// Пустой <paramref name="declaredNodeType"/> означает "имя закрывающего
-        /// тега вызывающему неизвестно": так читается тело члена с
-        /// <see cref="System.Xml.Serialization.XmlTextAttribute"/>, до которого
-        /// голова не доходит вовсе. Проверить имя в этом случае не на что, но
-        /// это и не потеря: до тела уже добрался разбор головы, а он имя сверял.
+        /// Тело ноды со встроенным типом - это текст. Default: первый
+        /// <c>&lt;</c> ends the text (no CDATA, no leading comments).
         /// </summary>
         public static void ReadTextBody(
-            bool containsXmlComments,
-            bool containsCDataBlocks,
             roschar body,
             bool isBodyless,
             roschar declaredNodeType,
@@ -396,7 +589,38 @@ namespace XmlSerDe.Common
                 return;
             }
 
-            var index = XmlNode2.GetLeadingCommentLengthIfExists(containsXmlComments, body);
+            var index = body.IndexOf('<');
+            if (index < 0)
+            {
+                throw new InvalidOperationException("Closing tag not found.");
+            }
+
+            text = body.Slice(0, index);
+            consumed = index + EndTagLength(body, index, declaredNodeType);
+        }
+
+        /// <summary>
+        /// Opt-in leading comments and/or CDATA inside element text
+        /// (<see cref="XmlFeature.Markup"/>; CDATA дополнительно по
+        /// <see cref="XmlFeature.CData"/>).
+        /// </summary>
+        public static void ReadTextBodyMarkup(
+            bool cdata,
+            roschar body,
+            bool isBodyless,
+            roschar declaredNodeType,
+            out roschar text,
+            out int consumed
+            )
+        {
+            if (isBodyless || body.IsEmpty)
+            {
+                text = roschar.Empty;
+                consumed = 0;
+                return;
+            }
+
+            var index = XmlNode2.GetLeadingCommentLengthIfExists(true, body);
             var textStart = index;
 
             while (true)
@@ -410,9 +634,8 @@ namespace XmlSerDe.Common
 
                 index += iof;
 
-                if (containsCDataBlocks && body.Slice(index).StartsWith(CDataHeadSpan))
+                if (cdata && body.Slice(index).StartsWith(CDataHeadSpan))
                 {
-                    //'<' внутри CDATA не закрывает текст
                     var cdataEnd = body.Slice(index).IndexOf(CDataTailSpan);
                     if (cdataEnd < 0)
                     {
@@ -431,17 +654,42 @@ namespace XmlSerDe.Common
         }
 
         /// <summary>
-        /// Пропускает тело ноды, которой в POCO не соответствует ни один член:
-        /// разбирать её содержимое незачем, достаточно досчитать баланс тегов.
-        ///
-        /// Это и есть "дешёвый скан" - но, в отличие от того, чем занят сегодня
-        /// GetFirstLength, он выполняется только для чужих элементов. На документе,
-        /// который целиком ложится на POCO, не вызывается ни разу.
-        ///
-        /// Скан обязан быть quote-aware: '&gt;' внутри значения атрибута легален
-        /// (XML 1.0 2.4), и на этом уже спотыкались.
+        /// Пропускает тело неизвестного элемента. Default: простой <c>&gt;</c>,
+        /// <c>&lt;!</c>/<c>&lt;?</c> — ошибка.
         /// </summary>
         public static int SkipBody(
+            roschar body,
+            bool isBodyless
+            )
+        {
+            return SkipBodyCore(
+                allowMarkup: false,
+                cdata: false,
+                body,
+                isBodyless
+                );
+        }
+
+        /// <summary>
+        /// Skip unknown body with opt-in markup (<see cref="XmlFeature.Markup"/>).
+        /// </summary>
+        public static int SkipBodyMarkup(
+            bool cdata,
+            roschar body,
+            bool isBodyless
+            )
+        {
+            return SkipBodyCore(
+                allowMarkup: true,
+                cdata,
+                body,
+                isBodyless
+                );
+        }
+
+        private static int SkipBodyCore(
+            bool allowMarkup,
+            bool cdata,
             roschar body,
             bool isBodyless
             )
@@ -493,11 +741,17 @@ namespace XmlSerDe.Common
 
                 if (c1 == '!' || c1 == '?')
                 {
-                    index += SkipNonElementMarkup(rest);
+                    if (!allowMarkup)
+                    {
+                        ThrowUnexpectedMarkup();
+                    }
+
+                    index += SkipNonElementMarkup(rest, cdata);
                     continue;
                 }
 
                 ScanHead(rest, out _, out var endOfHead);
+
                 index += endOfHead + 1;
                 if (rest[endOfHead - 1] != '/')
                 {
@@ -507,17 +761,62 @@ namespace XmlSerDe.Common
         }
 
         /// <summary>
-        /// Пропускает пробелы, текст между элементами, комментарии, CDATA и PI.
-        /// Возвращает индекс '&lt;', с которого начинается тег, либо -1.
+        /// Пропускает пробелы и текст между элементами. Любая разметка
+        /// (<c>&lt;!</c> / <c>&lt;?</c>) здесь - ошибка: это default-путь,
+        /// и цикла по конструкциям в нём нет вовсе.
         /// </summary>
-        private static int SkipToTag(roschar span, int index)
+        private static int SkipToTagStrict(
+            roschar span,
+            int index
+            )
+        {
+            while (index < span.Length && span[index] <= ' ')
+            {
+                index++;
+            }
+
+            if (index >= span.Length)
+            {
+                return -1;
+            }
+
+            if (span[index] != '<')
+            {
+                var next = span.Slice(index).IndexOf('<');
+                if (next < 0)
+                {
+                    return -1;
+                }
+
+                index += next;
+            }
+
+            if (span.Length - index < 2)
+            {
+                return -1;
+            }
+
+            var c1 = span[index + 1];
+            if (c1 == '!' || c1 == '?')
+            {
+                ThrowUnexpectedMarkup();
+            }
+
+            return index;
+        }
+
+        /// <summary>
+        /// То же, но разметка между элементами пропускается: комментарии, PI и
+        /// DOCTYPE безусловно, CDATA - согласно <paramref name="cdata"/>.
+        /// </summary>
+        private static int SkipToTagMarkup(
+            roschar span,
+            int index,
+            bool cdata
+            )
         {
             while (true)
             {
-                //XML S production (2.3) - ровно четыре символа, все <= ' '.
-                //Свой цикл вместо TrimStart: тот идёт через char.IsWhiteSpace
-                //с проверкой Unicode-категорий и заодно съедает, например, NBSP,
-                //который в XML является обычным текстовым содержимым.
                 while (index < span.Length && span[index] <= ' ')
                 {
                     index++;
@@ -530,7 +829,6 @@ namespace XmlSerDe.Common
 
                 if (span[index] != '<')
                 {
-                    //текст между дочерними элементами по контракту отбрасывается
                     var next = span.Slice(index).IndexOf('<');
                     if (next < 0)
                     {
@@ -552,15 +850,20 @@ namespace XmlSerDe.Common
                     return index;
                 }
 
-                index += SkipNonElementMarkup(rest);
+                index += SkipNonElementMarkup(rest, cdata);
             }
         }
 
         /// <summary>
         /// Длина конструкции, начинающейся с "&lt;!" или "&lt;?": комментарий,
         /// CDATA, DOCTYPE или processing instruction.
+        ///
+        /// Сюда попадают только хосты с <see cref="XmlFeature.Markup"/>, поэтому
+        /// комментарий, PI и DOCTYPE пропускаются без проверок: разделять их
+        /// флагами незачем - код у них общий, и цена входа сюда одна на всех.
+        /// Отдельно проверяется только CDATA: у неё свой флаг.
         /// </summary>
-        private static int SkipNonElementMarkup(roschar rest)
+        private static int SkipNonElementMarkup(roschar rest, bool cdata)
         {
             if (rest.StartsWith(CommentHeadSpan))
             {
@@ -575,6 +878,11 @@ namespace XmlSerDe.Common
 
             if (rest.StartsWith(CDataHeadSpan))
             {
+                if (!cdata)
+                {
+                    throw new InvalidOperationException("CDATA sections are not enabled.");
+                }
+
                 var end = rest.IndexOf(CDataTailSpan);
                 if (end < 0)
                 {
@@ -595,9 +903,6 @@ namespace XmlSerDe.Common
                 return end + PiTailSpan.Length;
             }
 
-            //DOCTYPE и прочие объявления: '>' внутри internal subset
-            //(например в <!ELEMENT Foo (#PCDATA)>) объявление не закрывает,
-            //поэтому считаем глубину скобок, а не ищем первый '>'
             var depth = 0;
             for (var i = 1; i < rest.Length; i++)
             {
@@ -617,6 +922,13 @@ namespace XmlSerDe.Common
             }
 
             throw new InvalidOperationException("Closing '>' not found for declaration.");
+        }
+
+        private static void ThrowUnexpectedMarkup()
+        {
+            throw new InvalidOperationException(
+                "Unexpected processing instruction, comment, CDATA or DOCTYPE."
+                );
         }
 
         /// <summary>
@@ -672,29 +984,13 @@ namespace XmlSerDe.Common
         #region разбор головы (общее с XmlNode2)
 
         /// <summary>
-        /// Находит за один проход и конец имени ноды, и конец её головы.
+        /// Голова тега: имя кончается на S / '/' / '&gt;', сама голова - на
+        /// '&gt;', который не находится внутри значения атрибута (XML 1.0 §2.4).
         ///
-        /// Конец имени - это первый символ XML S production (#x20 | #x9 | #xD | #xA,
-        /// XML 1.0 2.3) либо '/' либо '&gt;'. На net8.0+ все шесть значений ищутся
-        /// одним проходом через <see cref="NameEndValues"/>.
-        ///
-        /// На netstandard2.0 SearchValues нет, а искать все шесть символов одним
-        /// IndexOfAny(roschar) нельзя: рантайм имеет SIMD-реализации только для пяти
-        /// значений и меньше, а дальше переключается на вероятностный (bloom-filter)
-        /// скан. Поэтому там векторизованно ищется только тройка '/', '&gt;', ' ' (это
-        /// подавляющее большинство случаев), а оставшиеся символы S production
-        /// добираются скалярной проверкой c &lt; ' ' по короткому префиксу до уже
-        /// найденной позиции: #x9, #xA и #xD все меньше пробела, легальный символ
-        /// имени всегда больше, а обычного пробела в префиксе нет по построению,
-        /// так что проверка эквивалентна. Префикс короткий (в среднем 11 символов),
-        /// и цикл по нему дешевле ещё одного вызова с настройкой вектора.
-        ///
-        /// Конец головы в общем случае ищет <see cref="FindUnquotedGt"/>, но два
-        /// частых случая до него не доходят:
-        /// 1) имя упёрлось прямо в '&gt;' - значит атрибутов нет, а значит нет и
-        ///    кавычек, и конец головы это уже найденный индекс;
-        /// 2) иначе поиск стартует не с нуля, а с конца имени: раньше него кавычка
-        ///    встретиться не может.
+        /// Квотирование отдельной фичей не является: замер показал, что
+        /// quote-aware поиск стоит на уровне шумового порога (README, "Cost of
+        /// turning a flag on"), а без него голова с '&gt;' внутри AttValue
+        /// обрезалась молча и неправильно.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void ScanHead(
@@ -714,8 +1010,6 @@ namespace XmlSerDe.Common
             {
                 if (trimmed[i] < ' ')
                 {
-                    //имя закончилось табом/CR/LF раньше, чем найденным терминатором,
-                    //поэтому голову приходится искать с учётом кавычек
                     endOfName = i;
                     endOfHead = FindUnquotedGt(trimmed, i);
                     return;
@@ -777,6 +1071,11 @@ namespace XmlSerDe.Common
             }
         }
 
+        /// <summary>
+        /// Ищет в голове тега атрибут, подходящий под префикс/имя/значение.
+        /// Значение может стоять в любых кавычках (XML 1.0 §2.3 AttValue): это
+        /// не opt-in, см. <see cref="ScanHead"/>.
+        /// </summary>
         public static void ParseAttribute(
             roschar internalsOfHead,
             int index,
@@ -790,8 +1089,6 @@ namespace XmlSerDe.Common
             {
                 if (index < 0 || index >= internalsOfHead.Length)
                 {
-                    //голова кончилась, а искомый атрибут не встретился: это не ошибка,
-                    //отсутствующий атрибут - обычное дело
                     result = new ParsedAttribute();
                     return;
                 }
@@ -805,8 +1102,6 @@ namespace XmlSerDe.Common
 
                 if (apr.TotalLength <= 0)
                 {
-                    //курсор обязан двигаться вперёд: иначе цикл здесь вечный, а
-                    //документ, который его заводит, приходит снаружи
                     throw new InvalidOperationException("Attribute parsing made no progress.");
                 }
 
@@ -816,7 +1111,6 @@ namespace XmlSerDe.Common
                     {
                         if (requiredValue.IsEmpty)
                         {
-                            //вызывающему нужно значение: раскрываем только найденный атрибут
                             result = new ParsedAttribute(
                                 apr.Attribute.Prefix,
                                 apr.Attribute.Name,
@@ -859,7 +1153,6 @@ namespace XmlSerDe.Common
             var trimmed = internalsOfHead.Slice(iindex).TrimStart();
             var trimmedLength = internalsOfHead.Length - trimmed.Length;
 
-            //ищем ":" (префиксованное имя) или "=" (имя без префикса) - смотря что встретится раньше
 #if NET8_0_OR_GREATER
             var iofa0 = trimmed.IndexOfAny(AttributeNameEndValues);
 #else
@@ -873,7 +1166,6 @@ namespace XmlSerDe.Common
             var c = trimmed[iofa0];
             if (c == '/' || c == '>')
             {
-                //нода закрылась, атрибутов нету
                 result = new AttributeProcessResult();
                 return;
             }
@@ -882,7 +1174,6 @@ namespace XmlSerDe.Common
             roschar name;
             if (c == ':')
             {
-                //префиксованный атрибут (например p3:type)
                 prefix = internalsOfHead.Slice(trimmedLength, iofa0);
                 trimmed = trimmed.Slice(iofa0 + 1);
 
@@ -897,13 +1188,11 @@ namespace XmlSerDe.Common
             }
             else
             {
-                //атрибут без префикса (без двоеточия в имени), например id="1"
                 prefix = roschar.Empty;
                 name = internalsOfHead.Slice(trimmedLength, iofa0);
                 trimmed = trimmed.Slice(iofa0 + 1);
             }
 
-            //значение атрибута может быть в двойных или одинарных кавычках (XML 1.0 2.3, AttValue)
             var iofa2 = trimmed.IndexOfAny('"', '\'');
             if (iofa2 < 0)
             {
@@ -911,17 +1200,14 @@ namespace XmlSerDe.Common
             }
 
             var quoteChar = trimmed[iofa2];
-            //найдено начало значения
             trimmed = trimmed.Slice(iofa2 + 1);
 
-            //закрывающая кавычка должна совпадать по типу с открывающей
             var iofa3 = trimmed.IndexOf(quoteChar);
             if (iofa3 < 0)
             {
                 throw new InvalidOperationException("Closing quote not found for attribute value.");
             }
 
-            //найден конец значения
             var rawValue = trimmed.Slice(0, iofa3);
 
             var totalLength = (internalsOfHead.Length - trimmed.Length) + iofa3 + 1 - iindex;

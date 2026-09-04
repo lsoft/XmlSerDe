@@ -349,6 +349,14 @@ namespace XmlSerDe.Components.Exhauster
             _totalLength += value.Length + CalculateOverheadFromXmlSpecialSymbol(value);
         }
 
+        //оценщик длины строку не кодирует, поэтому guard'а здесь нет ни в одном
+        //режиме и checked/unchecked считают одно и то же
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendEncodedUnchecked(string? value)
+        {
+            AppendEncoded(value);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AppendAttributeEncoded(string? value)
         {
@@ -358,6 +366,12 @@ namespace XmlSerDe.Components.Exhauster
             }
 
             _totalLength += value.Length + XmlAttributeEncoder.EstimateOverhead(value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendAttributeEncodedUnchecked(string? value)
+        {
+            AppendAttributeEncoded(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

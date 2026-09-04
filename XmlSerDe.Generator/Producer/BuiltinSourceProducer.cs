@@ -258,27 +258,26 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             sb.AppendLine($$"""
         public static roschar {{CutXmlHeadMethodName}}(roschar xml)
         {
-            var containsXmlComments = {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.IsXmlCommentExistsHeuristic)}}(xml);
-            return {{CutXmlHeadMethodName}}(containsXmlComments, xml);
+            return {{CutXmlHeadMethodName}}(false, xml);
         }
 
-        public static roschar {{CutXmlHeadMethodName}}(bool containsXmlComments, roschar xml)
+        public static roschar {{CutXmlHeadMethodName}}(bool markup, roschar xml)
         {
             var startOfHead = "<?xml".AsSpan();
 
             var trimmedXml = xml.Trim();
 
             roschar headless;
-            //the XML declaration's target is exactly "xml" followed by whitespace
-            //(XMLDecl ::= '<?xml' VersionInfo ...); a PI target that merely starts
-            //with "xml" (e.g. "<?xml-stylesheet ...?>") is a different, ordinary PI
-            //and must not be mistaken for the declaration
             if (trimmedXml.StartsWith(startOfHead)
                 && trimmedXml.Length > startOfHead.Length
                 && (trimmedXml[startOfHead.Length] is ' ' or '\t' or '\r' or '\n'))
             {
                 var endOfHead = "?>".AsSpan();
                 var index = trimmedXml.IndexOf(endOfHead);
+                if (index < 0)
+                {
+                    throw new InvalidOperationException("Closing '?>' not found for xml declaration.");
+                }
 
                 headless = trimmedXml.Slice(index + endOfHead.Length);
             }
@@ -287,7 +286,11 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
                 headless = trimmedXml;
             }
 
-            return {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.SkipPrologMisc)}}(containsXmlComments, headless);
+            var features = markup
+                ? global::XmlSerDe.Common.XmlFeature.Markup
+                : global::XmlSerDe.Common.XmlFeature.None;
+
+            return {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.SkipPrologMisc)}}(features, headless);
         }
 
 """);

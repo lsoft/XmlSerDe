@@ -164,6 +164,32 @@ namespace XmlSerDe.Common
             dest.WriteChars(buffer.Slice(0, written));
         }
 
+        /// <summary>
+        /// <see cref="Encode"/> plus <see cref="XmlCharGuard"/> (opt-in
+        /// <see cref="XmlFeature.CharGuard"/>).
+        /// </summary>
+        public static string EncodeChecked(string value)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
+            return Encode(value);
+        }
+
+        public static void AppendChecked(StringBuilder sb, string value)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            XmlCharGuard.EnsureValidXmlChars(value.AsSpan());
+            Append(sb, value);
+        }
+
         private static int FormatNumericEntity(Span<char> dest, int codePoint)
         {
             dest[0] = '&';

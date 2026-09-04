@@ -24,6 +24,7 @@ namespace XmlSerDe.Tests.Interop
     /// разобранных.
     /// </summary>
     [XmlExhauster(typeof(StringBuilderExhauster))]
+    [XmlFeatures(XmlFeature.SystemXmlCompatible)]
 
     //скаляры
     [XmlSubject(typeof(ScalarsSubject), true)]

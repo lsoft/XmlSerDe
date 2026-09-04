@@ -138,6 +138,7 @@ namespace XmlSerDe.Tests
     }
 
     [XmlSubject(typeof(XmlObject33), true)]
+    [XmlFeatures(XmlFeature.CData)]
     public partial class XmlSerializerDeserializer33
     {
     }

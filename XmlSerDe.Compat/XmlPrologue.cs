@@ -16,22 +16,19 @@ namespace XmlSerDe.Compat
     {
         public static ReadOnlySpan<char> Cut(ReadOnlySpan<char> xml)
         {
-            var containsXmlComments = XmlNode2.IsXmlCommentExistsHeuristic(xml);
-
-            return Cut(containsXmlComments, xml);
+            return Cut(markup: true, xml);
         }
 
-        public static ReadOnlySpan<char> Cut(bool containsXmlComments, ReadOnlySpan<char> xml)
+        public static ReadOnlySpan<char> Cut(
+            bool markup,
+            ReadOnlySpan<char> xml
+            )
         {
             var startOfHead = "<?xml".AsSpan();
 
             var trimmedXml = xml.Trim();
 
             ReadOnlySpan<char> headless;
-            //цель объявления - ровно "xml", за которым идёт пробельный символ
-            //(XMLDecl ::= '<?xml' VersionInfo ...); инструкция, чьё имя просто
-            //начинается с "xml" ("<?xml-stylesheet ...?>"), - обычная PI и
-            //объявлением не является
             if (trimmedXml.StartsWith(startOfHead)
                 && trimmedXml.Length > startOfHead.Length
                 && (trimmedXml[startOfHead.Length] is ' ' or '\t' or '\r' or '\n'))
@@ -40,9 +37,6 @@ namespace XmlSerDe.Compat
                 var index = trimmedXml.IndexOf(endOfHead);
                 if (index < 0)
                 {
-                    //документ приходит снаружи, и незакрытое объявление - это про него,
-                    //а не про нас. Без проверки индекс -1 уходил в Slice(1) и разбор
-                    //продолжался с середины объявления: не исключение, а тихая чушь
                     throw new InvalidOperationException("Closing '?>' not found for xml declaration.");
                 }
 
@@ -53,7 +47,11 @@ namespace XmlSerDe.Compat
                 headless = trimmedXml;
             }
 
-            return XmlNode2.SkipPrologMisc(containsXmlComments, headless);
+            var features = markup
+                ? XmlFeature.Markup
+                : XmlFeature.None;
+
+            return XmlNode2.SkipPrologMisc(features, headless);
         }
     }
 }

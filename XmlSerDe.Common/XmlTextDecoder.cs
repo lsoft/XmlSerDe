@@ -46,12 +46,24 @@ namespace XmlSerDe.Common
         #region содержимое элемента
 
         /// <summary>
-        /// Текст элемента: секции CDATA отдаются как есть, всё вне них
-        /// раскрывается по §4.1. Пробельные символы сохраняются - нормализация
-        /// §3.3.3 относится только к значениям атрибутов,
-        /// см. <see cref="DecodeAttributeValue"/>.
+        /// Текст элемента без CDATA: ищется только <c>&amp;</c>. Литеральный
+        /// <c>&lt;</c> — ошибка. Opt-in CDATA — <see cref="DecodeElementTextWithCData"/>.
         /// </summary>
         public static string DecodeElementText(roschar text)
+        {
+            return DecodeElementTextCore(text, cdata: false);
+        }
+
+        /// <summary>
+        /// Текст элемента: секции CDATA отдаются как есть, всё вне них
+        /// раскрывается по §4.1.
+        /// </summary>
+        public static string DecodeElementTextWithCData(roschar text)
+        {
+            return DecodeElementTextCore(text, cdata: true);
+        }
+
+        private static string DecodeElementTextCore(roschar text, bool cdata)
         {
             if (text.IsEmpty)
             {
@@ -59,24 +71,31 @@ namespace XmlSerDe.Common
             }
 
             //один векторизованный проход отсекает текст, которому раскрытие не
-            //нужно вообще: в разметке элемента '&' и '<' могут стоять только
-            //как начало ссылки и как начало CDATA соответственно
-            if (text.IndexOfAny('&', '<') < 0)
+            //нужно вообще. Искать '&' и '<' раздельно нельзя: два IndexOf по
+            //одному и тому же спану стоят вдвое дороже одного IndexOfAny, а это
+            //горячий путь каждого строкового члена
+            var first = text.IndexOfAny('&', '<');
+            if (first < 0)
             {
                 return text.ToString();
+            }
+
+            if (!cdata && text[first] == '<')
+            {
+                ThrowLiteralLt(first);
             }
 
             if (text.Length <= StackallocThreshold)
             {
                 Span<char> stackBuffer = stackalloc char[text.Length];
-                var stackWritten = DecodeElementTextInto(text, stackBuffer);
+                var stackWritten = DecodeElementTextIntoCore(text, stackBuffer, cdata);
                 return stackBuffer.Slice(0, stackWritten).ToString();
             }
 
             var rented = ArrayPool<char>.Shared.Rent(text.Length);
             try
             {
-                var written = DecodeElementTextInto(text, rented);
+                var written = DecodeElementTextIntoCore(text, rented, cdata);
                 return new string(rented, 0, written);
             }
             finally
@@ -90,6 +109,16 @@ namespace XmlSerDe.Common
         /// обязан вмещать <paramref name="text"/> целиком.
         /// </summary>
         public static int DecodeElementTextInto(roschar text, Span<char> destination)
+        {
+            return DecodeElementTextIntoCore(text, destination, cdata: false);
+        }
+
+        public static int DecodeElementTextIntoWithCData(roschar text, Span<char> destination)
+        {
+            return DecodeElementTextIntoCore(text, destination, cdata: true);
+        }
+
+        private static int DecodeElementTextIntoCore(roschar text, Span<char> destination, bool cdata)
         {
             if (destination.Length < text.Length)
             {
@@ -106,6 +135,9 @@ namespace XmlSerDe.Common
             {
                 var rest = text.Slice(index);
 
+                //и здесь тоже один проход: отдельный IndexOf('<') на каждой
+                //итерации сканировал бы остаток текста до конца, превращая
+                //раскрытие строки с k сущностями в O(k*n)
                 var next = rest.IndexOfAny('&', '<');
                 if (next < 0)
                 {
@@ -127,13 +159,9 @@ namespace XmlSerDe.Common
                     continue;
                 }
 
-                //'<' в содержимом элемента законен только как начало CDATA:
-                //§2.4 прямо запрещает литеральный '<' в character data
-                if (!rest.StartsWith(CDataHeadSpan))
+                if (!cdata || !rest.StartsWith(CDataHeadSpan))
                 {
-                    throw new InvalidOperationException(
-                        $"Literal '<' at position {index} of element text is not allowed by XML 1.0 §2.4; use &lt; or a CDATA section."
-                        );
+                    ThrowLiteralLt(index);
                 }
 
                 var afterHead = rest.Slice(CDataHeadSpan.Length);
@@ -151,6 +179,13 @@ namespace XmlSerDe.Common
             }
 
             return written;
+        }
+
+        private static void ThrowLiteralLt(int index)
+        {
+            throw new InvalidOperationException(
+                $"Literal '<' at position {index} of element text is not allowed by XML 1.0 §2.4; use &lt;."
+                );
         }
 
         #endregion
