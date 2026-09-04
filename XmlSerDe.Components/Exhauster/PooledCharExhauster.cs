@@ -561,7 +561,31 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendEncodedUnchecked(string? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            var dest = new EncodeSink(this);
+            XmlTextEncoder.EncodeTo(value, ref dest);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AppendAttributeEncoded(string? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            var dest = new EncodeSink(this);
+            XmlAttributeEncoder.WriteToChecked(value, ref dest);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AppendAttributeEncodedUnchecked(string? value)
         {
             if (value is null)
             {

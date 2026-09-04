@@ -527,11 +527,11 @@ InvalidOperationException("There is an error in the XML document.")
 | Вопрос | понимать ли эту конструкцию | отказать ли, если XML 1.0 это запрещает |
 | Default native | выключено (после задачи фич) | выключено |
 | Compat | `XmlFeature.SystemXmlCompatible` | `XmlGuard.SystemXmlCompatible` |
-| Пример | без `QuotedAttributes` голова режется по первому `>` | со стражами битая голова атрибута — `XmlException`, не `FormatException` |
+| Пример | без `Markup` комментарий между элементами — ошибка, а не пропуск | со стражами битая голова атрибута — `XmlException`, не `FormatException` |
 
 Реализовывать стражи можно **до, после или параллельно** с [opt-in-xml-features.md](opt-in-xml-features.md). Если фичи ещё не вмержены: стражи вешать на текущий полный сканер (он уже quote-aware). Если фичи уже есть: `UniqueAttributes` зовётся после того `ReadHead`, который выбрал feature-binding; не плодить `ReadHeadGuardedQuoted`.
 
-Конфликт не предусматривается: выключенный `QuotedAttributes` + включённый `UniqueAttributes` — uniqueness на той голове, которую простой `>` уже отрезал. Документ с `attr="1>2"` для такого хоста и так не обещан.
+Конфликт не предусматривается: quote-aware разбор головы перестал быть фичей и включён всегда (см. [opt-in-xml-features.md §17](opt-in-xml-features.md#17-свёртка-набора-флагов-после-замера)), поэтому `UniqueAttributes` всегда работает на полной голове, а не на обрезанной по первому `>`.
 
 ---
 

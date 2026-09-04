@@ -35,7 +35,7 @@ namespace XmlSerDe.Tests
             "<XmlObject2><IntProperty>123</IntProperty><StringProperty>text</StringProperty></XmlObject2>";
 
         private const string WithAttributes =
-            @"<XmlObject5><XmlObjectProperty xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""XmlObject4Specific1""><StringProperty>MyString</StringProperty><IntProperty>123</IntProperty></XmlObjectProperty></XmlObject5>";
+            @"<XmlObject5><XmlObjectProperty xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""XmlObject4Specific1""><StringProperty>MyString</StringProperty><IntProperty>123</IntProperty></XmlObjectProperty></XmlObject5>";
 
         private const string WithCollection =
             "<XmlObject17><MyList><XmlObject16><MyField>1</MyField></XmlObject16><XmlObject16><MyField>2</MyField></XmlObject16></MyList></XmlObject17>";

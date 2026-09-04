@@ -66,6 +66,13 @@ namespace XmlSerDe.Generator.Producer
 
         public readonly SerializationInfoCollection SerializationInfoCollection;
 
+        /// <summary>
+        /// Primitives this host emits. Assembled once from <c>[XmlFeatures]</c>
+        /// (or <see cref="XmlFeature.SystemXmlCompatible"/> for compat).
+        /// Generate methods only read it — see docs/opt-in-xml-features.md §4.5.
+        /// </summary>
+        private readonly HostFeatureBinding _binding;
+
         private StringBuilder _sb;
 
         public ClassSourceProducer(
@@ -95,6 +102,7 @@ namespace XmlSerDe.Generator.Producer
             _sb = new StringBuilder();
 
             SerializationInfoCollection = ParseAttributes(compilation, _deSubject);
+            _binding = HostFeatureBinding.From(ReadXmlFeatures(_deSubject));
         }
 
         /// <summary>
@@ -136,6 +144,7 @@ namespace XmlSerDe.Generator.Producer
             _sb = new StringBuilder();
 
             SerializationInfoCollection = serializationInfoCollection;
+            _binding = HostFeatureBinding.From(XmlFeature.SystemXmlCompatible);
         }
 
         public string GenerateClass(
@@ -159,6 +168,8 @@ namespace {_targetNamespace}");
 
 """);
 
+            GenerateCutXmlHeadMethod();
+
             foreach (var exhaustType in this.SerializationInfoCollection.ExhaustList)
             {
                 GenerateSerializeMethods(exhaustType);
@@ -174,6 +185,32 @@ namespace {_targetNamespace}");
 """);
 
             return _sb.ToString();
+        }
+
+        /// <summary>
+        /// Обёртка над общим <c>BuiltinCodeHelper.CutXmlHead</c>, подставляющая
+        /// фичи именно этого хоста (docs/opt-in-xml-features.md §5.6). Без неё
+        /// пользователю пришлось бы помнить набор своих флагов и передавать его
+        /// руками, а безаргументный общий helper молча снимал бы пролог по
+        /// default-правилам даже у хоста с <c>Doctype</c>.
+        /// </summary>
+        private readonly void GenerateCutXmlHeadMethod()
+        {
+            var helper =
+                $"global::{typeof(BuiltinSourceProducer).Namespace}"
+                + $".{BuiltinSourceProducer.BuiltinCodeHelperClassName}"
+                + $".{BuiltinSourceProducer.CutXmlHeadMethodName}";
+
+            _sb.AppendLine($$"""
+        /// <summary>
+        /// Снимает XML-декларацию и пролог по фичам этого сериализатора.
+        /// </summary>
+        public static roschar {{BuiltinSourceProducer.CutXmlHeadMethodName}}(roschar xml)
+        {
+            return {{helper}}({{_binding.CutXmlHeadInvocation("xml")}});
+        }
+
+""");
         }
 
 
@@ -563,7 +600,12 @@ namespace {_targetNamespace}");
 
             if (placement == XmlPlacement.Attribute && memberType.Symbol.SpecialType == SpecialType.System_String)
             {
-                return $"exh.{nameof(IExhauster.AppendAttributeEncoded)}(obj.{member.Name});";
+                return _binding.AppendAttributeEncodedStatement("exh", $"obj.{member.Name}");
+            }
+
+            if (memberType.Symbol.SpecialType == SpecialType.System_String)
+            {
+                return _binding.AppendEncodedStatement("exh", $"obj.{member.Name}");
             }
 
             if (!memberType.IsEnum)
@@ -675,12 +717,24 @@ namespace {_targetNamespace}");
 
             if (BuiltinSourceProducer.TryGetBuiltin(_compilation, memberType.Symbol, out _))
             {
-                _sb.AppendLine($$"""
+                if (memberType.Symbol.SpecialType == SpecialType.System_String)
+                {
+                    _sb.AppendLine($$"""
+                exh.{{nameof(IExhauster.Append)}}("<{{elementName}}>");
+                {{_binding.AppendEncodedStatement("exh", $"obj.{member.Name}")}}
+                exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
+
+""");
+                }
+                else
+                {
+                    _sb.AppendLine($$"""
                 exh.{{nameof(IExhauster.Append)}}("<{{elementName}}>");
                 {{BuiltinSerializeHeadlessFullMethodName}}(exh, obj.{{member.Name}});
                 exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
 
 """);
+                }
 
             }
             else if (memberType.IsEnum)
@@ -883,8 +937,21 @@ namespace {_targetNamespace}");
 
             if (itemName is null)
             {
-                if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out _))
+                if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out var itemBuiltin))
                 {
+                    if (listItemType.SpecialType == SpecialType.System_String)
+                    {
+                        //голова пишется здесь, потому что тело выбирает binding
+                        //(checked/unchecked encode); имя элемента при этом берётся
+                        //из той же таблицы builtin'ов, что и у общего пути
+                        var itemElementName = itemBuiltin.XmlTypeName;
+
+                        return
+                            "                    exh." + nameof(IExhauster.Append) + "(\"<" + itemElementName + ">\");\r\n"
+                            + "                    " + _binding.AppendEncodedStatement("exh", $"obj.{member.Name}[index]") + "\r\n"
+                            + "                    exh." + nameof(IExhauster.Append) + "(\"</" + itemElementName + ">\");";
+                    }
+
                     return $"                    {BuiltinSerializeHeadFullMethodName}(exh, obj.{member.Name}[index]);";
                 }
 
@@ -908,9 +975,19 @@ namespace {_targetNamespace}");
 
             var isBuiltin = BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType, out _);
 
-            var headlessInvocation = isBuiltin
-                ? $"{BuiltinSerializeHeadlessFullMethodName}(exh, obj.{member.Name}[index]);"
-                : $"{HeadlessSerializeMethodName}(exh, obj.{member.Name}[index]);";
+            string headlessInvocation;
+            if (isBuiltin && listItemType.SpecialType == SpecialType.System_String)
+            {
+                headlessInvocation = _binding.AppendEncodedStatement("exh", $"obj.{member.Name}[index]");
+            }
+            else if (isBuiltin)
+            {
+                headlessInvocation = $"{BuiltinSerializeHeadlessFullMethodName}(exh, obj.{member.Name}[index]);";
+            }
+            else
+            {
+                headlessInvocation = $"{HeadlessSerializeMethodName}(exh, obj.{member.Name}[index]);";
+            }
 
             var head = GenerateElementHeadLines(
                 "                    ",
@@ -1012,7 +1089,6 @@ namespace {_targetNamespace}");
         private static readonly string XmlHeadFullName = typeof(XmlHead).FullName;
         private static readonly string XmlScanFullName = typeof(XmlScan).FullName;
         private static readonly string XmlBase64FullName = typeof(XmlBase64).FullName;
-
         //FullName у открытого обобщённого типа несёт хвост арности
         //("...PooledArrayBuilder`1"), которого в исходном коде быть не должно
         private static readonly string PooledArrayBuilderFullName =
@@ -1068,11 +1144,7 @@ namespace {_targetNamespace}");
             _sb.AppendLine($$"""
         public static void {{HeadDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar xmlFullNode, out {{ssGlobalName}} result)
         {
-            var settings = new {{typeof(XmlDeserializeSettings).FullName}}(
-                {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.IsXmlCommentExistsHeuristic)}}(xmlFullNode),
-                {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.IsCDataBlockExistsHeuristic)}}(xmlFullNode)
-                );
-            {{HeadDeserializeMethodName}}(ref settings, inj, xmlFullNode, roschar.Empty, out result);
+            {{HeadDeserializeMethodName}}(inj, xmlFullNode, roschar.Empty, out result);
         }
 """);
         }
@@ -1193,12 +1265,12 @@ namespace {_targetNamespace}");
             var ssGlobalName = subject.ToGlobalDisplayString();
 
             _sb.AppendLine($$"""
-        private static void {{HeadDeserializeMethodName}}(ref {{typeof(XmlDeserializeSettings).FullName}} settings, {{injectorType.ToGlobalDisplayString()}} inj, roschar fullNode, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
+        private static void {{HeadDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar fullNode, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
         {
             {{XmlHeadFullName}} xmlNode = new();
-            {{XmlScanFullName}}.{{nameof(XmlScan.ReadHead)}}(settings.{{nameof(XmlDeserializeSettings.ContainsXmlComments)}}, settings.{{nameof(XmlDeserializeSettings.ContainsCDataBlocks)}}, fullNode, xmlnsAttributeName, ref xmlNode);
+            {{XmlScanFullName}}.{{_binding.ReadHead}}({{_binding.ReadHeadInvocation("fullNode", "xmlnsAttributeName", "xmlNode")}});
             var xmlNodeBody = xmlNode.{{nameof(XmlHead.IsBodyless)}} ? roschar.Empty : fullNode.Slice(xmlNode.{{nameof(XmlHead.TotalLength)}});
-            {{HeadedDeserializeMethodName}}(ref settings, inj, ref xmlNode, xmlNodeBody, out result, out _);
+            {{HeadedDeserializeMethodName}}(inj, ref xmlNode, xmlNodeBody, out result, out _);
         }
 """);
         }
@@ -1230,9 +1302,9 @@ namespace {_targetNamespace}");
             }
 
             _sb.AppendLine($$"""
-        private static void {{HeadedDeserializeMethodName}}(ref {{typeof(XmlDeserializeSettings).FullName}} settings, {{injectorType.ToGlobalDisplayString()}} inj, ref {{XmlHeadFullName}} xmlNode, roschar body, out {{ssGlobalName}} result, out int bodyConsumed)
+        private static void {{HeadedDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, ref {{XmlHeadFullName}} xmlNode, roschar body, out {{ssGlobalName}} result, out int bodyConsumed)
         {
-            var xmlNodePreciseType = xmlNode.{{nameof(XmlHead.GetPreciseNodeType)}}();
+            var xmlNodePreciseType = xmlNode.{{_binding.GetPreciseNodeType}}();
             if(xmlNodePreciseType.IsEmpty)
             {
                 xmlNodePreciseType = xmlNode.{{nameof(XmlHead.DeclaredNodeType)}};
@@ -1249,7 +1321,7 @@ namespace {_targetNamespace}");
                 throw new InvalidOperationException("(1) Unknown type " + xmlNodePreciseType.ToString());
             }
 
-            {{HeadlessDeserializeMethodName}}(ref settings, inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}, out result, out bodyConsumed);{{GenerateDeserializeAttributesInvocation("            ", subject, "xmlNode", "result")}}
+            {{HeadlessDeserializeMethodName}}(inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}, out result, out bodyConsumed);{{GenerateDeserializeAttributesInvocation("            ", subject, "xmlNode", "result")}}
         }
 """);
         }
@@ -1267,7 +1339,7 @@ namespace {_targetNamespace}");
                 //{{nameof(GenerateDeserializeDispatch)}}
                 if (xmlNodePreciseType.SequenceEqual("{{d.GetXmlTypeName()}}".AsSpan()))
                 {
-                    {{classAndMethodName}}(ref settings, inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult, out bodyConsumed);{{GenerateDeserializeAttributesInvocation("                    ", d, "xmlNode", "iresult")}}
+                    {{classAndMethodName}}(inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult, out bodyConsumed);{{GenerateDeserializeAttributesInvocation("                    ", d, "xmlNode", "iresult")}}
                     result = iresult;
                     return;
                 }
@@ -1290,7 +1362,7 @@ namespace {_targetNamespace}");
             var ssGlobalName = subject.ToGlobalDisplayString();
 
             _sb.AppendLine($$"""
-        private static void {{HeadlessDeserializeMethodName}}(ref {{typeof(XmlDeserializeSettings).FullName}} settings, {{injectorType.ToGlobalDisplayString()}} inj, roschar body, roschar xmlnsAttributeName, out {{ssGlobalName}} result, out int bodyConsumed)
+        private static void {{HeadlessDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar body, roschar xmlnsAttributeName, out {{ssGlobalName}} result, out int bodyConsumed)
         {
 """);
 
@@ -1350,7 +1422,7 @@ namespace {_targetNamespace}");
             {{XmlHeadFullName}} child = new();
             while(true)
             {
-                {{XmlScanFullName}}.{{nameof(XmlScan.ReadHead)}}(settings.{{nameof(XmlDeserializeSettings.ContainsXmlComments)}}, settings.{{nameof(XmlDeserializeSettings.ContainsCDataBlocks)}}, cursor, xmlnsAttributeName, ref child);
+                {{XmlScanFullName}}.{{_binding.ReadHead}}({{_binding.ReadHeadInvocation("cursor", "xmlnsAttributeName", "child")}});
                 if(child.{{nameof(XmlHead.IsEmpty)}})
                 {
                     break;
@@ -1387,7 +1459,7 @@ namespace {_targetNamespace}");
             var skipStatement =
                 $"childConsumed = child.{nameof(XmlHead.IsBodyless)}"
                 + $" ? 0"
-                + $" : {XmlScanFullName}.{nameof(XmlScan.SkipBody)}(childBody, false);";
+                + $" : {XmlScanFullName}.{_binding.SkipBody}({_binding.SkipBodyInvocation("childBody", "false")});";
 
             if (isFirstMember)
             {
@@ -1446,13 +1518,18 @@ namespace {_targetNamespace}");
             else
             {
                 assignment =
-                    $"inj.{nameof(IInjector.ParseBody)}(bodyText, out {memberType.GlobalName} bodyParsed);\r\n"
-                    + $"                result.{member.Name} = bodyParsed;";
+                    _binding.ParseBodyStatement(
+                        "bodyText",
+                        memberType.Symbol.SpecialType == SpecialType.System_String,
+                        memberType.GlobalName,
+                        "bodyParsed"
+                        )
+                    + $"\r\n                result.{member.Name} = bodyParsed;";
             }
 
             _sb.AppendLine($$"""
             //{{typeof(XmlTextAttribute).Name}} {{memberType.ToGlobalDisplayString()}} {{member.Name}}
-            {{XmlScanFullName}}.{{nameof(XmlScan.ReadTextBody)}}(settings.{{nameof(XmlDeserializeSettings.ContainsXmlComments)}}, settings.{{nameof(XmlDeserializeSettings.ContainsCDataBlocks)}}, body, body.IsEmpty, roschar.Empty, out var bodyText, out bodyConsumed);
+            {{XmlScanFullName}}.{{_binding.ReadTextBody}}({{_binding.ReadTextBodyInvocation("body", "body.IsEmpty", "roschar.Empty", "bodyText", "bodyConsumed")}});
             if(!bodyText.IsEmpty)
             {
                 {{assignment}}
@@ -1495,7 +1572,7 @@ namespace {_targetNamespace}");
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         {{specifiedAssignment}}
-                        if(child.{{nameof(XmlHead.IsBodyless)}} && child.{{nameof(XmlHead.IsNil)}}())
+                        if(child.{{nameof(XmlHead.IsBodyless)}} && child.{{_binding.IsNil}}())
                         {
                             //<Foo xsi:nil="true"/> - значения нет, член остаётся null
                             childConsumed = 0;
@@ -1505,7 +1582,7 @@ namespace {_targetNamespace}");
                             //ReadTextBody на закрытой ноде отдаёт пустой текст и consumed = 0,
                             //так что <Foo/> здесь превращается в пустую строку
                             {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
-                            inj.{{nameof(IInjector.ParseBody)}}(childText, out {{memberType.GlobalName}} injr);
+                            {{_binding.ParseBodyStatement("childText", true, memberType.GlobalName, "injr")}}
                             result.{{member.Name}} = injr;
                         }
                     }
@@ -1564,7 +1641,7 @@ namespace {_targetNamespace}");
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         {{specifiedAssignment}}
-                        if(child.{{nameof(XmlHead.IsBodyless)}} && child.{{nameof(XmlHead.IsNil)}}())
+                        if(child.{{nameof(XmlHead.IsBodyless)}} && child.{{_binding.IsNil}}())
                         {
                             //<Foo xsi:nil="true"/> - массива нет вовсе, а не пустой массив
                             childConsumed = 0;
@@ -1616,7 +1693,7 @@ namespace {_targetNamespace}");
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         {{specifiedAssignment}}
-                        if(child.{{nameof(XmlHead.IsBodyless)}} && child.{{nameof(XmlHead.IsNil)}}())
+                        if(child.{{nameof(XmlHead.IsBodyless)}} && child.{{_binding.IsNil}}())
                         {
                             //<Foo xsi:nil="true"/> - коллекции нет вовсе, а не пустая коллекция
                             childConsumed = 0;
@@ -1630,7 +1707,7 @@ namespace {_targetNamespace}");
                         {{XmlHeadFullName}} {{child2VarName}} = new();
                         while(true)
                         {
-                            {{XmlScanFullName}}.{{nameof(XmlScan.ReadHead)}}(settings.{{nameof(XmlDeserializeSettings.ContainsXmlComments)}}, settings.{{nameof(XmlDeserializeSettings.ContainsCDataBlocks)}}, itemCursor, child.{{nameof(XmlHead.XmlnsAttributeName)}}, ref {{child2VarName}});
+                            {{XmlScanFullName}}.{{_binding.ReadHead}}({{_binding.ReadHeadInvocation("itemCursor", $"child.{nameof(XmlHead.XmlnsAttributeName)}", child2VarName)}});
                             if({{child2VarName}}.{{nameof(XmlHead.IsEmpty)}})
                             {
                                 break;
@@ -1682,7 +1759,7 @@ namespace {_targetNamespace}");
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         {{specifiedAssignment}}
-                        var childPreciseType = child.{{nameof(XmlHead.GetPreciseNodeType)}}();
+                        var childPreciseType = child.{{_binding.GetPreciseNodeType}}();
 """);
 
                     GenerateDeserializeDispatch2(subject.Deriveds, member.Name);
@@ -1690,7 +1767,7 @@ namespace {_targetNamespace}");
                     _sb.AppendLine($$"""
                         else
                         {
-                            {{classAndMethodName}}(ref settings, inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                            ", memberType.Symbol, "child", "iresult")}}
+                            {{classAndMethodName}}(inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                            ", memberType.Symbol, "child", "iresult")}}
                             result.{{member.Name}} = iresult;
                         }
                     }
@@ -1705,7 +1782,7 @@ namespace {_targetNamespace}");
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         {{specifiedAssignment}}
-                        {{classAndMethodName}}(ref settings, inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                        ", memberType.Symbol, "child", "iresult")}}
+                        {{classAndMethodName}}(inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                        ", memberType.Symbol, "child", "iresult")}}
                         result.{{member.Name}} = iresult;
                     }
 """);
@@ -1731,7 +1808,7 @@ namespace {_targetNamespace}");
                         //{{nameof(GenerateDeserializeDispatch2)}}
                         {{elseif}}if (childPreciseType.SequenceEqual("{{d.GetXmlTypeName()}}".AsSpan()))
                         {
-                            {{classAndMethodName}}(ref settings, inj, childBody, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                            ", d, "child", "iresult")}}
+                            {{classAndMethodName}}(inj, childBody, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                            ", d, "child", "iresult")}}
                             result.{{memberName}} = iresult;
                         }
 """);
@@ -1746,14 +1823,15 @@ namespace {_targetNamespace}");
             )
         {
             return
-                $"{XmlScanFullName}.{nameof(XmlScan.ReadTextBody)}("
-                + $"settings.{nameof(XmlDeserializeSettings.ContainsXmlComments)}, "
-                + $"settings.{nameof(XmlDeserializeSettings.ContainsCDataBlocks)}, "
-                + $"{bodyVarName}, "
-                + $"{headVarName}.{nameof(XmlHead.IsBodyless)}, "
-                + $"{headVarName}.{nameof(XmlHead.DeclaredNodeType)}, "
-                + $"out var {textVarName}, "
-                + $"out {consumedVarName});";
+                $"{XmlScanFullName}.{_binding.ReadTextBody}("
+                + _binding.ReadTextBodyInvocation(
+                    bodyVarName,
+                    $"{headVarName}.{nameof(XmlHead.IsBodyless)}",
+                    $"{headVarName}.{nameof(XmlHead.DeclaredNodeType)}",
+                    textVarName,
+                    consumedVarName
+                    )
+                + ");";
         }
 
         /// <summary>
@@ -1841,13 +1919,19 @@ namespace {_targetNamespace}");
             {
                 return
                     GenerateReadTextBodyStatement("child2Body", child2VarName, "child2Text", "child2Consumed")
-                    + $"\r\n                            inj.{nameof(IInjector.ParseBody)}(child2Text, out {listItemType.GlobalName} {listItemParseResultVarName});";
+                    + "\r\n                            "
+                    + _binding.ParseBodyStatement(
+                        "child2Text",
+                        listItemType.Symbol.SpecialType == SpecialType.System_String,
+                        listItemType.GlobalName,
+                        listItemParseResultVarName
+                        );
             }
             else
             {
                 var classAndMethodName = DetermineClassName(listItemType.Symbol) + "." + HeadedDeserializeMethodName;
 
-                return $@"{classAndMethodName}(ref settings, inj, ref {child2VarName}, child2Body, out {listItemType.ToGlobalDisplayString()} {listItemParseResultVarName}, out child2Consumed);";
+                return $@"{classAndMethodName}(inj, ref {child2VarName}, child2Body, out {listItemType.ToGlobalDisplayString()} {listItemParseResultVarName}, out child2Consumed);";
             }
         }
 
@@ -2345,6 +2429,43 @@ namespace {_targetNamespace}");
             }
 
             public readonly string ToGlobalDisplayString() => GlobalName;
+        }
+
+        private static XmlFeature ReadXmlFeatures(
+            INamedTypeSymbol deSubject
+            )
+        {
+            var features = XmlFeature.None;
+            var fullName = XmlDeserializeGenerator.FeaturesAttributeFullName;
+
+            foreach (var attribute in deSubject.GetAttributes())
+            {
+                var attrSymbol = attribute.AttributeClass;
+                if (attrSymbol is null)
+                {
+                    continue;
+                }
+                if (attrSymbol.ToFullDisplayString() != fullName)
+                {
+                    continue;
+                }
+                if (attribute.ConstructorArguments.Length == 0)
+                {
+                    continue;
+                }
+
+                var arg = attribute.ConstructorArguments[0];
+                if (arg.Value is int i)
+                {
+                    features |= (XmlFeature)i;
+                }
+                else if (arg.Value is long l)
+                {
+                    features |= (XmlFeature)(int)l;
+                }
+            }
+
+            return features;
         }
 
         private static SerializationInfoCollection ParseAttributes(

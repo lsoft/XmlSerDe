@@ -8,6 +8,20 @@ XmlSerDe's purpose is **POCO ↔ XML data binding**: mapping plain C# classes to
 
 The API and behavior may still change between releases.
 
+**Breaking change (native path):** a `[XmlSubject]` serializer without `[XmlFeatures]` no longer reads comments, CDATA, processing instructions, DOCTYPE, single-quoted attributes, `>` inside attribute values, or a non-`xsi` prefix for `xsi:type` / `xsi:nil`, and string serialization no longer runs `XmlCharGuard`. That is the fast POCO path. To get the previous native behaviour:
+
+```csharp
+[XmlFeatures(XmlFeature.SystemXmlCompatible)]
+[XmlSubject(typeof(Order), true)]
+public partial class OrderSerializer { }
+```
+
+`XmlSerDe.Compat` turns those features on by itself; user code does not add the attribute. See [Opt-in XML features](#opt-in-xml-features).
+
+Two smaller breaks come with it: a custom `IExhauster` now also implements `AppendEncodedUnchecked` / `AppendAttributeEncodedUnchecked` (the unguarded pair the default path calls), and `BuiltinCodeHelper.CutXmlHead(span)` alone no longer skips comments, PIs or a DOCTYPE — call the generated `YourSerializer.CutXmlHead(span)`, which passes that host's own flags.
+
+`XmlFeature` itself was then cut from seven flags to four. `QuotedAttributes` is gone and its behaviour is unconditional; `Comments`, `ProcessingInstructions` and `Doctype` are gone and folded into a single `Markup`, which `CData` now includes. `SystemXmlCompatible` is unchanged in meaning. The reasoning, with numbers, is in [Cost of turning a flag on](#cost-of-turning-a-flag-on).
+
 ## Performance
 
 XmlSerDe generates serialize and deserialize methods at compile time, so there is no runtime reflection, no first-call warm-up, and no extra cost as the type graph grows. Against `System.Xml.Serialization` on the same documents, a typical shallow payload deserializes about **4× faster** and allocates **5%** of the baseline — the object graph, and nothing else. A document nested 100 levels deep is about **5× faster** for the same reason: the parser is single-pass, so depth no longer multiplies the work. A ~100 MB document is still **twice as fast** and uses **39%** of the BCL heap. Serialization to a string is about **3×** on the small document; writing UTF-8 into a pre-sized `MemoryStream` on the 100 MB document is twice as fast and allocates **28%** of the BCL stream write. On .NET Framework the win is smaller — span `Parse` / `TryFormat` are missing — and on that HUGE deserialize XmlSerDe is a few percent *slower*, though it still allocates 41% of the baseline.
@@ -16,6 +30,8 @@ XmlSerDe generates serialize and deserialize methods at compile time, so there i
 <summary>Benchmark tables (click to expand)</summary>
 
 BenchmarkDotNet v0.15.2, Windows 11 (10.0.26200.8875), 13th Gen Intel Core i7-13700H, .NET SDK 11.0.100-preview.6.26359.118. Host: .NET 10.0.11. Reproduce with `run-benchmarks.bat`. `Ratio` and `Alloc Ratio` are against the `System.Xml` row in the same group. `Gen0` / `Gen1` are collections per 1000 operations. Error, StdDev and RatioSD are omitted here; they are in `benchmarks.log`.
+
+These tables were captured **before** native XML extras became opt-in and before `AuxXml` dropped CDATA / `p3:type`. They remain the last official BDN snapshot; re-run `run-benchmarks.bat` for a new default-path baseline. Relative cost of each flag on a small POCO document is in [Cost of turning a flag on](#cost-of-turning-a-flag-on).
 
 #### Deserialization
 
@@ -123,7 +139,7 @@ BenchmarkDotNet v0.15.2, Windows 11 (10.0.26200.8875), 13th Gen Intel Core i7-13
 
 Three document shapes:
 
-- **REGULAR** — 26 elements, maximum nesting depth 6, indented, with derived types dispatched by `xsi:type`, an enum, a `DateTime`, entity-encoded text and CDATA. This is `ComplexFixture.AuxXml`, reproduced [at the end of this section](#the-regular-document).
+- **REGULAR** — 26 elements, maximum nesting depth 6, indented, with derived types dispatched by `xsi:type`, an enum, a `DateTime`, and entity-encoded text. This is `ComplexFixture.AuxXml` (POCO form: no CDATA, prefix `xsi` not `p3`), reproduced [at the end of this section](#the-regular-document). The default native host is what the XmlSerDe row measures. `SystemXmlCompatible` on the same document is the `REGULAR_COMPAT` category.
 - **DEEP** — one element inside another, 100 levels down, a single string at the bottom, no indentation (`DeepFixture` in `XmlSerDe.Tests/Deep`). The same work in a different shape: wide-and-shallow becomes narrow-and-deep, which is what makes any per-ancestor re-walking visible.
 - **HUGE** — mixed document built to ~100 MB (`HugeFixture`). This is the scale where `Preestimate` pays off: a tight rent avoids leaving tens of megabytes of unused buffer, and `MemoryStream` doubling would otherwise dominate the heap.
 
@@ -203,7 +219,7 @@ The batch file builds in `Release` and prints only the result tables; `dotnet bu
 
 | Fixture | Runtimes | What it covers |
 |---------|----------|----------------|
-| `DeserializeMatrixFixture` | net472, net8.0, net10.0 | `Deserialize` — Categories (REGULAR / HUGE / DEEP) |
+| `DeserializeMatrixFixture` | net472, net8.0, net10.0 | `Deserialize` — Categories (REGULAR / REGULAR_COMPAT / HUGE / DEEP) |
 | `SerializeMatrixFixture` | net472, net8.0, net10.0 | `Serialize` — Categories (REGULAR / HUGE / DEEP), Exhauster (`stringbuilder` / `pooledchar` / `emptystream` / `memorystream`), Preestimate |
 
 Other fixtures in the project isolate pieces the matrix does not. `AllocationHotspotsFixture` measures the allocation sources that the enum and `Guid` fixes addressed (`Enum.ToString()`, `Enum.Parse` boxing, `StringBuilder.Append(object?)` boxing of `Guid`), each on its own and in small batches so the per-call cost shows up in `Allocated` rather than being lost in a full document. It and `XmlDecodeStringFixture` call APIs that do not exist on netstandard2.0 (`Enum.Parse(Type, ReadOnlySpan<char>)`, `Encoding.GetBytes(string, Span<byte>)`), so they are excluded from the `net472` compile rather than rewritten into measuring something else.
@@ -213,13 +229,13 @@ Other fixtures in the project isolate pieces the matrix does not. `AllocationHot
 ```xml
 <InfoContainer>
     <InfoCollection>
-        <BaseInfo xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="Derived3Info">
+        <BaseInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Derived3Info">
             <Email>example@example.com</Email>
         </BaseInfo>
-        <BaseInfo xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="Derived1Info">
+        <BaseInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Derived1Info">
             <BasePersonificationInfo>my string !@#$%^&amp;*()_+|-=\&#39;;[]{},./&lt;&gt;?</BasePersonificationInfo>
         </BaseInfo>
-        <BaseInfo xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="Derived2Info">
+        <BaseInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Derived2Info">
             <HotKeyUsed>false</HotKeyUsed>
             <StepsCounter>1</StepsCounter>
             <EventsTime>
@@ -363,6 +379,8 @@ public partial class OrderSerializer
 {
 }
 ```
+
+This is the fast POCO path: no `[XmlFeatures]`. The generated code reads what XmlSerDe itself writes (`xsi:type`, double-quoted attributes, entity-escaped text). XML extras that neither XmlSerDe nor `System.Xml.Serialization` emit for this subset are opt-in — see [Opt-in XML features](#opt-in-xml-features).
 
 The class **must** be `partial`. On build, the generator emits `OrderSerializer.g.cs` with `Serialize` and `Deserialize` methods.
 
@@ -705,6 +723,100 @@ Replaces `new T()` during deserialization with a custom C# expression. Useful fo
 
 The factory type must provide a `Reset()`-style method that clears state before reuse. See `CachedInfoContainer` in `XmlSerDe.Tests/Complex/Subject/InfoContainer.cs`.
 
+### Opt-in XML features
+
+`[XmlFeatures(XmlFeature.…)]` — XML 1.0 extras that the POCO path does not need. The attribute goes on the **serializer class** (same place as `[XmlSubject]`), not on each subject type. Several attributes on one class are OR-combined.
+
+| Flag | What it accepts / does | When to turn it on |
+|------|------------------------|--------------------|
+| `Markup` | `<!-- … -->`, `<?…?>` and `<!DOCTYPE …>` between elements and in the prolog (not the XML declaration) | Foreign documents with comments, PIs or a DOCTYPE |
+| `CData` | `<![CDATA[…]]>` in element text and between elements; implies `Markup` | Foreign documents that use CDATA instead of entities |
+| `FlexibleXsiPrefix` | `xmlns:*=XMLSchema-instance` then that prefix for `type`/`nil` | Documents that bind the instance namespace to something other than `xsi` (tests used to write `p3`) |
+| `CharGuard` | `XmlCharGuard` before escaping a string on serialize | Reject illegal XML 1.0 `Char` (e.g. `U+0001`) instead of writing it |
+| `SystemXmlCompatible` | All of the above | Yesterday's native behaviour, in one flag |
+
+Entities (`&amp;`, CharRef), `xsi:type` / `xsi:nil` **as the `xsi` prefix**, collections, and `S` whitespace between elements stay on. They are the POCO format, not extras. So are quoted attributes: `'` as well as `"`, and a `>` inside an `AttValue` that does not close the tag (XML 1.0 §2.4). That used to be a flag; it is now the only behaviour, because the measurement below put its price at the noise floor while the flagless path could mis-read such a head silently.
+
+Comments, PIs and DOCTYPE are **one** flag rather than three for the same reason in reverse: they run through the same `ReadHeadMarkup` / `SkipBodyMarkup` code, so the first of them costs ~15% and the other two are free. Splitting them bought a strictness nobody asked for at the price of a combinatorial surface in the generator.
+
+Narrow include — only CDATA, prefix already `xsi`:
+
+```csharp
+[XmlFeatures(XmlFeature.CData)]
+[XmlSubject(typeof(Order), true)]
+public partial class OrderSerializer { }
+```
+
+Full previous native set:
+
+```csharp
+[XmlFeatures(XmlFeature.SystemXmlCompatible)]
+[XmlSubject(typeof(Order), true)]
+public partial class OrderSerializer { }
+```
+
+Compat does not need the attribute: the generated facade host is `SystemXmlCompatible` internally. A `[XmlSubject]` class in the same assembly does **not** inherit those flags.
+
+Disabled feature is an **error**, not a skip: a comment on a default host throws, it is not ignored.
+
+`CData` is the only flag with an effect beyond the scanner: `IInjector` has no CDATA-aware overload, so a `CData` host decodes string members directly and a custom injector is not called for them. `Markup` alone keeps the injector.
+
+The prolog follows the same rule. Each generated serializer gets its own `CutXmlHead`, so the flag never has to be repeated by hand:
+
+```csharp
+//snips <?xml ...?> always; the DOCTYPE only because this host enabled Markup
+var body = OrderSerializer.CutXmlHead(xml.AsSpan());
+OrderSerializer.Deserialize(DefaultInjector.Instance, body, out Order order);
+```
+
+### Cost of turning a flag on
+
+```bash
+dotnet run -c Release -f net10.0 --project XmlSerDe.PerformanceTests -- --feature-cost
+```
+
+The probe measures a ladder of hosts (`XmlSerDe.Tests/Complex/FeatureLadderHosts.cs`) that differ **only** in `[XmlFeatures]` — same type graph, same exhauster, same input. The input is the REGULAR document (`ComplexFixture.AuxXml`) and contains none of the opt-in constructions, so what is measured is the price of *being able* to understand them, not the price of a different document. REGULAR is the most telling shape available: 26 elements pay `ReadHead` per tag, three `xsi:type` attributes pay attribute parsing and prefix lookup, and the entity-escaped strings pay the decoder and — on serialize — the char guard.
+
+It is not a BenchmarkDotNet job: the process pins itself to one core and raises its priority, every case is warmed up, then all cases are timed round-robin (direction alternating) for fifteen rounds and the best time of each is kept. Two facts serve as the built-in noise check, and both hold in the numbers below: `CharGuard` must not move deserialization at all, and no other flag may move serialization at all. Anything under ~3% is noise. Numbers are the median of three runs on net10.0, 13th Gen Intel Core i7-13700H. Absolute times drift a few percent between runs; only ratios measured inside one round-robin are comparable.
+
+**One flag at a time, over the flagless baseline:**
+
+| Host | Deserialize | Serialize | Where it goes |
+|------|------------:|----------:|---------------|
+| default (no flags) | 1.00 (~2.0 µs) | 1.00 (~715 ns) | |
+| `Markup` | **1.14×** | 1.00× | `ReadHeadMarkup` / `SkipBodyMarkup` / `SkipToTagMarkup`: `<!`/`<?` becomes a skip instead of an error, on every tag |
+| `CData` | **1.14×** | 1.00× | same markup path, plus the CDATA-aware decoder on every string |
+| `FlexibleXsiPrefix` | **1.10×** | 1.00× | xmlns-URI scan over the attributes of every head that has any |
+| `CharGuard` | 1.00× | **1.14×** | `AppendEncoded` instead of `AppendEncodedUnchecked` — one extra pass over each string |
+
+Deserialization-side flags do not touch the serializer at all: the generated `Serialize` is byte-identical for every host except the `CharGuard` one. The 1.00× column is a measurement of that fact, not a rounding.
+
+**Cumulatively, in enum order — the marginal column is what each step adds to the one above it:**
+
+| Step | Deserialize | vs previous | Serialize | vs previous |
+|------|------------:|------------:|----------:|------------:|
+| default (no flags) | 1.00 | — | 1.00 | — |
+| `+ Markup` | 1.15× | **+15%** | 1.00× | — |
+| `+ CData` | 1.16× | ~0 | 1.00× | — |
+| `+ FlexibleXsiPrefix` | 1.28× | **+11%** | 1.00× | — |
+| `+ CharGuard` = `SystemXmlCompatible` | 1.27× | ~0 | **1.17×** | **+17%** |
+
+Three prices, and the table now has one row per price. `Markup` is the cost of entering the markup-aware scan (~15%); `CData` rides on it for free and pays only its own decoder; `FlexibleXsiPrefix` is an extra attribute scan per head (~11%); `CharGuard` is one extra pass per string on serialize (~15%). Nothing here is cheap enough to enable "just in case", and nothing is expensive enough to split further.
+
+Quote-aware heads used to be the fifth row, at **1.03×** measured the same way — the only flag whose price sat at the noise floor. It is no longer a flag; that ~3% is now part of the default, in exchange for the default no longer truncating a head at a `>` inside an attribute value.
+
+**Whole documents, same probe:**
+
+| Case | Time | Allocated |
+|------|-----:|----------:|
+| REGULAR deserialize, default | ~2.0 µs | 792 B |
+| REGULAR deserialize, `SystemXmlCompatible` | ~2.6 µs (1.25×) | 792 B |
+| REGULAR deserialize, `SystemXmlCompatible` on the pre-opt-in document (CDATA + `p3:type`) | ~2.5 µs | 792 B |
+| REGULAR serialize, default | ~715 ns | 0 B |
+| REGULAR serialize, `SystemXmlCompatible` | ~825 ns (1.15×) | 0 B |
+
+The REGULAR matrix also has a `REGULAR_COMPAT` category (`XmlSerializerDeserializerCompatible` on the same `AuxXml`) for a BenchmarkDotNet comparison of default vs `SystemXmlCompatible` on the large document.
+
 ### Example: polymorphic serializer
 
 ```csharp
@@ -719,7 +831,7 @@ public partial class MySerializer { }
 Produces XML compatible with `System.Xml.Serialization` polymorphism:
 
 ```xml
-<BaseInfo xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" p3:type="Derived1Info">
+<BaseInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Derived1Info">
   <BasePersonificationInfo>my string</BasePersonificationInfo>
 </BaseInfo>
 ```
@@ -740,7 +852,8 @@ For each supported builtin type, `IInjector` defines:
 - Validates the declared XSD element name, then delegates to `ParseBody`.
 - Uses standard `*.Parse` methods for numeric types, `DateTime.Parse`, `Guid.Parse`, etc.
 - **Culture-invariant:** every numeric and `DateTime` parse path uses `CultureInfo.InvariantCulture` explicitly, matching XSD's fixed lexical space regardless of the ambient thread culture.
-- **Strings:** supports CDATA blocks (concatenates multiple), then `WebUtility.HtmlDecode`.
+- **Strings (generated default):** the host calls `inj.ParseBody`, and `DefaultInjector` decodes with `XmlTextDecoder.DecodeElementText` — predefined entities and CharRef, no CDATA. CDATA requires `[XmlFeatures(XmlFeature.CData)]`, and that flag is the one case where the generated host decodes a string itself (`DecodeElementTextWithCData`) instead of going through the injector: `IInjector` has no CDATA-aware overload. A custom injector that rewrites strings therefore keeps working everywhere except on a `CData` host.
+- **Strings (`DefaultInjector` / `XmlNode2`):** the public `XmlNode2` walker still understands CDATA; that is not the generated POCO hot path.
 - **Booleans:** `"true"` / `"false"`.
 
 ### Custom injector
@@ -761,7 +874,7 @@ The generator emits a `Deserialize(MyInjector inj, ReadOnlySpan<char> xml, out T
 
 ### XmlNode2
 
-`XmlNode2` in `XmlSerDe.Common` is a `ref struct` that walks XML without allocating DOM nodes. The root `Deserialize` overload builds `XmlDeserializeSettings` from heuristics (whether comments or CDATA blocks are likely present) and iterates child nodes via `XmlNode2.GetFirst`.
+`XmlNode2` in `XmlSerDe.Common` is a `ref struct` that walks XML without allocating DOM nodes. It remains a **full** XML 1.0 subset (comments, CDATA, quoted attributes, flexible `xsi` prefix) for callers that construct it directly. Generated `[XmlSubject]` deserializers do **not** go through `XmlNode2` and do **not** build `XmlDeserializeSettings` from document-wide comment/CDATA heuristics.
 
 Its attribute parser follows XML 1.0's actual grammar rather than a narrow subset:
 
@@ -781,7 +894,8 @@ An **exhauster** (`IExhauster`) is the output sink for serialized data. For each
 
 - `Append(string? value)` — raw append.
 - `AppendEncoded(string? value)` — validates then HTML-encodes then appends (used for `string` builtins in element text).
-- `AppendAttributeEncoded(string? value)` — the same for an attribute value, which needs a wider escape set: see the well-formedness note below.
+- `AppendEncodedUnchecked(string? value)` — the same without the `XmlCharGuard` check. This is what a host without `[XmlFeatures(XmlFeature.CharGuard)]` calls; it still escapes straight into the sink, so turning the flag off costs no allocation and keeps `null` writing nothing.
+- `AppendAttributeEncoded(string? value)` / `AppendAttributeEncodedUnchecked(string? value)` — the same pair for an attribute value, which needs a wider escape set: see the well-formedness note below.
 - `AppendBase64(byte[]? value)` — a `byte[]` as one `base64Binary` token. No escaping at all: the base64 alphabet contains no markup and no whitespace, so the same token serves both element text and attribute values. Length estimators are the only exhausters that do not call the encoder here — they compute the encoded length arithmetically rather than building a string only to measure it.
 
 Null nullable values (including nullable value types like `int?`, `DateTime?`) are skipped entirely on serialize rather than emitting an empty tag.
@@ -790,7 +904,7 @@ Null nullable values (including nullable value types like `int?`, `DateTime?`) a
 
 **Attribute values escape more than text:** in element text a tab, CR or LF is an ordinary character, but inside an attribute value a reader is *required* to replace each one with a space (XML 1.0 §3.3.3, attribute-value normalization) — the only way to get one through is a character reference written by the producer. So `AppendAttributeEncoded` (`XmlAttributeEncoder`) escapes `< > & "` plus CR, LF and TAB, and leaves the apostrophe alone since the value is always double-quoted — character for character what `XmlWriter` does. It returns the original string instance when there is nothing to escape, which is the overwhelmingly common case.
 
-**Well-formedness guard:** `AppendEncoded` calls `XmlCharGuard.EnsureValidXmlChars` before encoding. `WebUtility.HtmlEncode` escapes `<`, `>`, `&`, `"`, `'` but doesn't know about XML's `Char` production (XML 1.0 §2.2), which forbids most C0 control characters, unpaired surrogates, and `U+FFFE`/`U+FFFF` outright — there is no legal escape for these in XML. String content containing them throws `ArgumentException` instead of silently producing not-well-formed output. Legal whitespace (tab/CR/LF) is allowed through.
+**Well-formedness guard:** `AppendEncoded` calls `XmlCharGuard.EnsureValidXmlChars` before encoding; `AppendEncodedUnchecked` does not, and it is the one a host without `XmlFeature.CharGuard` calls. `WebUtility.HtmlEncode` escapes `<`, `>`, `&`, `"`, `'` but doesn't know about XML's `Char` production (XML 1.0 §2.2), which forbids most C0 control characters, unpaired surrogates, and `U+FFFE`/`U+FFFF` outright — there is no legal escape for these in XML. String content containing them throws `ArgumentException` instead of silently producing not-well-formed output. Legal whitespace (tab/CR/LF) is allowed through.
 
 ### Built-in exhausters
 
@@ -898,8 +1012,8 @@ public class Message
 
 ## Limitations
 
-- **No CDATA serialization** — string content is always emitted entity-escaped, never wrapped in `<![CDATA[...]]>`. Deserialization does read CDATA sections, in any position within an element's text and any number of them.
-- **No well-formedness *validation* of input.** The deserializer reads what it needs and skips the rest, so a malformed document is often accepted rather than rejected: an unbalanced `<A><B></A>` is caught only where a closing tag is actually checked, unknown elements are skipped, and a duplicated attribute silently resolves to the first one. What it will *not* do is fail with a bounds error: parsing a span is index arithmetic, and an `IndexOutOfRangeException` there is a statement about the parser, not about the document. Every malformed input ends either in a result or in an `InvalidOperationException` (or a `FormatException` when a lexeme is in place but is not a number). That invariant is held by a fuzz corpus built mechanically from valid documents — every prefix, every single-character deletion, every single-character replacement with a markup character — plus hand-written broken heads and unterminated comment/CDATA/PI/DOCTYPE markup; a 20 000-deep unknown element is included too, since skipping a foreign subtree counts tags rather than recursing. Still: leniency is not validation, so a document from an untrusted source can produce a partially populated object without complaint. (Serialization *output*, by contrast, is guarded: `AppendEncoded` rejects string content containing characters illegal per XML 1.0's `Char` production — see [`XmlCharGuard`](#exhauster).)
+- **No CDATA serialization** — string content is always emitted entity-escaped, never wrapped in `<![CDATA[...]]>`. Deserialization of CDATA is **opt-in** (`[XmlFeatures(XmlFeature.CData)]`); the default native path treats a literal `<` in element text as an error.
+- **No well-formedness *validation* of input.** The deserializer reads what it needs and skips the rest, so a malformed document is often accepted rather than rejected: an unbalanced `<A><B></A>` is caught only where a closing tag is actually checked, unknown elements are skipped, and a duplicated attribute silently resolves to the first one. What it will *not* do is fail with a bounds error: parsing a span is index arithmetic, and an `IndexOutOfRangeException` there is a statement about the parser, not about the document. Every malformed input ends either in a result or in an `InvalidOperationException` (or a `FormatException` when a lexeme is in place but is not a number). That invariant is held by a fuzz corpus built mechanically from valid documents — every prefix, every single-character deletion, every single-character replacement with a markup character — plus hand-written broken heads and unterminated comment/CDATA/PI/DOCTYPE markup; a 20 000-deep unknown element is included too, since skipping a foreign subtree counts tags rather than recursing. Still: leniency is not validation, so a document from an untrusted source can produce a partially populated object without complaint. (Serialization *output* may run `XmlCharGuard` when `[XmlFeatures(XmlFeature.CharGuard)]` is set: illegal XML 1.0 `Char` then throws `ArgumentException`. Default native serialize does not.)
 - **Parameterless constructor required** unless `[XmlFactory]` is used.
 - Serialized types must be visible to the serializer partial class.
 - Members need accessible setters for deserialization, except setter-less `List<T>` properties (see [Members](#members)).
@@ -914,8 +1028,8 @@ See also [Out of scope by design](#out-of-scope-by-design) for XML 1.0 features 
 
 XmlSerDe targets POCO ↔ XML data binding, not general-purpose XML processing. The following XML 1.0 / XML Namespaces features are consequences of that scope, not oversights — each is unlikely to matter for typical data-transfer XML (including everything `System.Xml.Serialization` itself produces for the primitives, collections, and polymorphism XmlSerDe supports), but matters for interop with documents from other kinds of XML producers.
 
-- **No DTD support.** A `<!DOCTYPE ...>` in the prolog is skipped over, not parsed — so any custom general entities it declares are not resolved. Only the five predefined XML entities (`&amp;`, `&lt;`, `&gt;`, `&apos;`, `&quot;`) plus character references (`&#49;`, `&#x31;`) are understood; a reference to anything else — including an HTML named entity such as `&nbsp;` — throws, because without a DTD declaring it that is a well-formedness error (XML 1.0 §4.1, WFC: Entity Declared) rather than text to pass through. There's also no DTD-based content validation and no fetching of external DTDs.
-- **No general XML Namespaces support.** Only one namespace is special-cased: `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"` for `xsi:type` polymorphism (the prefix itself is flexible — deserialize resolves whichever prefix is actually bound to that URI). Beyond that, element and attribute names are compared as literal text, prefix included; there's no general prefix-to-URI resolution or default-namespace (`xmlns="uri"`) handling.
+- **No DTD support.** A `<!DOCTYPE ...>` is a parse error on the default native path. With `[XmlFeatures(XmlFeature.Markup)]` (or `CutXmlHead(true, span)`) it is skipped, not parsed — so any custom general entities it declares are not resolved. Only the five predefined XML entities (`&amp;`, `&lt;`, `&gt;`, `&apos;`, `&quot;`) plus character references (`&#49;`, `&#x31;`) are understood; a reference to anything else — including an HTML named entity such as `&nbsp;` — throws, because without a DTD declaring it that is a well-formedness error (XML 1.0 §4.1, WFC: Entity Declared) rather than text to pass through. There's also no DTD-based content validation and no fetching of external DTDs.
+- **No general XML Namespaces support.** Only one namespace is special-cased: `http://www.w3.org/2001/XMLSchema-instance` for `xsi:type` / `xsi:nil`. Default native reads the **literal** prefix `xsi`. A different prefix (`xmlns:p3=… p3:type=…`) needs `[XmlFeatures(XmlFeature.FlexibleXsiPrefix)]`. Beyond that, element and attribute names are compared as literal text, prefix included; there's no general prefix-to-URI resolution or default-namespace (`xmlns="uri"`) handling.
 - **`xml:space`, `xml:lang`, `xml:base` are not interpreted.** In practice this rarely matters for `xml:space`: text content is always preserved verbatim regardless (matching the XML default, `xml:space="preserve"`) — but `xml:space="default"`, which would opt back into whitespace collapsing, has no effect either.
 - **No mixed content.** An element is parsed as either plain text or a list of child elements, never an interleaving of both — text appearing between child elements is discarded rather than bound to any member. Consequently a type that combines an `[XmlText]` member with element members — which `System.Xml.Serialization` does support — fails to build, rather than silently producing a document with the text missing.
 - **No duplicate-attribute detection.** XML 1.0 forbids two attributes with the same name on one element; XmlSerDe doesn't check for this and silently takes the first match.
@@ -960,9 +1074,12 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 
 | Tests | Feature |
 |-------|---------|
-| `XmlObject1_*` | Empty root, self-closing tags, `xsi:type`, XML comments, stream serialization |
-| `XmlObject2_*` | Primitives, XML entity decoding, XML declaration stripping |
-| `XmlObject4_5_*` | Abstract polymorphism |
+| `XmlObject1_*` | Empty root, self-closing tags, `xsi:type`, stream serialization; comment documents use `XmlSerializerDeserializerComments` |
+| `XmlObject2_*` | Primitives, XML entity decoding, XML declaration stripping; comment documents use the Comments host |
+| `XmlObject4_5_*` | Abstract polymorphism with `xsi:type` |
+| `XmlFeatureFixture` | Per-flag matrix from `docs/opt-in-xml-features.md`: default rejects comments/CDATA/PI/DOCTYPE/`p3:type`/single quotes; each flag accepts its document and rejects a neighbour |
+| `XmlFeatureGeneratorFixture` / `HostFeatureBindingFixture` | Generated text has no document-wide heuristics on default hosts; flags → primitive names without Roslyn; two hosts in one compilation stay distinct; compat injects the full set without a user `[XmlFeatures]` |
+| `GeneratorIncrementalityFixture` | Cache hits on comments in the host file; cache misses on `[XmlFeatures]` add/remove and on member rename in another file |
 | `XmlObject6_*` | `List<string>` |
 | `XmlObject7_8_*` | Public fields |
 | `XmlObject9_10_*`, `XmlObject11_12_*` | Non-abstract / abstract base polymorphism |
@@ -975,17 +1092,17 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | `XmlObject25_26_27_*`, `XmlObject28_29_30_*` | Polymorphism on nested properties and in lists |
 | `ComplexFixture` / `ComplexFixtureV2` | Full document with derived types, enums, `DateTime`, `XmlFactory` reuse |
 | `DeepFixture` | Self-referencing type nested 100 levels deep; guards the DEEP benchmark by asserting the whole chain is walked and matches `System.Xml` |
-| `SinglePassParserFixture` | Consequences of single-pass deserialization: unknown elements skipped by tag balance (incl. `>` inside attribute values, CDATA, nested children), self-closing children not ending the sibling loop, mismatched/truncated closing tags rejected, compact vs. indented parity |
+| `SinglePassParserFixture` | Consequences of single-pass deserialization: unknown elements skipped by tag balance (plain skip and `>` inside attribute values on the default host; CDATA-in-unknown on the CData host), self-closing children not ending the sibling loop, mismatched/truncated closing tags rejected, compact vs. indented parity |
 | `XmlTextDecoderFixture` | Reference expansion per XML 1.0 §4.1: the five predefined entities, decimal/hex character references incl. above-BMP surrogate pairs, CDATA in any position, attribute-value normalization vs. references, and every reference form XML rejects (undeclared, unterminated, empty, uppercase `X`, illegal or out-of-range code point) |
 | `PooledArrayBuilderFixture` | Array members across the pooled builder's growth steps (every other array test uses 3 elements and never reaches one), for primitive, struct and reference element types; empty-array and builder-reuse semantics |
 | `SerDeFixtureV2` | Same feature set as `SerDeFixture`, exercised through a second serializer declaration to catch cross-class code-gen issues |
 | `CoverageExpansionFixture` | All primitive types incl. `decimal`/`Guid` round-trips, nullable value-type omission on serialize, `LengthEstimatorExhauster` upper-bound accuracy, empty/null collections, CDATA strings (including concatenated blocks), HTML-entity-encoded string serialization |
 | `RegularAccEstMemoryFixture` | `LengthEstimatorExhauster` never undershoots REGULAR, including apostrophe → `&#39;` overhead that a tight estimate must count |
-| `SpecComplianceFixture` | XML 1.0 edge cases: unescaped `>` in attribute values (including a foreign-producer-style extra attribute during polymorphic deserialize), prolog processing instructions / `DOCTYPE` (incl. internal subset) being skipped, attribute-value whitespace normalization vs. character references |
+| `SpecComplianceFixture` | XML 1.0 edge cases: unescaped `>` in attribute values (default host), prolog PI / DOCTYPE skipped when `Markup` (or `CutXmlHead(true, …)`) is on, `XmlNode2` attribute-value whitespace normalization vs. character references |
 | `MalformedInputFixture` | Malformed input never produces a bounds error: a corpus built mechanically from valid documents (every prefix, every single-character deletion, every single-character replacement with a markup character) plus broken attribute heads, unterminated comment/CDATA/PI/DOCTYPE markup, and a 20 000-deep unknown element. Every outcome must be a result, an `InvalidOperationException` or a `FormatException` |
 | `Interop/*` | Differential harness: 36 POCO shapes run through both XmlSerDe and `System.Xml.Serialization` in all three directions (each reads the other's output; the two documents are compared). Divergences are pinned by tests as well, so closing one turns a test red on purpose. A compatibility table is written to `interop-report.md` next to the test assembly |
 | `Interop/BinaryLexicalFixture` | `base64Binary` lexical edges that neither side writes and the differential runs therefore cannot produce: empty and self-closing elements decoding to `byte[0]` rather than `null`, whitespace inside the lexeme, a corrupt lexeme. Each is asserted as "both sides agree", not as "ours works" |
-| `Compat/CompatFixture` | The facade at runtime: it *is* a `System.Xml.Serialization.XmlSerializer`, a refused type still round-trips through the fallback, a transitive graph is accelerated from a single call site, every overload — including calls through the base-typed reference — produces a document the BCL can read, and a failure surfaces as the same exception the BCL raises for it (the expectation is taken from the BCL inside the test, not written down as a literal). Also the paths that must *not* be accelerated: a subscriber on the deserialization events (whether attached to the instance or passed into the call), a non-null `encodingStyle`, and a non-empty extra constructor argument — plus `FromTypes` and the factory, whose types are named nowhere else, so the test fails if the generator stops seeing those call sites |
+| `Compat/CompatFixture` | The facade at runtime: it *is* a `System.Xml.Serialization.XmlSerializer`, a refused type still round-trips through the fallback, a transitive graph is accelerated from a single call site, every overload — including calls through the base-typed reference — produces a document the BCL can read, and a failure surfaces as the same exception the BCL raises for it (the expectation is taken from the BCL inside the test, not written down as a literal). Also the paths that must *not* be accelerated: a subscriber on the deserialization events (whether attached to the instance or passed into the call), a non-null `encodingStyle`, and a non-empty extra constructor argument — plus `FromTypes` and the factory, whose types are named nowhere else, so the test fails if the generator stops seeing those call sites. Opt-in XML (CDATA, comments, `p3:type`, quotes, `>` in attributes) is accepted **without** a user `[XmlFeatures]`; a native default host in the same process still rejects CDATA |
 | `Compat/CompatGeneratorFixture` | The facade at build time, driven through `CSharpGeneratorDriver`: which types are refused and why (including attributes that would otherwise be ignored silently, and the controls proving the refusals didn't spread — a plain enum and six ordinary naming attributes stay accelerated), which call-site shapes are recognized (`new`, `FromTypes`, the facade's own factory — but not the BCL's, and not an array in a variable), that a refusal of one root leaves the others accelerated, that `XmlSerDeCompatStrict` changes severity only, and that a project without `XmlSerDe.Compat` gets no generated code at all |
 
 ## Alternatives

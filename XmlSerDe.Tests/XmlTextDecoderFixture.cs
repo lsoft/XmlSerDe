@@ -96,7 +96,7 @@ namespace XmlSerDe.Tests
         {
             Assert.Equal(
                 "<a href='x'> & </a>",
-                XmlTextDecoder.DecodeElementText("<![CDATA[<a href='x'> & </a>]]>".AsSpan())
+                XmlTextDecoder.DecodeElementTextWithCData("<![CDATA[<a href='x'> & </a>]]>".AsSpan())
                 );
         }
 
@@ -105,7 +105,7 @@ namespace XmlSerDe.Tests
         {
             Assert.Equal(
                 "firstsecond",
-                XmlTextDecoder.DecodeElementText("<![CDATA[first]]><![CDATA[second]]>".AsSpan())
+                XmlTextDecoder.DecodeElementTextWithCData("<![CDATA[first]]><![CDATA[second]]>".AsSpan())
                 );
         }
 
@@ -117,7 +117,7 @@ namespace XmlSerDe.Tests
             //came back with the markup still in it
             Assert.Equal(
                 "before<raw>after",
-                XmlTextDecoder.DecodeElementText("before<![CDATA[<raw>]]>after".AsSpan())
+                XmlTextDecoder.DecodeElementTextWithCData("before<![CDATA[<raw>]]>after".AsSpan())
                 );
         }
 
@@ -126,7 +126,7 @@ namespace XmlSerDe.Tests
         {
             Assert.Equal(
                 "&&amp;&",
-                XmlTextDecoder.DecodeElementText("&amp;<![CDATA[&amp;]]>&amp;".AsSpan())
+                XmlTextDecoder.DecodeElementTextWithCData("&amp;<![CDATA[&amp;]]>&amp;".AsSpan())
                 );
         }
 
@@ -134,7 +134,7 @@ namespace XmlSerDe.Tests
         public void ElementText_UnterminatedCData_Throws()
         {
             Assert.Throws<InvalidOperationException>(
-                () => XmlTextDecoder.DecodeElementText("<![CDATA[no end".AsSpan())
+                () => XmlTextDecoder.DecodeElementTextWithCData("<![CDATA[no end".AsSpan())
                 );
         }
 
@@ -144,6 +144,14 @@ namespace XmlSerDe.Tests
             //XML 1.0 §2.4 forbids a literal '<' in character data
             Assert.Throws<InvalidOperationException>(
                 () => XmlTextDecoder.DecodeElementText("a < b".AsSpan())
+                );
+        }
+
+        [Fact]
+        public void ElementText_CData_IsRejectedByDefaultDecoder()
+        {
+            Assert.Throws<InvalidOperationException>(
+                () => XmlTextDecoder.DecodeElementText("<![CDATA[x]]>".AsSpan())
                 );
         }
 
@@ -297,7 +305,7 @@ namespace XmlSerDe.Tests
             Assert.True(source.Length > 256);
             Assert.Equal(
                 expected.ToString(),
-                XmlTextDecoder.DecodeElementText(source.ToString().AsSpan())
+                XmlTextDecoder.DecodeElementTextWithCData(source.ToString().AsSpan())
                 );
         }
 

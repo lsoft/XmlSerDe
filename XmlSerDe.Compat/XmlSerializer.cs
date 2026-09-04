@@ -593,7 +593,11 @@ namespace XmlSerDe.Compat
         private static object? Deserialize(ReadOnlySpan<char> root, XmlSerDeEntry entry)
         {
             var head = new XmlHead();
-            XmlScan.ReadHead(true, true, root, ReadOnlySpan<char>.Empty, ref head);
+            XmlScan.ReadHeadMarkup(
+                cdata: true,
+                flexibleXsiPrefix: true,
+                root, ReadOnlySpan<char>.Empty, ref head
+                );
 
             if (head.IsBodyless && head.IsNil())
             {

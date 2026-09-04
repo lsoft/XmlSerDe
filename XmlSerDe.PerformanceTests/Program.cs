@@ -14,6 +14,12 @@ namespace XmlSerDe.PerformanceTests
     {
         static void Main(string[] args)
         {
+            if (args.Length > 0 && string.Equals(args[0], "--feature-cost", StringComparison.Ordinal))
+            {
+                FeatureCostProbe.Run();
+                return;
+            }
+
 #if DEBUG
             new DeserializeMatrixFixture();
             new SerializeMatrixFixture();

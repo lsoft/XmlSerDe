@@ -24,6 +24,7 @@ namespace XmlSerDe.PerformanceTests;
 public class DeserializeMatrixFixture
 {
     private const string RegularCategory = "REGULAR";
+    private const string RegularCompatibleCategory = "REGULAR_COMPAT";
     private const string HugeCategory = "HUGE";
     private const string DeepCategory = "DEEP";
 
@@ -67,6 +68,13 @@ public class DeserializeMatrixFixture
     public DeepNode Deserialize_Deep_XmlSerDe()
     {
         return DeepFixture.Deserialize_XmlSerDe(DeepFixture.DeepXml.AsSpan());
+    }
+
+    [BenchmarkCategory(RegularCompatibleCategory)]
+    [Benchmark(Description = "Deserialize: REGULAR: XmlSerDe SystemXmlCompatible")]
+    public InfoContainer Deserialize_Regular_XmlSerDe_Compatible()
+    {
+        return ComplexFixture.Deserialize_XmlSerDe_Compatible(ComplexFixture.AuxXml.AsSpan());
     }
 }
 

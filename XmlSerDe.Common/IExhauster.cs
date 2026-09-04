@@ -60,9 +60,23 @@ namespace XmlSerDe.Common
         void Append(string? value);
 
         /// <summary>
-        /// Текст тела элемента: экранируется разметка.
+        /// Текст тела элемента: экранируется разметка, плюс проверка Char
+        /// production XML 1.0 §2.2 (<see cref="XmlCharGuard"/>).
         /// </summary>
         void AppendEncoded(string? value);
+
+        /// <summary>
+        /// То же без <see cref="XmlCharGuard"/>: default-путь генератора,
+        /// у которого <see cref="XmlFeature.CharGuard"/> выключен.
+        ///
+        /// Это отдельный метод, а не <c>Append(XmlTextEncoder.Encode(value))</c>
+        /// на стороне генератора: <see cref="XmlTextEncoder.Encode"/> при наличии
+        /// экранируемого символа строит промежуточную строку, тогда как
+        /// экранирование прямо в буфер обходится без аллокации вовсе. Ради
+        /// выключенной фичи платить аллокацией на каждую строку - ровно то, чего
+        /// opt-in должен был избежать.
+        /// </summary>
+        void AppendEncodedUnchecked(string? value);
 
         /// <summary>
         /// Значение атрибута: сверх разметки экранируются ещё CR, LF и TAB, иначе
@@ -70,6 +84,11 @@ namespace XmlSerDe.Common
         /// round-trip. См. <see cref="XmlAttributeEncoder"/>.
         /// </summary>
         void AppendAttributeEncoded(string? value);
+
+        /// <summary>
+        /// То же без <see cref="XmlCharGuard"/>.
+        /// </summary>
+        void AppendAttributeEncodedUnchecked(string? value);
 
         /// <summary>
         /// <c>byte[]</c> одной лексемой base64Binary. Экранирования здесь нет вовсе:

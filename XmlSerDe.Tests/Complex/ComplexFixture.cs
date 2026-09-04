@@ -86,6 +86,54 @@ namespace XmlSerDe.Tests.Complex
         public const string AuxXml = @"
 <InfoContainer>
     <InfoCollection>
+        <BaseInfo xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""Derived3Info"">
+            <Email>example@example.com</Email>
+        </BaseInfo>
+        <BaseInfo xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""Derived1Info"">
+            <BasePersonificationInfo1>" + XmlEncodedString + @"</BasePersonificationInfo1>
+            <BasePersonificationInfo2>" + XmlEncodedString + XmlEncodedString + @"</BasePersonificationInfo2>
+        </BaseInfo>
+        <BaseInfo xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""Derived2Info"">
+            <HotKeyUsed>false</HotKeyUsed>
+            <StepsCounter>1</StepsCounter>
+            <EventsTime>
+                <SerializeKeyValue>
+                    <Key>Three</Key>
+                    <Value>
+                        <StartTime>2022-09-28T14:51:39.2438815+03:00</StartTime>
+                        <SecondsSpan>3</SecondsSpan>
+                    </Value>
+                </SerializeKeyValue>
+                <SerializeKeyValue>
+                    <Key>One</Key>
+                    <Value>
+                        <StartTime>2022-09-28T14:28:00.5009069+03:00</StartTime>
+                        <SecondsSpan>0</SecondsSpan>
+                    </Value>
+                </SerializeKeyValue>
+                <SerializeKeyValue>
+                    <Key>Two</Key>
+                    <Value>
+                        <StartTime>2022-09-28T14:28:02.3089553+03:00</StartTime>
+                        <SecondsSpan>1</SecondsSpan>
+                    </Value>
+                </SerializeKeyValue>
+            </EventsTime>
+        </BaseInfo>
+    </InfoCollection>
+</InfoContainer>
+";
+
+        /// <summary>
+        /// Тот же документ в форме, которую писали до opt-in: CDATA вместо
+        /// сущностей и префикс p3 вместо xsi. Default-путь его читать не
+        /// обязан (docs/opt-in-xml-features.md §7), поэтому в бенчмарке и в
+        /// round-trip тестах стоит <see cref="AuxXml"/>, а этот документ
+        /// остаётся входом для opt-in / compat.
+        /// </summary>
+        public const string AuxXmlLegacy = @"
+<InfoContainer>
+    <InfoCollection>
         <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived3Info"">
             <Email>example@example.com</Email>
         </BaseInfo>
@@ -124,20 +172,20 @@ namespace XmlSerDe.Tests.Complex
 </InfoContainer>
 ";
 
-        public const string PartXml = @"          <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived3Info"">
+        public const string PartXml = @"          <BaseInfo xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""Derived3Info"">
 <Email>example@example.com</Email>
 </BaseInfo>";
 
         public const string InternalsXml = @"
     <InfoCollection>
-        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived3Info"">
+        <BaseInfo xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""Derived3Info"">
             <Email>example@example.com</Email>
         </BaseInfo>
-        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived1Info"">
+        <BaseInfo xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""Derived1Info"">
             <BasePersonificationInfo1>" + XmlEncodedString + @"</BasePersonificationInfo1>
-            <BasePersonificationInfo2><![CDATA[" + RawString + @"]]><![CDATA[" + RawString + @"]]></BasePersonificationInfo2>
+            <BasePersonificationInfo2>" + XmlEncodedString + XmlEncodedString + @"</BasePersonificationInfo2>
         </BaseInfo>
-        <BaseInfo xmlns:p3=""http://www.w3.org/2001/XMLSchema-instance"" p3:type=""Derived2Info"">
+        <BaseInfo xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:type=""Derived2Info"">
             <HotKeyUsed>false</HotKeyUsed>
             <StepsCounter>1</StepsCounter>
             <EventsTime>
@@ -203,6 +251,25 @@ namespace XmlSerDe.Tests.Complex
             var deser_xmlserde = Deserialize_XmlSerDe(AuxXml.AsSpan());
 
             CheckForEquality(deser_systemxml, deser_xmlserde);
+        }
+
+        /// <summary>
+        /// Старая форма того же документа (CDATA + p3) читается хостом с
+        /// <see cref="XmlFeature.SystemXmlCompatible"/> так же, как её читает
+        /// BCL, и не читается default-хостом. Это и есть §7: документ
+        /// разделён, а не переписан молча.
+        /// </summary>
+        [Fact]
+        public void DeserializeLegacyDocument_OnlyWithFeatures_CheckForEquality()
+        {
+            var deser_systemxml = Deserialize_SystemXml(AuxXmlLegacy);
+            var deser_xmlserde = Deserialize_XmlSerDe_Compatible(AuxXmlLegacy.AsSpan());
+
+            CheckForEquality(deser_systemxml, deser_xmlserde);
+
+            Assert.ThrowsAny<Exception>(
+                () => Deserialize_XmlSerDe(AuxXmlLegacy.AsSpan())
+                );
         }
 
         private void CheckForEquality(InfoContainer first, InfoContainer second)
@@ -323,6 +390,13 @@ namespace XmlSerDe.Tests.Complex
         public static InfoContainer Deserialize_XmlSerDe(ReadOnlySpan<char> xml)
         {
             XmlSerializerDeserializer.Deserialize(DefaultInjector.Instance, xml, out InfoContainer r);
+            return r;
+        }
+
+        [MethodImpl(TestMethodImplOptions.AggressiveOptimization)]
+        public static InfoContainer Deserialize_XmlSerDe_Compatible(ReadOnlySpan<char> xml)
+        {
+            XmlSerializerDeserializerCompatible.Deserialize(DefaultInjector.Instance, xml, out InfoContainer r);
             return r;
         }
 
