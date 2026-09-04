@@ -317,10 +317,18 @@ namespace XmlSerDe.Common
 
         /// <summary>
         /// Что может закончить имя атрибута: ':' (префиксованное имя), '=' (имя
-        /// без префикса) либо '/' и '&gt;' (нода закрылась, атрибутов больше нет).
+        /// без префикса), '/' и '&gt;' (нода закрылась, атрибутов больше нет)
+        /// либо любой символ S (XML 1.0 §3.1 разрешает пробелы вокруг '=').
+        ///
+        /// S здесь не для того, чтобы принимать больше, а чтобы имя кончалось
+        /// там, где оно кончается по спецификации: без S в наборе
+        /// <c>&lt;Foo a = "1"&gt;</c> давал имя <c>"a "</c> (с пробелом) и не
+        /// совпадал ни с одним членом, а <c>&lt;Foo id Tag="x"&gt;</c> - имя
+        /// <c>"id Tag"</c>. Дополнительного прохода по имени это не стоит:
+        /// поиск тот же самый, набор шире на четыре значения.
         /// </summary>
         private static readonly SearchValues<char> AttributeNameEndValues =
-            SearchValues.Create("=/>:");
+            SearchValues.Create("=/>: \t\r\n");
 
         /// <summary>
         /// Значению атрибута нужна нормализация по §3.3.3, только если в нём есть
@@ -464,7 +472,7 @@ namespace XmlSerDe.Common
             var gt = span.IndexOf('>');
             if (gt < 0)
             {
-                throw new InvalidOperationException("Closing '>' not found for end tag.");
+                throw new XmlDocumentException("Closing '>' not found for end tag.");
             }
 
             result = new XmlHead(
@@ -592,7 +600,7 @@ namespace XmlSerDe.Common
             var index = body.IndexOf('<');
             if (index < 0)
             {
-                throw new InvalidOperationException("Closing tag not found.");
+                throw new XmlDocumentException("Closing tag not found.");
             }
 
             text = body.Slice(0, index);
@@ -629,7 +637,7 @@ namespace XmlSerDe.Common
                 var iof = rest.IndexOf('<');
                 if (iof < 0)
                 {
-                    throw new InvalidOperationException("Closing tag not found.");
+                    throw new XmlDocumentException("Closing tag not found.");
                 }
 
                 index += iof;
@@ -639,7 +647,7 @@ namespace XmlSerDe.Common
                     var cdataEnd = body.Slice(index).IndexOf(CDataTailSpan);
                     if (cdataEnd < 0)
                     {
-                        throw new InvalidOperationException("Closing ']]>' not found for CDATA block.");
+                        throw new XmlDocumentException("Closing ']]>' not found for CDATA block.");
                     }
 
                     index += cdataEnd + CDataTailSpan.Length;
@@ -708,7 +716,7 @@ namespace XmlSerDe.Common
                 var iof = rest.IndexOf('<');
                 if (iof < 0)
                 {
-                    throw new InvalidOperationException("Closing tag not found.");
+                    throw new XmlDocumentException("Closing tag not found.");
                 }
 
                 index += iof;
@@ -716,7 +724,7 @@ namespace XmlSerDe.Common
 
                 if (rest.Length < 2)
                 {
-                    throw new InvalidOperationException("Closing tag not found.");
+                    throw new XmlDocumentException("Closing tag not found.");
                 }
 
                 var c1 = rest[1];
@@ -726,7 +734,7 @@ namespace XmlSerDe.Common
                     var gt = rest.IndexOf('>');
                     if (gt < 0)
                     {
-                        throw new InvalidOperationException("Closing '>' not found for end tag.");
+                        throw new XmlDocumentException("Closing '>' not found for end tag.");
                     }
 
                     index += gt + 1;
@@ -870,7 +878,7 @@ namespace XmlSerDe.Common
                 var end = rest.IndexOf(CommentTailSpan);
                 if (end < 0)
                 {
-                    throw new InvalidOperationException("Closing '-->' not found for comment.");
+                    throw new XmlDocumentException("Closing '-->' not found for comment.");
                 }
 
                 return end + CommentTailSpan.Length;
@@ -880,13 +888,13 @@ namespace XmlSerDe.Common
             {
                 if (!cdata)
                 {
-                    throw new InvalidOperationException("CDATA sections are not enabled.");
+                    throw new XmlDocumentException("CDATA sections are not enabled.");
                 }
 
                 var end = rest.IndexOf(CDataTailSpan);
                 if (end < 0)
                 {
-                    throw new InvalidOperationException("Closing ']]>' not found for CDATA block.");
+                    throw new XmlDocumentException("Closing ']]>' not found for CDATA block.");
                 }
 
                 return end + CDataTailSpan.Length;
@@ -897,7 +905,7 @@ namespace XmlSerDe.Common
                 var end = rest.IndexOf(PiTailSpan);
                 if (end < 0)
                 {
-                    throw new InvalidOperationException("Closing '?>' not found for processing instruction.");
+                    throw new XmlDocumentException("Closing '?>' not found for processing instruction.");
                 }
 
                 return end + PiTailSpan.Length;
@@ -921,13 +929,316 @@ namespace XmlSerDe.Common
                 }
             }
 
-            throw new InvalidOperationException("Closing '>' not found for declaration.");
+            throw new XmlDocumentException("Closing '>' not found for declaration.");
         }
 
         private static void ThrowUnexpectedMarkup()
         {
-            throw new InvalidOperationException(
+            throw new XmlDocumentException(
                 "Unexpected processing instruction, comment, CDATA or DOCTYPE."
+                );
+        }
+
+        #endregion
+
+        #region стражи (docs/opt-in-xml-guards.md)
+
+        /// <summary>
+        /// <see cref="XmlGuard.MatchingEndTags"/>: закрывающий тег обязан
+        /// совпасть с открывающим.
+        ///
+        /// Сверяется имя <b>из документа</b>, а не имя отображённого типа:
+        /// well-formedness - свойство пары тегов, и у корня генератор допускает
+        /// два имени сразу (<c>[XmlType]</c> и <c>[XmlRoot]</c>), а у
+        /// полиморфного члена тело разбирает производный тип, тогда как в
+        /// документе стоит имя члена.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void EnsureEndTagName(roschar actual, roschar expected)
+        {
+            if (!actual.SequenceEqual(expected))
+            {
+                ThrowMismatchedEndTag(actual, expected);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ThrowMismatchedEndTag(roschar actual, roschar expected)
+        {
+            throw new XmlDocumentException(
+                "The '" + expected.ToString() + "' start tag does not match the end tag of '"
+                + actual.ToString() + "'."
+                );
+        }
+
+        /// <summary>
+        /// <see cref="XmlGuard.MatchingEndTags"/>: тело кончилось концом ввода,
+        /// а своего закрывающего тега так и не было.
+        ///
+        /// Список незакрытых элементов, который в этом случае печатает BCL,
+        /// здесь не воспроизводится: для него нужен стек имён на всю глубину
+        /// документа, а это цена на горячем пути ради текста сообщения.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void ThrowUnexpectedEof()
+        {
+            throw new XmlDocumentException("Unexpected end of file has occurred.");
+        }
+
+        /// <summary>
+        /// <see cref="XmlGuard.UniqueAttributes"/>: XML 1.0 WFC Unique Att Spec -
+        /// двух атрибутов с одним qualified name на одной голове быть не может.
+        /// Без стража берётся первое совпадение, и <c>id="1" id="2"</c> проходит
+        /// молча.
+        ///
+        /// Зовётся только при <see cref="XmlHead.HasAttributes"/>: на голове без
+        /// атрибутов платить не за что, и DEEP-подобный документ этот флаг
+        /// не замечает вовсе.
+        ///
+        /// Уже увиденные имена лежат в <c>stackalloc</c> парами
+        /// <c>(offset, length)</c> - на них голова разбирается ровно один раз.
+        /// Хранить сами спаны нельзя (<c>Span</c> из
+        /// <c>ReadOnlySpan&lt;char&gt;</c> не собирается: <c>roschar</c> -
+        /// ref struct), а список или массив имён - это куча на каждой голове
+        /// с атрибутами, чего страж себе позволить не может. Числа обходят оба
+        /// запрета, и разбор их всё равно считает по дороге.
+        ///
+        /// Буфер конечен, атрибутов на голове - нет. Переполнение <b>не</b>
+        /// значит «дубль»: голова с 33 разными атрибутами легальна. Значит
+        /// хвост считается попарно, как раньше - см.
+        /// <see cref="EnsureUniqueAttributesPairwise"/>.
+        ///
+        /// Что это даёт, измерено (<c>--guard-cost</c>). На голове из двух
+        /// атрибутов - ничего: попарный вариант делает там ровно один лишний
+        /// разбор, и он тонет в дрейфе. Разница появляется там, где атрибутов
+        /// много: попарная проверка квадратична по их числу, эта - линейна,
+        /// и на голове из двенадцати атрибутов страж стоит 1.40x вместо 2.37x.
+        /// То есть буфер здесь не про горячий путь POCO, а про то, чтобы
+        /// широкая голова не превращала страж в квадрат.
+        /// </summary>
+        public static void EnsureUniqueAttributes(roschar fullHead, roschar declaredNodeType)
+        {
+            //32 имени - это 256 байт стека и заведомо больше, чем бывает
+            //на голове, сгенерированной из POCO
+            const int MaxTracked = 32;
+
+            Span<int> seen = stackalloc int[MaxTracked * 2];
+            var seenCount = 0;
+
+            //'<' плюс имя: дальше начинаются атрибуты
+            var start = 1 + declaredNodeType.Length;
+            var index = start;
+
+            while (true)
+            {
+                if (index < 0 || index >= fullHead.Length)
+                {
+                    return;
+                }
+
+                ParseFirstFoundAttribute(fullHead, index, out var current);
+                if (current.Attribute.IsEmpty)
+                {
+                    return;
+                }
+
+                if (current.TotalLength <= 0)
+                {
+                    throw new XmlDocumentException("Attribute parsing made no progress.");
+                }
+
+                var qname = fullHead.Slice(current.QNameOffset, current.QNameLength);
+
+                for (var i = 0; i < seenCount; i++)
+                {
+                    //QName сравнивается целиком: ':' внутри prefix и внутри
+                    //локального имени невозможно, так что посимвольное
+                    //равенство "prefix:name" равносильно равенству обеих частей
+                    if (fullHead.Slice(seen[i * 2], seen[(i * 2) + 1]).SequenceEqual(qname))
+                    {
+                        ThrowDuplicateAttribute(current.Attribute.Prefix, current.Attribute.Name);
+                    }
+                }
+
+                if (seenCount == MaxTracked)
+                {
+                    //место кончилось, атрибуты - нет: досчитать надо, но уже
+                    //медленным способом, иначе легальная голова стала бы ошибкой
+                    EnsureUniqueAttributesPairwise(fullHead, start);
+                    return;
+                }
+
+                seen[seenCount * 2] = current.QNameOffset;
+                seen[(seenCount * 2) + 1] = current.QNameLength;
+                seenCount++;
+
+                index += current.TotalLength;
+            }
+        }
+
+        /// <summary>
+        /// Запасной путь <see cref="EnsureUniqueAttributes"/> для головы, чьи
+        /// имена не поместились в буфер: каждый атрибут сверяется с каждым
+        /// предыдущим, разбирая их заново. Квадратично по числу атрибутов и
+        /// линейно по длине головы на каждый шаг - но зовётся только там, где
+        /// атрибутов больше трёх десятков, а такой документ уже не про
+        /// горячий путь.
+        /// </summary>
+        private static void EnsureUniqueAttributesPairwise(roschar fullHead, int start)
+        {
+            var index = start;
+
+            while (true)
+            {
+                if (index < 0 || index >= fullHead.Length)
+                {
+                    return;
+                }
+
+                ParseFirstFoundAttribute(fullHead, index, out var current);
+                if (current.Attribute.IsEmpty)
+                {
+                    return;
+                }
+
+                if (current.TotalLength <= 0)
+                {
+                    throw new XmlDocumentException("Attribute parsing made no progress.");
+                }
+
+                var scan = start;
+                while (scan < index)
+                {
+                    ParseFirstFoundAttribute(fullHead, scan, out var earlier);
+                    if (earlier.Attribute.IsEmpty || earlier.TotalLength <= 0)
+                    {
+                        break;
+                    }
+
+                    if (earlier.Attribute.Name.SequenceEqual(current.Attribute.Name)
+                        && earlier.Attribute.Prefix.SequenceEqual(current.Attribute.Prefix)
+                        )
+                    {
+                        ThrowDuplicateAttribute(current.Attribute.Prefix, current.Attribute.Name);
+                    }
+
+                    scan += earlier.TotalLength;
+                }
+
+                index += current.TotalLength;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ThrowDuplicateAttribute(roschar prefix, roschar name)
+        {
+            var qualified = prefix.IsEmpty
+                ? name.ToString()
+                : prefix.ToString() + ":" + name.ToString();
+
+            throw new XmlDocumentException("'" + qualified + "' is a duplicate attribute name.");
+        }
+
+        /// <summary>
+        /// <see cref="XmlGuard.SingleRoot"/> для хоста без
+        /// <see cref="XmlFeature.Markup"/>: после корня допустимы только символы
+        /// XML S production. Комментарий и PI такому хосту и внутри документа -
+        /// ошибка разбора, так что разрешать их в хвосте было бы странно.
+        ///
+        /// Хвост чаще всего пуст, и тогда проверка стоит одно сравнение.
+        /// </summary>
+        public static void EnsureNoTrailingContent(roschar fullNode, int consumed)
+        {
+            if (consumed >= fullNode.Length)
+            {
+                return;
+            }
+
+            var tail = fullNode.Slice(consumed);
+
+            var index = SkipS(tail);
+            if (index >= tail.Length)
+            {
+                return;
+            }
+
+            ThrowTrailingContent(tail.Slice(index));
+        }
+
+        /// <summary>
+        /// <see cref="XmlGuard.SingleRoot"/> для хоста с
+        /// <see cref="XmlFeature.Markup"/> (в том числе для всего compat-слоя):
+        /// XML разрешает после корня Misc - пробелы, комментарии и processing
+        /// instructions, - и <c>System.Xml</c> такой документ читает молча.
+        /// Отвергать <c>&lt;/root&gt;&lt;!-- bye --&gt;</c> значило бы падать на
+        /// well-formed вводе, то есть менять один дефект на другой.
+        ///
+        /// DOCTYPE и CDATA сюда не входят: после корня их нет в продукции Misc.
+        /// </summary>
+        public static void EnsureNoTrailingContentMarkup(roschar fullNode, int consumed)
+        {
+            if (consumed >= fullNode.Length)
+            {
+                return;
+            }
+
+            var tail = fullNode.Slice(consumed);
+            var index = 0;
+
+            while (true)
+            {
+                index += SkipS(tail.Slice(index));
+                if (index >= tail.Length)
+                {
+                    return;
+                }
+
+                var rest = tail.Slice(index);
+                if (rest.Length < 2 || rest[0] != '<')
+                {
+                    ThrowTrailingContent(rest);
+                }
+
+                if (rest.StartsWith(CommentHeadSpan))
+                {
+                    var end = rest.IndexOf(CommentTailSpan);
+                    if (end < 0)
+                    {
+                        throw new XmlDocumentException("Closing '-->' not found for comment.");
+                    }
+
+                    index += end + CommentTailSpan.Length;
+                    continue;
+                }
+
+                if (rest[1] == '?')
+                {
+                    var end = rest.IndexOf(PiTailSpan);
+                    if (end < 0)
+                    {
+                        throw new XmlDocumentException("Closing '?>' not found for processing instruction.");
+                    }
+
+                    index += end + PiTailSpan.Length;
+                    continue;
+                }
+
+                ThrowTrailingContent(rest);
+            }
+        }
+
+        /// <summary>
+        /// Различаются два случая по первому непробельному символу, как их
+        /// различает <c>System.Xml</c>: '&lt;' - это ещё один элемент, всё
+        /// остальное - мусор на уровне документа. Позиция не считается.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ThrowTrailingContent(roschar rest)
+        {
+            throw new XmlDocumentException(
+                rest.Length > 0 && rest[0] == '<'
+                    ? "There are multiple root elements."
+                    : "Data at the root level is invalid."
                 );
         }
 
@@ -942,12 +1253,12 @@ namespace XmlSerDe.Common
             var required = 2 + declaredNodeType.Length + 1;
             if (index + required > body.Length)
             {
-                throw new InvalidOperationException("Closing tag not found.");
+                throw new XmlDocumentException("Closing tag not found.");
             }
 
             if (body[index + 1] != '/')
             {
-                throw new InvalidOperationException("Closing tag not found for " + declaredNodeType.ToString());
+                throw new XmlDocumentException("Closing tag not found for " + declaredNodeType.ToString());
             }
 
             if (declaredNodeType.IsEmpty)
@@ -956,7 +1267,7 @@ namespace XmlSerDe.Common
                 var gt = body.Slice(index).IndexOf('>');
                 if (gt < 0)
                 {
-                    throw new InvalidOperationException("Closing tag not found.");
+                    throw new XmlDocumentException("Closing tag not found.");
                 }
 
                 return gt + 1;
@@ -968,12 +1279,12 @@ namespace XmlSerDe.Common
                 );
             if (!eq)
             {
-                throw new InvalidOperationException("Mismatched closing tag found for " + declaredNodeType.ToString());
+                throw new XmlDocumentException("Mismatched closing tag found for " + declaredNodeType.ToString());
             }
 
             if (body[index + 2 + declaredNodeType.Length] != '>')
             {
-                throw new InvalidOperationException("Broken closing tag found for " + declaredNodeType.ToString());
+                throw new XmlDocumentException("Broken closing tag found for " + declaredNodeType.ToString());
             }
 
             return required;
@@ -1050,7 +1361,7 @@ namespace XmlSerDe.Common
                 var index = sliced.IndexOfAny('>', '"', '\'');
                 if (index < 0)
                 {
-                    throw new InvalidOperationException("Closing '>' not found for element head.");
+                    throw new XmlDocumentException("Closing '>' not found for element head.");
                 }
 
                 var c = sliced[index];
@@ -1064,7 +1375,7 @@ namespace XmlSerDe.Common
                 var closingIndex = rest.IndexOf(c);
                 if (closingIndex < 0)
                 {
-                    throw new InvalidOperationException("Closing quote not found for attribute value.");
+                    throw new XmlDocumentException("Closing quote not found for attribute value.");
                 }
 
                 offset += index + 1 + closingIndex + 1;
@@ -1102,7 +1413,7 @@ namespace XmlSerDe.Common
 
                 if (apr.TotalLength <= 0)
                 {
-                    throw new InvalidOperationException("Attribute parsing made no progress.");
+                    throw new XmlDocumentException("Attribute parsing made no progress.");
                 }
 
                 if (requiredPrefix.IsEmpty || requiredPrefix.SequenceEqual(apr.Attribute.Prefix))
@@ -1134,15 +1445,27 @@ namespace XmlSerDe.Common
         /// <summary>
         /// Разбирает один атрибут начиная с позиции <paramref name="iindex"/>.
         ///
-        /// Каждый из четырёх поисков ниже проверяется на "не нашлось". Проверка
-        /// стоит ровно одно сравнение с уже посчитанным индексом - лишнего прохода
-        /// по спану ни одна из них не делает, - а без них отрицательный индекс шёл
-        /// прямо в индексатор или в Slice, и голова вида
+        /// Разбор идёт по XML 1.0 §3.1: <c>Attribute ::= Name Eq AttValue</c>,
+        /// <c>Eq ::= S? '=' S?</c>. Ни одна из проверок ниже не является
+        /// opt-in (docs/opt-in-xml-guards.md §5.1), и на well-formed голове ни
+        /// одна из них не стоит лишнего прохода по спану.
+        ///
+        /// Каждый поиск проверяется на "не нашлось": без этого отрицательный
+        /// индекс шёл прямо в индексатор или в Slice, и голова вида
         /// <c>&lt;Foo a:b&gt;</c> или <c>&lt;Foo a=&gt;</c> роняла разбор
         /// <see cref="IndexOutOfRangeException"/>. Документ приходит снаружи, и
         /// такое исключение - это не диагностика битого документа, а сообщение
         /// о собственной ошибке: поймать его по смыслу нельзя, отличить от чужого
         /// бага в коде вызывающего - тоже.
+        ///
+        /// Найтись мало - найтись должно там, где положено. Имя кончается на S
+        /// наравне с '=' и ':', после имени допускается только <c>S* '='</c>,
+        /// после '=' - только <c>S* кавычка</c>. Без этих трёх условий поиск
+        /// уходил вперёд по голове и брал разделитель у следующего атрибута:
+        /// <c>&lt;Foo id=1 Tag="x"&gt;</c> читался как <c>id="x"</c> (значение
+        /// украдено у соседа, Tag потерян), <c>&lt;Foo id Tag="x"&gt;</c> - как
+        /// атрибут с именем <c>"id Tag"</c>, а легальный
+        /// <c>&lt;Foo a = "1"&gt;</c> - как имя <c>"a "</c>, то есть молча терялся.
         /// </summary>
         private static void ParseFirstFoundAttribute(
             roschar internalsOfHead,
@@ -1156,11 +1479,11 @@ namespace XmlSerDe.Common
 #if NET8_0_OR_GREATER
             var iofa0 = trimmed.IndexOfAny(AttributeNameEndValues);
 #else
-            var iofa0 = trimmed.IndexOfAny("=/>:".AsSpan());
+            var iofa0 = trimmed.IndexOfAny("=/>: \t\r\n".AsSpan());
 #endif
             if (iofa0 < 0)
             {
-                throw new InvalidOperationException("Attribute name is not terminated.");
+                throw new XmlDocumentException("Attribute name is not terminated.");
             }
 
             var c = trimmed[iofa0];
@@ -1172,40 +1495,66 @@ namespace XmlSerDe.Common
 
             roschar prefix;
             roschar name;
+            int qnameLength;
             if (c == ':')
             {
                 prefix = internalsOfHead.Slice(trimmedLength, iofa0);
                 trimmed = trimmed.Slice(iofa0 + 1);
 
-                var iofa1 = trimmed.IndexOf('=');
+                //QName пробелов вокруг ':' не допускает, поэтому локальное имя
+                //начинается ровно здесь и кончается тем же набором
+#if NET8_0_OR_GREATER
+                var iofa1 = trimmed.IndexOfAny(AttributeNameEndValues);
+#else
+                var iofa1 = trimmed.IndexOfAny("=/>: \t\r\n".AsSpan());
+#endif
                 if (iofa1 < 0)
                 {
-                    throw new InvalidOperationException("'=' not found for prefixed attribute name.");
+                    throw new XmlDocumentException("Attribute name is not terminated.");
                 }
 
                 name = trimmed.Slice(0, iofa1);
-                trimmed = trimmed.Slice(iofa1 + 1);
+                trimmed = trimmed.Slice(iofa1);
+
+                //QName - это prefix, ':' и локальное имя подряд, без пробелов
+                qnameLength = iofa0 + 1 + iofa1;
             }
             else
             {
                 prefix = roschar.Empty;
                 name = internalsOfHead.Slice(trimmedLength, iofa0);
-                trimmed = trimmed.Slice(iofa0 + 1);
+                trimmed = trimmed.Slice(iofa0);
+
+                qnameLength = iofa0;
             }
 
-            var iofa2 = trimmed.IndexOfAny('"', '\'');
-            if (iofa2 < 0)
+            //XML 1.0 §3.1: Eq ::= S? '=' S?. Пробелы здесь легальны, а всё
+            //остальное - нет: без этой проверки поиск кавычки уходил вперёд по
+            //голове и брал её у следующего атрибута, то есть <Foo id=1 Tag="x">
+            //давал id="x", а Tag терялся
+            var afterName = SkipS(trimmed);
+            if (afterName >= trimmed.Length || trimmed[afterName] != '=')
             {
-                throw new InvalidOperationException("Opening quote not found for attribute value.");
+                ThrowUnexpectedToken(trimmed.Slice(afterName), "'='");
             }
 
-            var quoteChar = trimmed[iofa2];
-            trimmed = trimmed.Slice(iofa2 + 1);
+            trimmed = trimmed.Slice(afterName + 1);
+
+            var afterEq = SkipS(trimmed);
+            if (afterEq >= trimmed.Length
+                || (trimmed[afterEq] != '"' && trimmed[afterEq] != '\'')
+                )
+            {
+                ThrowUnexpectedToken(trimmed.Slice(afterEq), "'\"' or '''");
+            }
+
+            var quoteChar = trimmed[afterEq];
+            trimmed = trimmed.Slice(afterEq + 1);
 
             var iofa3 = trimmed.IndexOf(quoteChar);
             if (iofa3 < 0)
             {
-                throw new InvalidOperationException("Closing quote not found for attribute value.");
+                throw new XmlDocumentException("Closing quote not found for attribute value.");
             }
 
             var rawValue = trimmed.Slice(0, iofa3);
@@ -1214,7 +1563,65 @@ namespace XmlSerDe.Common
 
             result = new AttributeProcessResult(
                 new ParsedAttribute(prefix, name, rawValue),
-                totalLength
+                totalLength,
+                trimmedLength,
+                qnameLength
+                );
+        }
+
+        /// <summary>
+        /// Сколько символов XML S production (#x20 | #x9 | #xD | #xA) стоит
+        /// в начале спана. На well-formed голове почти всегда 0 или 1.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int SkipS(roschar span)
+        {
+            var index = 0;
+            while (index < span.Length)
+            {
+                var c = span[index];
+                if (c != ' ' && c != '\t' && c != '\r' && c != '\n')
+                {
+                    break;
+                }
+
+                index++;
+            }
+
+            return index;
+        }
+
+        /// <summary>
+        /// Сообщение в форме <c>System.Xml</c>, но без позиции: у span-парсера
+        /// строки и колонки нет. Токеном считается то, что стоит на месте
+        /// ожидаемого, до ближайшего разделителя - так же, как его называет BCL.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ThrowUnexpectedToken(roschar rest, string expected)
+        {
+            var length = 0;
+            while (length < rest.Length)
+            {
+                var c = rest[length];
+                if (c == ' ' || c == '\t' || c == '\r' || c == '\n'
+                    || c == '=' || c == '/' || c == '>' || c == '"' || c == '\''
+                    )
+                {
+                    break;
+                }
+
+                length++;
+            }
+
+            if (length == 0 && rest.Length > 0)
+            {
+                //на месте ожидаемого стоит сам разделитель - он и есть токен
+                length = 1;
+            }
+
+            throw new XmlDocumentException(
+                "'" + rest.Slice(0, length).ToString()
+                + "' is an unexpected token. The expected token is " + expected + "."
                 );
         }
 

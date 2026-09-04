@@ -1,4 +1,4 @@
-#if NETSTANDARD
+﻿#if NETSTANDARD
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -73,6 +73,15 @@ namespace XmlSerDe.Generator.Producer
         /// </summary>
         private readonly HostFeatureBinding _binding;
 
+        /// <summary>
+        /// Какие нарушения well-formedness этот хост ловит. Собран один раз из
+        /// <c>[XmlGuards]</c> (или из <see cref="XmlGuard.SystemXmlCompatible"/>
+        /// для compat) вместе с набором фич: три точки, где оси встречаются,
+        /// разрешаются внутри <see cref="HostGuardBinding.From"/>, а не здесь.
+        /// Generate-методы его только читают - docs/opt-in-xml-guards.md §5.0.
+        /// </summary>
+        private readonly HostGuardBinding _guards;
+
         private StringBuilder _sb;
 
         public ClassSourceProducer(
@@ -102,7 +111,10 @@ namespace XmlSerDe.Generator.Producer
             _sb = new StringBuilder();
 
             SerializationInfoCollection = ParseAttributes(compilation, _deSubject);
-            _binding = HostFeatureBinding.From(ReadXmlFeatures(_deSubject));
+
+            var features = ReadXmlFeatures(_deSubject);
+            _binding = HostFeatureBinding.From(features);
+            _guards = HostGuardBinding.From(ReadXmlGuards(_deSubject), features);
         }
 
         /// <summary>
@@ -144,7 +156,12 @@ namespace XmlSerDe.Generator.Producer
             _sb = new StringBuilder();
 
             SerializationInfoCollection = serializationInfoCollection;
+
+            //фасад включает себе оба полных набора сам: пользователь не пишет
+            //ни [XmlFeatures], ни [XmlGuards], а native-хост в той же сборке
+            //ничего из этого не наследует
             _binding = HostFeatureBinding.From(XmlFeature.SystemXmlCompatible);
+            _guards = HostGuardBinding.From(XmlGuard.SystemXmlCompatible, XmlFeature.SystemXmlCompatible);
         }
 
         public string GenerateClass(
@@ -1141,10 +1158,12 @@ namespace {_targetNamespace}");
         {
             var ssGlobalName = subject.ToGlobalDisplayString();
 
+            var invocation = $"{HeadDeserializeMethodName}(inj, xmlFullNode, roschar.Empty, out result);";
+
             _sb.AppendLine($$"""
         public static void {{HeadDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar xmlFullNode, out {{ssGlobalName}} result)
         {
-            {{HeadDeserializeMethodName}}(inj, xmlFullNode, roschar.Empty, out result);
+{{_guards.RootBodyStatement("            ", invocation)}}
         }
 """);
         }
@@ -1208,7 +1227,9 @@ namespace {_targetNamespace}");
                     //нормализации §3.3.3 и раскрытия ссылок, а ParseBody - это
                     //декодер текста тела, и второй проход по уже раскрытому
                     //значению спотыкался бы о литеральный '<', пришедший из &lt;
-                    assignment = $"result.{member.Name} = {valueExpression}.ToString();";
+                    assignment =
+                        _guards.CheckSpanStatementBefore("                ", valueExpression)
+                        + $"result.{member.Name} = {valueExpression}.ToString();";
                 }
                 else
                 {
@@ -1268,9 +1289,9 @@ namespace {_targetNamespace}");
         private static void {{HeadDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar fullNode, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
         {
             {{XmlHeadFullName}} xmlNode = new();
-            {{XmlScanFullName}}.{{_binding.ReadHead}}({{_binding.ReadHeadInvocation("fullNode", "xmlnsAttributeName", "xmlNode")}});
+            {{XmlScanFullName}}.{{_binding.ReadHead}}({{_binding.ReadHeadInvocation("fullNode", "xmlnsAttributeName", "xmlNode")}});{{_guards.AfterReadHeadStatement("            ", "xmlNode")}}
             var xmlNodeBody = xmlNode.{{nameof(XmlHead.IsBodyless)}} ? roschar.Empty : fullNode.Slice(xmlNode.{{nameof(XmlHead.TotalLength)}});
-            {{HeadedDeserializeMethodName}}(inj, ref xmlNode, xmlNodeBody, out result, out _);
+            {{HeadedDeserializeMethodName}}(inj, ref xmlNode, xmlNodeBody, out result, {{_guards.RootBodyConsumedArgument}});{{_guards.RootTailStatement("            ", "fullNode", "xmlNode")}}
         }
 """);
         }
@@ -1321,7 +1342,7 @@ namespace {_targetNamespace}");
                 throw new InvalidOperationException("(1) Unknown type " + xmlNodePreciseType.ToString());
             }
 
-            {{HeadlessDeserializeMethodName}}(inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}, out result, out bodyConsumed);{{GenerateDeserializeAttributesInvocation("            ", subject, "xmlNode", "result")}}
+            {{HeadlessDeserializeMethodName}}(inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}{{_guards.ExpectedEndNameArgument("xmlNode")}}, out result, out bodyConsumed);{{GenerateDeserializeAttributesInvocation("            ", subject, "xmlNode", "result")}}
         }
 """);
         }
@@ -1339,7 +1360,7 @@ namespace {_targetNamespace}");
                 //{{nameof(GenerateDeserializeDispatch)}}
                 if (xmlNodePreciseType.SequenceEqual("{{d.GetXmlTypeName()}}".AsSpan()))
                 {
-                    {{classAndMethodName}}(inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{d.ToGlobalDisplayString()}} iresult, out bodyConsumed);{{GenerateDeserializeAttributesInvocation("                    ", d, "xmlNode", "iresult")}}
+                    {{classAndMethodName}}(inj, body, xmlNode.{{nameof(XmlHead.XmlnsAttributeName)}}{{_guards.ExpectedEndNameArgument("xmlNode")}}, out {{d.ToGlobalDisplayString()}} iresult, out bodyConsumed);{{GenerateDeserializeAttributesInvocation("                    ", d, "xmlNode", "iresult")}}
                     result = iresult;
                     return;
                 }
@@ -1362,7 +1383,7 @@ namespace {_targetNamespace}");
             var ssGlobalName = subject.ToGlobalDisplayString();
 
             _sb.AppendLine($$"""
-        private static void {{HeadlessDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar body, roschar xmlnsAttributeName, out {{ssGlobalName}} result, out int bodyConsumed)
+        private static void {{HeadlessDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar body, roschar xmlnsAttributeName{{_guards.ExpectedEndNameParameter}}, out {{ssGlobalName}} result, out int bodyConsumed)
         {
 """);
 
@@ -1422,14 +1443,14 @@ namespace {_targetNamespace}");
             {{XmlHeadFullName}} child = new();
             while(true)
             {
-                {{XmlScanFullName}}.{{_binding.ReadHead}}({{_binding.ReadHeadInvocation("cursor", "xmlnsAttributeName", "child")}});
+                {{XmlScanFullName}}.{{_binding.ReadHead}}({{_binding.ReadHeadInvocation("cursor", "xmlnsAttributeName", "child")}});{{_guards.AfterReadHeadStatement("                ", "child")}}
                 if(child.{{nameof(XmlHead.IsEmpty)}})
-                {
+                {{{_guards.EndOfInputStatement("                    ", "!expectedEndName.IsEmpty")}}
                     break;
                 }
                 if(child.{{nameof(XmlHead.IsEndTag)}})
                 {
-                    //наш собственный закрывающий тег - тело кончилось
+                    //наш собственный закрывающий тег - тело кончилось{{_guards.EndTagStatement("                    ", "child", "expectedEndName")}}
                     bodyConsumed += child.{{nameof(XmlHead.TotalLength)}};
                     break;
                 }
@@ -1517,19 +1538,22 @@ namespace {_targetNamespace}");
             }
             else
             {
+                var isString = memberType.Symbol.SpecialType == SpecialType.System_String;
+
                 assignment =
                     _binding.ParseBodyStatement(
                         "bodyText",
-                        memberType.Symbol.SpecialType == SpecialType.System_String,
+                        isString,
                         memberType.GlobalName,
                         "bodyParsed"
                         )
+                    + _guards.CheckStringStatement("                ", isString, "bodyParsed")
                     + $"\r\n                result.{member.Name} = bodyParsed;";
             }
 
             _sb.AppendLine($$"""
             //{{typeof(XmlTextAttribute).Name}} {{memberType.ToGlobalDisplayString()}} {{member.Name}}
-            {{XmlScanFullName}}.{{_binding.ReadTextBody}}({{_binding.ReadTextBodyInvocation("body", "body.IsEmpty", "roschar.Empty", "bodyText", "bodyConsumed")}});
+            {{XmlScanFullName}}.{{_binding.ReadTextBody}}({{_binding.ReadTextBodyInvocation("body", "body.IsEmpty", _guards.TextBodyExpectedName("roschar.Empty"), "bodyText", "bodyConsumed")}});
             if(!bodyText.IsEmpty)
             {
                 {{assignment}}
@@ -1582,7 +1606,7 @@ namespace {_targetNamespace}");
                             //ReadTextBody на закрытой ноде отдаёт пустой текст и consumed = 0,
                             //так что <Foo/> здесь превращается в пустую строку
                             {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
-                            {{_binding.ParseBodyStatement("childText", true, memberType.GlobalName, "injr")}}
+                            {{_binding.ParseBodyStatement("childText", true, memberType.GlobalName, "injr")}}{{_guards.CheckStringStatement("                            ", true, "injr")}}
                             result.{{member.Name}} = injr;
                         }
                     }
@@ -1707,13 +1731,13 @@ namespace {_targetNamespace}");
                         {{XmlHeadFullName}} {{child2VarName}} = new();
                         while(true)
                         {
-                            {{XmlScanFullName}}.{{_binding.ReadHead}}({{_binding.ReadHeadInvocation("itemCursor", $"child.{nameof(XmlHead.XmlnsAttributeName)}", child2VarName)}});
+                            {{XmlScanFullName}}.{{_binding.ReadHead}}({{_binding.ReadHeadInvocation("itemCursor", $"child.{nameof(XmlHead.XmlnsAttributeName)}", child2VarName)}});{{_guards.AfterReadHeadStatement("                            ", child2VarName)}}
                             if({{child2VarName}}.{{nameof(XmlHead.IsEmpty)}})
-                            {
+                            {{{_guards.EndOfInputStatement("                                ", "!child." + nameof(XmlHead.IsBodyless))}}
                                 break;
                             }
                             if({{child2VarName}}.{{nameof(XmlHead.IsEndTag)}})
-                            {
+                            {{{_guards.EndTagStatement("                                ", child2VarName, "childDeclaredNodeType")}}
                                 itemConsumed += {{child2VarName}}.{{nameof(XmlHead.TotalLength)}};
                                 break;
                             }
@@ -1767,7 +1791,7 @@ namespace {_targetNamespace}");
                     _sb.AppendLine($$"""
                         else
                         {
-                            {{classAndMethodName}}(inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                            ", memberType.Symbol, "child", "iresult")}}
+                            {{classAndMethodName}}(inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}{{_guards.ExpectedEndNameArgumentRaw("child", "childDeclaredNodeType")}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                            ", memberType.Symbol, "child", "iresult")}}
                             result.{{member.Name}} = iresult;
                         }
                     }
@@ -1782,7 +1806,7 @@ namespace {_targetNamespace}");
                     {{elseif}}if(childDeclaredNodeType.SequenceEqual({{member.Name}}Span))
                     {
                         {{specifiedAssignment}}
-                        {{classAndMethodName}}(inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                        ", memberType.Symbol, "child", "iresult")}}
+                        {{classAndMethodName}}(inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}{{_guards.ExpectedEndNameArgumentRaw("child", "childDeclaredNodeType")}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                        ", memberType.Symbol, "child", "iresult")}}
                         result.{{member.Name}} = iresult;
                     }
 """);
@@ -1808,7 +1832,7 @@ namespace {_targetNamespace}");
                         //{{nameof(GenerateDeserializeDispatch2)}}
                         {{elseif}}if (childPreciseType.SequenceEqual("{{d.GetXmlTypeName()}}".AsSpan()))
                         {
-                            {{classAndMethodName}}(inj, childBody, child.XmlnsAttributeName, out {{d.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                            ", d, "child", "iresult")}}
+                            {{classAndMethodName}}(inj, childBody, child.XmlnsAttributeName{{_guards.ExpectedEndNameArgumentRaw("child", "childDeclaredNodeType")}}, out {{d.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                            ", d, "child", "iresult")}}
                             result.{{memberName}} = iresult;
                         }
 """);
@@ -1917,15 +1941,18 @@ namespace {_targetNamespace}");
             }
             else if (BuiltinSourceProducer.TryGetBuiltin(_compilation, listItemType.Symbol, out _))
             {
+                var isString = listItemType.Symbol.SpecialType == SpecialType.System_String;
+
                 return
                     GenerateReadTextBodyStatement("child2Body", child2VarName, "child2Text", "child2Consumed")
                     + "\r\n                            "
                     + _binding.ParseBodyStatement(
                         "child2Text",
-                        listItemType.Symbol.SpecialType == SpecialType.System_String,
+                        isString,
                         listItemType.GlobalName,
                         listItemParseResultVarName
-                        );
+                        )
+                    + _guards.CheckStringStatement("                            ", isString, listItemParseResultVarName);
             }
             else
             {
@@ -2435,8 +2462,34 @@ namespace {_targetNamespace}");
             INamedTypeSymbol deSubject
             )
         {
-            var features = XmlFeature.None;
-            var fullName = XmlDeserializeGenerator.FeaturesAttributeFullName;
+            return (XmlFeature)ReadFlagsAttribute(
+                deSubject,
+                XmlDeserializeGenerator.FeaturesAttributeFullName
+                );
+        }
+
+        private static XmlGuard ReadXmlGuards(
+            INamedTypeSymbol deSubject
+            )
+        {
+            return (XmlGuard)ReadFlagsAttribute(
+                deSubject,
+                XmlDeserializeGenerator.GuardsAttributeFullName
+                );
+        }
+
+        /// <summary>
+        /// OR всех значений одного <c>[Flags]</c>-атрибута на классе-хосте.
+        /// Обе оси (<see cref="XmlFeature"/> и <see cref="XmlGuard"/>) читаются
+        /// одинаково и складываются одинаково: несколько атрибутов на классе -
+        /// это объединение, а не последний победивший.
+        /// </summary>
+        private static int ReadFlagsAttribute(
+            INamedTypeSymbol deSubject,
+            string fullName
+            )
+        {
+            var flags = 0;
 
             foreach (var attribute in deSubject.GetAttributes())
             {
@@ -2457,15 +2510,15 @@ namespace {_targetNamespace}");
                 var arg = attribute.ConstructorArguments[0];
                 if (arg.Value is int i)
                 {
-                    features |= (XmlFeature)i;
+                    flags |= i;
                 }
                 else if (arg.Value is long l)
                 {
-                    features |= (XmlFeature)(int)l;
+                    flags |= (int)l;
                 }
             }
 
-            return features;
+            return flags;
         }
 
         private static SerializationInfoCollection ParseAttributes(

@@ -94,6 +94,33 @@ namespace Sample
 }
 ";
 
+        private const string HostWithGuards = @"
+using System;
+using XmlSerDe.Common;
+using XmlSerDe.Components.Exhauster;
+using XmlSerializer = XmlSerDe.Compat.XmlSerializer;
+
+namespace Sample
+{
+    [XmlExhauster(typeof(StringBuilderExhauster))]
+    [XmlGuards(XmlGuard.SingleRoot)]
+    [XmlSubject(typeof(Node), true)]
+    public partial class Host
+    {
+    }
+
+    public static class Entry
+    {
+        public static object Make() => new XmlSerializer(typeof(Node));
+    }
+
+    public static class Unrelated
+    {
+        public static int Value() => 1;
+    }
+}
+";
+
         /// <summary>
         /// Комментарий в файле с хостом: разобрано заново будет дерево, но состав
         /// генерации от этого не меняется ни на строчку.
@@ -154,6 +181,36 @@ namespace Sample
             Assert.NotEqual(run.FirstHost, run.SecondHost);
             Assert.Contains("DecodeElementTextWithCData", run.SecondHost, StringComparison.Ordinal);
             Assert.DoesNotContain("DecodeElementTextWithCData", run.FirstHost, StringComparison.Ordinal);
+
+            Assert.Contains(
+                OutputReasons(run.Second),
+                reason => reason != IncrementalStepRunReason.Cached
+                );
+        }
+
+        [Fact]
+        public void XmlGuards_Added_RegeneratesOutput_Test()
+        {
+            var run = Run(editedHost: HostWithGuards);
+
+            Assert.NotEqual(run.FirstHost, run.SecondHost);
+            Assert.Contains("EnsureNoTrailingContent", run.SecondHost, StringComparison.Ordinal);
+            Assert.DoesNotContain("EnsureNoTrailingContent", run.FirstHost, StringComparison.Ordinal);
+
+            Assert.Contains(
+                OutputReasons(run.Second),
+                reason => reason != IncrementalStepRunReason.Cached
+                );
+        }
+
+        [Fact]
+        public void XmlGuards_Removed_RegeneratesOutput_Test()
+        {
+            var run = Run(initialHost: HostWithGuards, editedHost: Host);
+
+            Assert.NotEqual(run.FirstHost, run.SecondHost);
+            Assert.Contains("EnsureNoTrailingContent", run.FirstHost, StringComparison.Ordinal);
+            Assert.DoesNotContain("EnsureNoTrailingContent", run.SecondHost, StringComparison.Ordinal);
 
             Assert.Contains(
                 OutputReasons(run.Second),

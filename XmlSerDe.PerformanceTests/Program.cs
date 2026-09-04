@@ -20,6 +20,12 @@ namespace XmlSerDe.PerformanceTests
                 return;
             }
 
+            if (args.Length > 0 && string.Equals(args[0], "--guard-cost", StringComparison.Ordinal))
+            {
+                GuardCostProbe.Run();
+                return;
+            }
+
 #if DEBUG
             new DeserializeMatrixFixture();
             new SerializeMatrixFixture();

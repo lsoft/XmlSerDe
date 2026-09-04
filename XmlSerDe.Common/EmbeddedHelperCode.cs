@@ -374,12 +374,12 @@ namespace XmlSerDe.Common
                     if (!eq)
                     {
                         //не наша нода, битый XML?
-                        throw new InvalidOperationException($"Something wrong with node {nodeType.ToString()}");
+                        throw new XmlDocumentException($"Something wrong with node {nodeType.ToString()}");
                     }
                     //сравним последний символ
                     if (nodes[index + 2 + nodeTypeLength] != '>')
                     {
-                        throw new InvalidOperationException($"Something wrong with node {nodeType.ToString()}");
+                        throw new XmlDocumentException($"Something wrong with node {nodeType.ToString()}");
                     }
 
                     //успех, нашли закрывающий тег
@@ -434,12 +434,12 @@ namespace XmlSerDe.Common
             var cindex = FullNode.LastIndexOf("</".AsSpan());
             if (cindex < 0)
             {
-                throw new InvalidOperationException("Closing tag not found.");
+                throw new XmlDocumentException("Closing tag not found.");
             }
             if (cindex + DeclaredNodeType.Length + 3 > FullNode.Length)
             {
                 //выход на пределы строки
-                throw new InvalidOperationException("Closing tag not found.");
+                throw new XmlDocumentException("Closing tag not found.");
             }
 
             var compareResult = MemoryExtensions.SequenceEqual(
@@ -448,11 +448,11 @@ namespace XmlSerDe.Common
                 );
             if (!compareResult)
             {
-                throw new InvalidOperationException("Mismatched closing tag found for " + DeclaredNodeType.ToString());
+                throw new XmlDocumentException("Mismatched closing tag found for " + DeclaredNodeType.ToString());
             }
             if (FullNode[cindex + 2 + DeclaredNodeType.Length] != '>')
             {
-                throw new InvalidOperationException("Broken closing tag found for " + DeclaredNodeType.ToString());
+                throw new XmlDocumentException("Broken closing tag found for " + DeclaredNodeType.ToString());
             }
 
             var startIndex = FullHead.Length;
@@ -544,7 +544,7 @@ namespace XmlSerDe.Common
                     );
                 if (endCommentIndex < 0)
                 {
-                    throw new InvalidOperationException("Mismatched closing tag found for COMMENT around " + span.ToString());
+                    throw new XmlDocumentException("Mismatched closing tag found for COMMENT around " + span.ToString());
                 }
 
                 var portion = endCommentIndex + endCommentSpan.Length;
@@ -613,7 +613,7 @@ namespace XmlSerDe.Common
                     var endIndex = span.IndexOf("?>".AsSpan());
                     if (endIndex < 0)
                     {
-                        throw new InvalidOperationException("Malformed processing instruction in XML prolog.");
+                        throw new XmlDocumentException("Malformed processing instruction in XML prolog.");
                     }
 
                     span = span.Slice(endIndex + 2);
@@ -657,7 +657,7 @@ namespace XmlSerDe.Common
                 }
             }
 
-            throw new InvalidOperationException("Malformed DOCTYPE declaration in XML prolog.");
+            throw new XmlDocumentException("Malformed DOCTYPE declaration in XML prolog.");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -729,16 +729,40 @@ namespace XmlSerDe.Common
         public readonly ParsedAttribute Attribute;
         public readonly int TotalLength;
 
+        /// <summary>
+        /// Где в разбираемой голове лежит QName атрибута - то есть
+        /// <c>prefix:name</c> целиком, вместе с двоеточием, если префикс есть.
+        /// Спан этого имени в <see cref="Attribute"/> уже лежит, но спан нельзя
+        /// сложить в <c>Span&lt;T&gt;</c>: <c>roschar</c> - ref struct. Пара
+        /// чисел кладётся, и на ней держится проверка уникальности
+        /// (docs/opt-in-xml-guards.md §5.4), которой иначе пришлось бы
+        /// разбирать уже разобранные атрибуты заново.
+        ///
+        /// Разбор эти числа всё равно считает по дороге, так что поля здесь
+        /// не стоят ничего: <c>ref struct</c> живёт на стеке.
+        /// </summary>
+        public readonly int QNameOffset;
+        public readonly int QNameLength;
+
         public AttributeProcessResult()
         {
             Attribute = new ParsedAttribute();
             TotalLength = 0;
+            QNameOffset = 0;
+            QNameLength = 0;
         }
 
-        public AttributeProcessResult(ParsedAttribute attribute, int totalLength)
+        public AttributeProcessResult(
+            ParsedAttribute attribute,
+            int totalLength,
+            int qnameOffset,
+            int qnameLength
+            )
         {
             Attribute = attribute;
             TotalLength = totalLength;
+            QNameOffset = qnameOffset;
+            QNameLength = qnameLength;
         }
     }
 
@@ -777,7 +801,48 @@ namespace XmlSerDe.Common
     /// </summary>
     public static class XmlCharGuard
     {
+        /// <summary>
+        /// Сторона <b>записи</b>: <see cref="XmlFeature.CharGuard"/>. Ошибка
+        /// здесь - про аргумент, который дали сериализатору, поэтому
+        /// <see cref="ArgumentException"/> и позиция в тексте: документ пишем
+        /// мы сами, и позиция указывает на место в переданной строке.
+        /// </summary>
         public static void EnsureValidXmlChars(roschar value)
+        {
+            var index = IndexOfIllegalChar(value);
+            if (index >= 0)
+            {
+                throw new ArgumentException(
+                    $"String contains character U+{(int)value[index]:X4} at position {index}, which is not a legal XML 1.0 character (XML 1.0 §2.2)."
+                    );
+            }
+        }
+
+        /// <summary>
+        /// Сторона <b>чтения</b>: <see cref="XmlGuard.IllegalChars"/>. Тот же
+        /// обход символов, но ошибка - про документ, и текст её снят с
+        /// <c>System.Xml</c> без координат: строк и колонок у span-парсера нет
+        /// (docs/opt-in-xml-guards.md §5.5, §6).
+        /// </summary>
+        public static void EnsureValidInputChars(roschar value)
+        {
+            var index = IndexOfIllegalChar(value);
+            if (index >= 0)
+            {
+                var c = value[index];
+
+                throw new XmlDocumentException(
+                    $"'{c}', hexadecimal value 0x{(int)c:X2}, is an invalid character."
+                    );
+            }
+        }
+
+        /// <summary>
+        /// Индекс первого символа вне Char production XML 1.0 §2.2 или -1.
+        /// Один обход на обе стороны: правило одно и то же, различается только
+        /// то, кому предъявляется претензия.
+        /// </summary>
+        private static int IndexOfIllegalChar(roschar value)
         {
             for (var i = 0; i < value.Length; i++)
             {
@@ -790,7 +855,7 @@ namespace XmlSerDe.Common
 
                 if (c < 0x20)
                 {
-                    ThrowIllegalChar(c, i);
+                    return i;
                 }
 
                 if (c >= 0xD800 && c <= 0xDFFF)
@@ -802,22 +867,17 @@ namespace XmlSerDe.Common
                         continue;
                     }
 
-                    ThrowIllegalChar(c, i);
+                    return i;
                 }
 
                 var codePoint = (int)c;
                 if (codePoint == 0xFFFE || codePoint == 0xFFFF)
                 {
-                    ThrowIllegalChar(c, i);
+                    return i;
                 }
             }
-        }
 
-        private static void ThrowIllegalChar(char c, int index)
-        {
-            throw new ArgumentException(
-                $"String contains character U+{(int)c:X4} at position {index}, which is not a legal XML 1.0 character (XML 1.0 §2.2)."
-                );
+            return -1;
         }
     }
 

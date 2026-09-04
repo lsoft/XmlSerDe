@@ -276,7 +276,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
                 var index = trimmedXml.IndexOf(endOfHead);
                 if (index < 0)
                 {
-                    throw new InvalidOperationException("Closing '?>' not found for xml declaration.");
+                    throw new global::XmlSerDe.Common.XmlDocumentException("Closing '?>' not found for xml declaration.");
                 }
 
                 headless = trimmedXml.Slice(index + endOfHead.Length);

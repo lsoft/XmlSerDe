@@ -22,6 +22,10 @@ Two smaller breaks come with it: a custom `IExhauster` now also implements `Appe
 
 `XmlFeature` itself was then cut from seven flags to four. `QuotedAttributes` is gone and its behaviour is unconditional; `Comments`, `ProcessingInstructions` and `Doctype` are gone and folded into a single `Markup`, which `CData` now includes. `SystemXmlCompatible` is unchanged in meaning. The reasoning, with numbers, is in [Cost of turning a flag on](#cost-of-turning-a-flag-on).
 
+**Breaking change (attribute syntax, every host):** a broken attribute head is now an error instead of a wrong object. `<Foo id=1 Tag="x">` used to read as `id="x"` — the value stolen from the neighbouring attribute, `Tag` lost — and `<Foo id Tag="x">` used to produce an attribute named `"id Tag"` that matched nothing. Both now throw. This is not a flag: there is no mode in which reading the neighbour's value is correct. The same check repairs the mirror bug on **valid** input — `<Foo a = "1">` is legal XML that used to be dropped silently, because the attribute name ended only at `=`, `:`, `/` or `>`.
+
+**Breaking change (drop-in):** `XmlSerDe.Compat` now refuses malformed documents the way `System.Xml.Serialization` refuses them — a second root element, a duplicate attribute, a mismatched or missing closing tag, an illegal `Char` in a string. Code that relied on the facade quietly accepting broken input will start seeing `InvalidOperationException` → `XmlException`, which is what the BCL raised there all along. The native path is unaffected unless you ask for it with `[XmlGuards]` — see [Opt-in XML guards](#opt-in-xml-guards).
+
 ## Performance
 
 XmlSerDe generates serialize and deserialize methods at compile time, so there is no runtime reflection, no first-call warm-up, and no extra cost as the type graph grows. Against `System.Xml.Serialization` on the same documents, a typical shallow payload deserializes about **4× faster** and allocates **5%** of the baseline — the object graph, and nothing else. A document nested 100 levels deep is about **5× faster** for the same reason: the parser is single-pass, so depth no longer multiplies the work. A ~100 MB document is still **twice as fast** and uses **39%** of the BCL heap. Serialization to a string is about **3×** on the small document; writing UTF-8 into a pre-sized `MemoryStream` on the 100 MB document is twice as fast and allocates **28%** of the BCL stream write. On .NET Framework the win is smaller — span `Parse` / `TryFormat` are missing — and on that HUGE deserialize XmlSerDe is a few percent *slower*, though it still allocates 41% of the baseline.
@@ -410,7 +414,7 @@ OrderSerializer.Deserialize(DefaultInjector.Instance, body, out Order result);
 
 ## Drop-in mode: `XmlSerDe.Compat`
 
-The route above is the native one: you declare the serializer class, and every call site names it. `XmlSerDe.Compat` is the other route — for code that already calls `System.Xml.Serialization.XmlSerializer` and would rather not be rewritten. It is **not** a full drop-in replacement; see [What it does not accelerate](#what-it-does-not-accelerate) and [Limitations](#limitations) before reaching for it. In particular, it inherits the untrusted-input caveat: the facade does not add well-formedness validation, so an accelerated type is no safer on hostile input than the native route.
+The route above is the native one: you declare the serializer class, and every call site names it. `XmlSerDe.Compat` is the other route — for code that already calls `System.Xml.Serialization.XmlSerializer` and would rather not be rewritten. It is **not** a full drop-in replacement; see [What it does not accelerate](#what-it-does-not-accelerate) and [Limitations](#limitations) before reaching for it. On untrusted input it is now the *stricter* of the two routes: the facade turns on the full set of [XML guards](#opt-in-xml-guards) by itself, so an accelerated type refuses the same malformed documents `System.Xml.Serialization` refuses. A native `[XmlSubject]` host in the same assembly does not — it stays lenient until you write `[XmlGuards]`.
 
 Reference the extra project and add one line to your own:
 
@@ -467,7 +471,7 @@ It buys you nothing — or close to nothing — when:
 - **the calls go through `XmlWriter` / `XmlReader` / `XmlSerializerNamespaces`.** Those paths materialize the document or hand the call over entirely — see [What the fast path costs elsewhere](#what-the-fast-path-costs-elsewhere). If that is *all* your code does, the facade adds a layer and returns nothing;
 - **serialization happens once, at startup, on a small config file.** Saving 2 ms on a 300 ms boot is not a reason to add a dependency;
 - **the bytes must match `System.Xml.Serialization` exactly** — see [Where the output differs](#where-the-output-differs-from-systemxmlserialization);
-- **the input is untrusted.** XmlSerDe does not validate well-formedness; that is a property of the engine, and the facade does not change it.
+- **the input is untrusted and you are on the native route without `[XmlGuards]`.** The default engine does not validate well-formedness. The facade does: it enables the full guard set itself, so this caveat applies to a native host that has not asked for the guards, not to the drop-in.
 
 A useful way to decide: the facade helps in proportion to how much of your XML work already goes through the fast overloads on types the generator accepts. Measure that share first — [Verifying the migration](#verifying-the-migration) shows how to get the list.
 
@@ -568,7 +572,7 @@ Null and exceptions, on the other hand, behave like the BCL on purpose. `null` i
 | Failure | `System.Xml.Serialization` | `XmlSerDe.Compat` |
 |---|---|---|
 | wrong object type to `Serialize` | `InvalidOperationException("There was an error generating the XML document.")` → `InvalidCastException` | same |
-| malformed document to `Deserialize` | `InvalidOperationException("There is an error in XML document (1, 25).")` → `XmlException` | same type, message without the position (see below) |
+| malformed document to `Deserialize` | `InvalidOperationException("There is an error in XML document (1, 25).")` → `XmlException` | same chain, message without the position (see below): the facade runs the full [guard set](#opt-in-xml-guards), and a document error arrives as `XmlException` inside, not as our own `InvalidOperationException` |
 | `null` writer or stream | `ArgumentNullException` (`output` / `input`) | same |
 
 Three details behind "same", all measured against the BCL rather than assumed:
@@ -769,6 +773,44 @@ var body = OrderSerializer.CutXmlHead(xml.AsSpan());
 OrderSerializer.Deserialize(DefaultInjector.Instance, body, out Order order);
 ```
 
+### Opt-in XML guards
+
+`[XmlGuards(XmlGuard.…)]` — refusal on input that XML 1.0 calls not-well-formed and that the POCO path otherwise turns into an object anyway. Same place as `[XmlFeatures]` (the **serializer class**), same OR rule for several attributes, same "no attribute ≡ `None`".
+
+The two axes are orthogonal and deliberately not one enum: `XmlFeature` answers *should this construct be understood*, `XmlGuard` answers *should this be refused because XML 1.0 forbids it*. A host can have `CData` and no guards, or every guard and no features.
+
+| Flag | What it rejects | What the default does instead |
+|------|-----------------|-------------------------------|
+| `MatchingEndTags` | A closing tag that does not match the open one, and a complex type whose body ends at end-of-input | Any `</…>` closes the current class; a truncated document succeeds with a partially filled object |
+| `SingleRoot` | A second root element, or garbage after the first one | Everything past the first element is silently eaten |
+| `UniqueAttributes` | Two attributes with one qualified name on a head (XML 1.0 WFC: Unique Att Spec) | First match wins |
+| `IllegalChars` | A string that reached the POCO (element text, attribute value) containing a character outside XML 1.0 §2.2 `Char` | `U+0001` in a string member is accepted |
+| `SystemXmlCompatible` | All of the above | — |
+
+```csharp
+//narrow: someone else's writer emits a stray closing tag and it must not pass
+[XmlGuards(XmlGuard.MatchingEndTags)]
+[XmlSubject(typeof(Order), true)]
+public partial class OrderSerializer { }
+
+//full: refuse what System.Xml.Serialization refuses
+[XmlGuards(XmlGuard.SystemXmlCompatible)]
+[XmlSubject(typeof(Order), true)]
+public partial class StrictOrderSerializer { }
+```
+
+`XmlSerDe.Compat` enables the full set by itself — the facade is a drop-in for `System.Xml.Serialization.XmlSerializer`, and being more lenient than the thing it replaces is not a feature. A `[XmlSubject]` class in the same assembly inherits nothing.
+
+**Exceptions.** A host with any guard reports a document error the way the BCL does over a reader without `IXmlLineInfo`: `InvalidOperationException("There is an error in the XML document.")` with the real cause in an `XmlException` inside — the same chain, so a `catch (XmlException)` written before the migration keeps catching. There is no line or position: the parser walks a span and has nothing to report. A host **without** guards keeps today's plain `XmlDocumentException` (it derives from `InvalidOperationException`) with today's message.
+
+**What guards are not.** Not an `XmlReader` pre-pass — the checks are melted into the cursor that was walking the document anyway, and a default host does not call a single one of them. Not a schema. Unknown elements are still skipped: that is the data-binding contract, not a hole. And three things stay unchecked even with the full set, on purpose:
+
+- closing tags **inside a skipped foreign subtree** — counting names there needs a stack as deep as the subtree, which is the very cost that was refused for the end-of-file message;
+- a duplicate attribute reached through **two different prefixes** bound to the same namespace (`xsi:type` and `p3:type`) — comparison is on the literal qualified name, since the core has no general prefix resolution;
+- the **line and position** in the exception.
+
+**Always on, no flag.** Attribute syntax is checked on every host, including the default one: `Attribute ::= Name Eq AttValue` with `Eq ::= S? '=' S?`. There is no mode in which reading the *neighbouring* attribute's value is right, and until this became a check that is what happened — `<Foo id=1 Tag="x">` was read as `id="x"` with `Tag` lost, and `<Foo id Tag="x">` produced an attribute literally named `"id Tag"`. The same check fixes the mirror-image bug on **valid** input: `<Foo a = "1">` is legal XML that XmlSerDe used to drop silently, because the name ended only at `=`, `:`, `/` or `>` and so came out as `"a "`.
+
 ### Cost of turning a flag on
 
 ```bash
@@ -816,6 +858,51 @@ Quote-aware heads used to be the fifth row, at **1.03×** measured the same way 
 | REGULAR serialize, `SystemXmlCompatible` | ~825 ns (1.15×) | 0 B |
 
 The REGULAR matrix also has a `REGULAR_COMPAT` category (`XmlSerializerDeserializerCompatible` on the same `AuxXml`) for a BenchmarkDotNet comparison of default vs `SystemXmlCompatible` on the large document.
+
+### Cost of turning a guard on
+
+```bash
+dotnet run -c Release -f net10.0 --project XmlSerDe.PerformanceTests -- --guard-cost
+```
+
+Same instrument and same reasoning as the flag table above: the question is not "what does deserialization cost" but "what does *one guard* add", and that is a single-digit percentage. A second ladder of hosts (`XmlSerDe.Tests/Complex/GuardLadderHosts.cs`) differs **only** in `[XmlGuards]` — same type graph, same exhauster, same input. The input contains no violation at all: what is measured is the price of *being able* to refuse, not the price of refusing.
+
+**REGULAR** (`ComplexFixture.AuxXml`: 26 elements, three heads carrying `xmlns:xsi` + `xsi:type`, entity-escaped strings), one guard at a time over the default host:
+
+| Flag | Deserialize | Allocated | Where the time goes |
+|------|------------:|----------:|---------------------|
+| `MatchingEndTags` | 1.02–1.05× | 816 B | one name comparison per element body, plus the expected name travelling into `DeserializeBody` |
+| `SingleRoot` | ~1.00× | 816 B | one scan of an empty tail per document; inside the noise floor |
+| `UniqueAttributes` | **1.15×** | 816 B | one walk over the attributes of a head that has any — and every attribute-carrying head here holds a 41-character `xmlns:xsi` value the walk has to step over |
+| `IllegalChars` | **1.06×** | 816 B | one extra pass over every string that reaches the POCO |
+
+**Cumulatively** (median of six runs; the spread of the last row across those runs was 1.22–1.38×):
+
+| Step | Deserialize | vs previous | Allocated |
+|------|------------:|------------:|----------:|
+| default (no guards) | 1.00 | — | 816 B |
+| `+ MatchingEndTags` | 1.03× | +3% | 816 B |
+| `+ SingleRoot` | 1.03× | ~0 | 816 B |
+| `+ UniqueAttributes` | 1.19× | **+16%** | 816 B |
+| `+ IllegalChars` = `SystemXmlCompatible` | **1.25×** | **+5%** | 816 B |
+
+The `Allocated` column is a statement, not a measurement of interest: it is byte-identical down the ladder because a guard is not allowed to allocate on the happy path — no list of seen attribute names, no reader. If that column ever moves, something grew a heap.
+
+**WIDE** — the same REGULAR document with ten extra attributes on every head, none of which the host knows. The parser ignores them (it looks its own up by name); `UniqueAttributes` must walk all of them, so this is the row that decides how the uniqueness check is implemented:
+
+| Flag | Deserialize | Allocated |
+|------|------------:|----------:|
+| `UniqueAttributes` | **1.40×** | 816 B |
+| `SystemXmlCompatible` | **1.46×** | 816 B |
+
+Already-seen names are kept as `(offset, length)` pairs in a `stackalloc Span<int>`, so each head is parsed once. The obvious alternative — compare each attribute against the earlier ones by re-parsing them — is quadratic in the number of attributes, and on this document costs **2.37×** instead of 1.40× (three runs each, 2.35/2.42/2.37 against 1.40/1.41/1.39; no overlap). On a POCO-shaped head with two attributes the two implementations are indistinguishable — one extra parse, well under the drift — so the buffer buys nothing there and everything here. Spans themselves cannot be stored (`Span<ReadOnlySpan<char>>` is illegal — `roschar` is a ref struct) and a heap list is forbidden on this path; two ints per name are neither. A head with more names than the buffer holds falls back to the pairwise walk: overflow is not a duplicate, and a head with 33 distinct attributes is legal XML.
+
+**DEEP** (100 nested levels, no attributes, one string) — every row lands inside the ±4% spread of the probe on this document, `SystemXmlCompatible` included. Nothing there costs anything measurable: `UniqueAttributes` never fires (no head has attributes), `IllegalChars` has one string to check, `SingleRoot` one empty tail, and `MatchingEndTags` compares a short name once per level against a body that took ~30 ns to parse anyway.
+
+Two honest notes about this table:
+
+- the full set on REGULAR is **~1.25×**, not the "5–10%" that `docs/opt-in-xml-guards.md` §3 estimated before the work, and two thirds of that is `UniqueAttributes` alone. The estimate assumed heads with short attributes; REGULAR's heads carry a 41-character namespace URI, and enumerating the attributes means stepping over it. It is still nowhere near the 2× that would mean a forbidden full document scan, and a document with no attributes (DEEP) pays nothing;
+- the numbers are ratios measured **inside one round-robin**. Absolute times drift several percent between processes on this machine, so a cross-process A/B of the default host is not evidence of anything — which is exactly why the always-on attribute check and the scalar closing-tag check are not in this table.
 
 ### Example: polymorphic serializer
 
@@ -1013,7 +1100,9 @@ public class Message
 ## Limitations
 
 - **No CDATA serialization** — string content is always emitted entity-escaped, never wrapped in `<![CDATA[...]]>`. Deserialization of CDATA is **opt-in** (`[XmlFeatures(XmlFeature.CData)]`); the default native path treats a literal `<` in element text as an error.
-- **No well-formedness *validation* of input.** The deserializer reads what it needs and skips the rest, so a malformed document is often accepted rather than rejected: an unbalanced `<A><B></A>` is caught only where a closing tag is actually checked, unknown elements are skipped, and a duplicated attribute silently resolves to the first one. What it will *not* do is fail with a bounds error: parsing a span is index arithmetic, and an `IndexOutOfRangeException` there is a statement about the parser, not about the document. Every malformed input ends either in a result or in an `InvalidOperationException` (or a `FormatException` when a lexeme is in place but is not a number). That invariant is held by a fuzz corpus built mechanically from valid documents — every prefix, every single-character deletion, every single-character replacement with a markup character — plus hand-written broken heads and unterminated comment/CDATA/PI/DOCTYPE markup; a 20 000-deep unknown element is included too, since skipping a foreign subtree counts tags rather than recursing. Still: leniency is not validation, so a document from an untrusted source can produce a partially populated object without complaint. (Serialization *output* may run `XmlCharGuard` when `[XmlFeatures(XmlFeature.CharGuard)]` is set: illegal XML 1.0 `Char` then throws `ArgumentException`. Default native serialize does not.)
+- **No well-formedness *validation* of input on the default path.** By default the deserializer reads what it needs and skips the rest, so a malformed document is often accepted rather than rejected: an unbalanced `<A><B></A>` is caught only where a closing tag is actually checked, unknown elements are skipped, and a duplicated attribute silently resolves to the first one. That leniency is now **opt-in to give up**: `[XmlGuards(XmlGuard.…)]` turns the checks on, and `XmlSerDe.Compat` turns all of them on by itself — see [Opt-in XML guards](#opt-in-xml-guards). Three things stay unchecked even with the full set, and they are named there: closing tags *inside a skipped foreign subtree*, a duplicate attribute reached through two different prefixes bound to the same namespace, and the line/position in the exception.
+
+  What the default path will *not* do is fail with a bounds error: parsing a span is index arithmetic, and an `IndexOutOfRangeException` there is a statement about the parser, not about the document. Every malformed input ends either in a result or in an `InvalidOperationException` (`XmlDocumentException` derives from it) or a `FormatException` when a lexeme is in place but is not a number. That invariant is held by a fuzz corpus built mechanically from valid documents — every prefix, every single-character deletion, every single-character replacement with a markup character — plus hand-written broken heads and unterminated comment/CDATA/PI/DOCTYPE markup; a 20 000-deep unknown element is included too, since skipping a foreign subtree counts tags rather than recursing. (Serialization *output* may run `XmlCharGuard` when `[XmlFeatures(XmlFeature.CharGuard)]` is set: illegal XML 1.0 `Char` then throws `ArgumentException`. Default native serialize does not.)
 - **Parameterless constructor required** unless `[XmlFactory]` is used.
 - Serialized types must be visible to the serializer partial class.
 - Members need accessible setters for deserialization, except setter-less `List<T>` properties (see [Members](#members)).
@@ -1079,7 +1168,11 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | `XmlObject4_5_*` | Abstract polymorphism with `xsi:type` |
 | `XmlFeatureFixture` | Per-flag matrix from `docs/opt-in-xml-features.md`: default rejects comments/CDATA/PI/DOCTYPE/`p3:type`/single quotes; each flag accepts its document and rejects a neighbour |
 | `XmlFeatureGeneratorFixture` / `HostFeatureBindingFixture` | Generated text has no document-wide heuristics on default hosts; flags → primitive names without Roslyn; two hosts in one compilation stay distinct; compat injects the full set without a user `[XmlFeatures]` |
-| `GeneratorIncrementalityFixture` | Cache hits on comments in the host file; cache misses on `[XmlFeatures]` add/remove and on member rename in another file |
+| `XmlGuardFixture` | Per-guard matrix from `docs/opt-in-xml-guards.md`: the same document goes to a host without the attribute (which must **accept** it) and to a host with exactly one flag (which must refuse it, and only on its own violation). Includes the traps a guard must not fall into - `&lt;Foo/&gt;`, an empty body, an empty collection, a skipped foreign subtree, a head with ten distinct attributes |
+| `XmlGuardGeneratorFixture` / `HostGuardBindingFixture` | A default host mentions no guard primitive and carries no extra parameter; `XmlGuard.None` is textually identical to no attribute; one flag emits only its own primitive; flags → snippets without Roslyn; compat gets the full set with no user `[XmlGuards]` and does not change the native host next to it |
+| `AttributeSyntaxFixture` | `Attribute ::= Name Eq AttValue` on both host families: legal whitespace around `=` is read (it used to be dropped), a missing quote or `=` throws instead of stealing the neighbour&#39;s value |
+| `Compat/CompatGuardFixture` | The facade against the BCL on the malformed-document matrix: outer type and message (without the position), inner `XmlException`, expectation taken from the BCL inside the test. Plus Misc after the root, which must **not** start failing, and a native host in the same assembly that still accepts a foreign closing tag |
+| `GeneratorIncrementalityFixture` | Cache hits on comments in the host file; cache misses on `[XmlFeatures]` / `[XmlGuards]` add/remove and on member rename in another file |
 | `XmlObject6_*` | `List<string>` |
 | `XmlObject7_8_*` | Public fields |
 | `XmlObject9_10_*`, `XmlObject11_12_*` | Non-abstract / abstract base polymorphism |

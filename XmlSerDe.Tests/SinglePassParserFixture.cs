@@ -1,4 +1,5 @@
 using System;
+using XmlSerDe.Common;
 using XmlSerDe.Components.Injector;
 using Xunit;
 
@@ -134,7 +135,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void MismatchedClosingTag_Throws()
         {
-            Assert.Throws<InvalidOperationException>(() =>
+            Assert.Throws<XmlDocumentException>(() =>
                 XmlSerializerDeserializer2.Deserialize(
                     DefaultInjector.Instance,
                     "<XmlObject2><StringProperty>abc</WrongName><IntProperty>7</IntProperty></XmlObject2>".AsSpan(),
@@ -146,7 +147,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void TruncatedDocument_Throws()
         {
-            Assert.Throws<InvalidOperationException>(() =>
+            Assert.Throws<XmlDocumentException>(() =>
                 XmlSerializerDeserializer2.Deserialize(
                     DefaultInjector.Instance,
                     "<XmlObject2><StringProperty>abc".AsSpan(),

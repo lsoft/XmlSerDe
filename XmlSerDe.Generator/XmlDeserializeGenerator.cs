@@ -24,6 +24,7 @@ namespace XmlSerDe.Generator
         public static readonly string ExhausterAttributeFullName = typeof(XmlExhausterAttribute).FullName;
         public static readonly string InjectorAttributeFullName = typeof(XmlInjectorAttribute).FullName;
         public static readonly string FeaturesAttributeFullName = typeof(XmlFeaturesAttribute).FullName;
+        public static readonly string GuardsAttributeFullName = typeof(XmlGuardsAttribute).FullName;
 
         internal const string HostsTrackingName = "Hosts";
         internal const string CallSitesTrackingName = "CallSites";

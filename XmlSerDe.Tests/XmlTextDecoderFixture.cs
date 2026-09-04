@@ -133,7 +133,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void ElementText_UnterminatedCData_Throws()
         {
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementTextWithCData("<![CDATA[no end".AsSpan())
                 );
         }
@@ -142,7 +142,7 @@ namespace XmlSerDe.Tests
         public void ElementText_LiteralLessThan_Throws()
         {
             //XML 1.0 §2.4 forbids a literal '<' in character data
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("a < b".AsSpan())
                 );
         }
@@ -150,7 +150,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void ElementText_CData_IsRejectedByDefaultDecoder()
         {
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("<![CDATA[x]]>".AsSpan())
                 );
         }
@@ -164,7 +164,7 @@ namespace XmlSerDe.Tests
         {
             //HtmlDecode resolved this to U+00A0; XML without a DTD has no such
             //entity, and passing it through would be equally wrong
-            var e = Assert.Throws<InvalidOperationException>(
+            var e = Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("a&nbsp;b".AsSpan())
                 );
             Assert.Contains("nbsp", e.Message);
@@ -173,13 +173,13 @@ namespace XmlSerDe.Tests
         [Fact]
         public void ElementText_UnterminatedReference_Throws()
         {
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("a & b".AsSpan())
                 );
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("trailing &".AsSpan())
                 );
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&amp".AsSpan())
                 );
         }
@@ -187,13 +187,13 @@ namespace XmlSerDe.Tests
         [Fact]
         public void ElementText_EmptyReference_Throws()
         {
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&;".AsSpan())
                 );
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&#;".AsSpan())
                 );
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&#x;".AsSpan())
                 );
         }
@@ -203,7 +203,7 @@ namespace XmlSerDe.Tests
         {
             //CharRef ::= '&#' [0-9]+ ';' | '&#x' [0-9a-fA-F]+ ';' - the marker is
             //lowercase 'x' only
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&#X41;".AsSpan())
                 );
         }
@@ -211,10 +211,10 @@ namespace XmlSerDe.Tests
         [Fact]
         public void ElementText_NonDigitInCharacterReference_Throws()
         {
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&#6a5;".AsSpan())
                 );
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&#xZZ;".AsSpan())
                 );
         }
@@ -223,18 +223,18 @@ namespace XmlSerDe.Tests
         public void ElementText_CharacterReferenceToIllegalChar_Throws()
         {
             //U+0000 and the C0 controls other than TAB/LF/CR are not legal Chars
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&#0;".AsSpan())
                 );
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&#1;".AsSpan())
                 );
             //a lone surrogate is not a Char either
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&#xD800;".AsSpan())
                 );
             //U+FFFE and U+FFFF are excluded by the Char production
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&#xFFFF;".AsSpan())
                 );
         }
@@ -242,11 +242,11 @@ namespace XmlSerDe.Tests
         [Fact]
         public void ElementText_CharacterReferenceOutOfUnicodeRange_Throws()
         {
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&#x110000;".AsSpan())
                 );
             //must not overflow into a legal-looking value on the way
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeElementText("&#99999999999999999999;".AsSpan())
                 );
         }
@@ -282,7 +282,7 @@ namespace XmlSerDe.Tests
         [Fact]
         public void AttributeValue_UndeclaredEntity_Throws()
         {
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlDocumentException>(
                 () => XmlTextDecoder.DecodeAttributeValue("&copy;".AsSpan())
                 );
         }

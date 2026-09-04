@@ -577,8 +577,32 @@ namespace XmlSerDe.Compat
             return new InvalidOperationException(SerializationErrorMessage, inner);
         }
 
+        /// <summary>
+        /// То же, но у ошибки документа форма строже: BCL отдаёт
+        /// <see cref="InvalidOperationException"/> с <see cref="XmlException"/>
+        /// внутри, и цепочка должна совпасть, иначе <c>catch</c> по
+        /// <see cref="XmlException"/> в чужом коде перестанет ловить
+        /// (docs/opt-in-xml-guards.md §6).
+        ///
+        /// Три случая, а не один. Сгенерированный хост со стражами заворачивает
+        /// сам, и его результат надо пропустить как есть - иначе получится
+        /// <c>IOE</c> внутри <c>IOE</c>. Пролог и проверка корня на
+        /// <c>xsi:nil</c> исполняются здесь, до сгенерированного кода, и их
+        /// ошибку заворачивать некому. Всё остальное - не про документ, и
+        /// выдавать его за <see cref="XmlException"/> было бы враньём.
+        /// </summary>
         private static InvalidOperationException DeserializationFailed(Exception inner)
         {
+            if (XmlDocumentErrors.IsWrapped(inner))
+            {
+                return (InvalidOperationException)inner;
+            }
+
+            if (inner is XmlDocumentException document)
+            {
+                return XmlDocumentErrors.Wrap(document);
+            }
+
             return new InvalidOperationException(DeserializationErrorMessage, inner);
         }
 

@@ -312,7 +312,12 @@ namespace XmlSerDe.Tests.Compat
             var serializer = new XmlSerializer(typeof(CompatSubject));
             Assert.True(serializer.IsAccelerated, "иначе тест проверяет фолбэк, а не быстрый путь");
 
-            var broken = "<CompatSubject><Number>&nosuchentity;</Number></CompatSubject>";
+            //ссылка стоит в строковом члене намеренно: у числового текст уходит
+            //прямо в разбор числа, минуя декодер, и наружу выходит
+            //FormatException вместо ошибки документа. Это расхождение известно
+            //и записано (docs/opt-in-xml-guards.md §16), а здесь проверяется
+            //цепочка, а не оно
+            var broken = "<CompatSubject><Name>&nosuchentity;</Name></CompatSubject>";
 
             var bcl = new BclXmlSerializer(typeof(CompatSubject));
             var expected = Assert.Throws<InvalidOperationException>(
@@ -330,7 +335,13 @@ namespace XmlSerDe.Tests.Compat
                 })
             {
                 Assert.Equal("There is an error in the XML document.", thrown.Message);
-                Assert.NotNull(thrown.InnerException);
+
+                //цепочка совпадает с BCL целиком, а не только наружным типом:
+                //InvalidOperationException -> XmlException. До стражей внутри
+                //лежало наше InvalidOperationException, и catch (XmlException)
+                //в чужом коде не ловил (docs/opt-in-xml-guards.md §6)
+                Assert.IsType<XmlException>(expected.InnerException);
+                Assert.IsType<XmlException>(thrown.InnerException);
             }
         }
 
@@ -1189,7 +1200,7 @@ namespace XmlSerDe.Tests.Compat
             Assert.Equal(7, p3.Child.Number);
             Assert.Equal("t", p3.Child.Title);
 
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<XmlSerDe.Common.XmlDocumentException>(
                 () => XmlSerDe.Tests.XmlSerializerDeserializer2.Deserialize(
                     XmlSerDe.Components.Injector.DefaultInjector.Instance,
                     "<XmlObject2><IntProperty>1</IntProperty><StringProperty><![CDATA[x]]></StringProperty></XmlObject2>".AsSpan(),

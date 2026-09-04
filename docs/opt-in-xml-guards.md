@@ -1,56 +1,65 @@
 # Opt-in защиты от malformed XML: задача и требования к реализации
 
-**Статус:** к реализации. Код по этому документу ещё не менялся.
-**Связанные документы:** [opt-in-xml-features.md](opt-in-xml-features.md), [README — Limitations](../README.md#limitations), [xmlserializer-compat.md](xmlserializer-compat.md), [perf-single-pass-parser.md](perf-single-pass-parser.md).
+**Статус:** реализовано. Все четыре стража, `[XmlGuards]`, `HostGuardBinding`,
+форма исключений §6, полный набор у compat и обе половины always-on разбора
+атрибута (§5.1). Цифры замера — README, «Cost of turning a guard on»; §3 остаётся
+оценкой *до* реализации и в пользовательский текст не идёт. Чем реализация
+разошлась с этим документом — §17.
+
+**Связанные документы:** [opt-in-xml-features.md](opt-in-xml-features.md) (реализовано),
+[README — Limitations](../README.md#limitations), [xmlserializer-compat.md](xmlserializer-compat.md),
+[perf-single-pass-parser.md](perf-single-pass-parser.md).
 
 Документ самодостаточный: по нему должно быть можно реализовать работу, не поднимая переписку.
 
-Это **не** та же задача, что [opt-in-xml-features.md](opt-in-xml-features.md). Фичи (`XmlFeature`) — *принимать* дополнительные XML-конструкции (CDATA, комментарии, `'` в атрибутах). Стражи (`XmlGuard`) — *отказывать* на вводе, который XML 1.0 считает не-well-formed, и который сегодня ядро молча превращает в POCO. Ортогонально: хост может быть с `CData` и без стражей, или без фич и со всеми стражами. Не складывать флаги в один enum.
+Это **не** та же задача, что [opt-in-xml-features.md](opt-in-xml-features.md). Фичи (`XmlFeature`) — *принимать* дополнительные XML-конструкции (CDATA, комментарии, гибкий префикс `xsi`). Стражи (`XmlGuard`) — *отказывать* на вводе, который XML 1.0 считает не-well-formed, и который сегодня ядро молча превращает в POCO. Оси ортогональны: хост может быть с `CData` и без стражей, или без фич и со всеми стражами. Не складывать флаги в один enum.
+
+Ортогональность осей **не** означает, что они нигде не встречаются. Мест встречи ровно три, все перечислены в §8, и каждое — не «лапша», а один выбор в одном месте: хвост документа (`SingleRoot` × `Markup`), декодер строки (`IllegalChars` × `CData`) и форма исключения. Первая редакция утверждала «конфликт не предусматривается»; это было неверно, см. §16.
 
 ---
 
 ## 1. Задача
 
-Ядро XmlSerDe — POCO ↔ XML data binding, не универсальный XML-процессор. README честно пишет, что защиты от malformed XML на входе нет. `System.Xml.Serialization` этой защитой обладает: сначала `XmlReader` требует well-formedness, потом маппинг на объект. Люди скармливают ему тела HTTP-запросов. Compat-слой, называясь заменой `XmlSerializer`, наследует это ожидание.
+Ядро XmlSerDe — POCO ↔ XML data binding, не универсальный XML-процессор. README честно пишет, что валидации well-formedness на входе нет. `System.Xml.Serialization` этой валидацией обладает: сначала `XmlReader` требует well-formedness, потом маппинг на объект. Люди скармливают ему тела HTTP-запросов. Compat-слой, называясь заменой `XmlSerializer`, наследует это ожидание.
 
 Требуется:
 
-1. **По умолчанию** native-путь (`[XmlSubject]` без дополнительных атрибутов) **не** платит за стражи: поведение на well-formed POCO-документе как сегодня, битый ввод по-прежнему может быть принят.
+1. **По умолчанию** native-путь (`[XmlSubject]` без `[XmlGuards]`) **не** платит за стражи: поведение на well-formed POCO-документе как сегодня, битый ввод по-прежнему может быть принят.
 2. Пользователь **включает** стражи атрибутом с `[Flags]`-перечислением на классе-сериализаторе. Генератор тогда порождает код, который ловит перечисленные нарушения.
-3. **Compat-слой** включает у себя **полный набор** стражей **автоматически**, без атрибута на пользовательском коде.
+3. **Compat-слой** включает у себя **полный набор** стражей **автоматически**, без атрибута на пользовательском коде — ровно так же, как он уже включает себе `XmlFeature.SystemXmlCompatible`.
 4. Детекция — **свой код** в `XmlScan` / декодере / сгенерированном `Deserialize`, не `XmlReader` и не предварительный проход «сначала валидатор, потом разбор».
 5. Исключения — той же формы, что у `System.Xml.Serialization`, **без** строки и колонки (их у span-парсера нет).
 
-Это не breaking change native-пути: default остаётся как сейчас. Breaking — только для compat (битый документ, который фасад сегодня принял, начнёт бросать) и для native-хоста, на который повесили атрибут.
+Это не breaking change native-пути на well-formed вводе. Breaking — для compat (битый документ, который фасад сегодня принял, начнёт бросать), для native-хоста, на который повесили атрибут, и — в одном узком месте — для любого хоста: битый синтаксис атрибута (§5.1) отвергается всегда.
 
 ---
 
 ## 2. Какие угрозы реально есть у POCO-биндинга
 
-Ниже — не энциклопедия XML-атак, а то, что следует из текущего парсера и из прогона тех же документов через `System.Xml.Serialization.XmlSerializer` и через ядро (net10.0 Release, 2026-08-17).
+Ниже — не энциклопедия XML-атак, а то, что следует из текущего парсера и из прогона тех же документов через `System.Xml.Serialization.XmlSerializer` и через ядро (net10.0 Release, прогон 2026-08-17, перепроверено по коду 2026-09-04).
 
 Классические XML-атаки, которых **у этого парсера нет** и которые **не** входят в задачу:
 
 | Атака | Почему не про POCO XmlSerDe |
 |---|---|
-| XXE (`<!ENTITY xxe SYSTEM "file:///…">`) | `<!DOCTYPE>` пропускается, внешние сущности не резолвятся. Нет DTD — нет XXE |
+| XXE (`<!ENTITY xxe SYSTEM "file:///…">`) | `<!DOCTYPE>` либо ошибка (default), либо пропуск (`XmlFeature.Markup`); внешние сущности не резолвятся. Нет DTD — нет XXE |
 | Billion Laughs / квадратичный entity expansion | Те же пять предопределённых сущностей (`amp`/`lt`/`gt`/`apos`/`quot`) и CharRef. Вложенных general entity нет |
 | Схема / XSD / SOAP | Вне скоупа ядра |
-| Namespaces well-formedness (два `xmlns`, зарезервированные префиксы) | Имена сравниваются литерально; общего резолва префиксов нет |
+| Namespaces well-formedness (два `xmlns`, зарезервированные префиксы, дубль по expanded name) | Имена сравниваются литерально; общего резолва префиксов нет. См. оговорку в §5.4 |
 | Неизвестные элементы | И ядро, и BCL их пропускают. Это контракт data binding, не дыра well-formedness |
 | Дубли скалярных *элементов* (`<Total>1</Total><Total>9</Total>`) | Well-formed XML; оба читателя обычно берут последнее. Не страж |
 | Рост `List<T>` / массива от миллиона `<Item>` | Легитимный документ. Лимит размера — политика приложения, не XML 1.0 |
 | Max depth как well-formedness | `SkipBody` итеративный. Стек C# растёт только по графу *известных* типов, как у BCL |
 
-Что **нужно** ловить — только то, что (а) XML 1.0 запрещает, (б) BCL на этом падает, (в) ядро сегодня **принимает объект**, (г) это меняет смысл POCO или доступность сервиса.
+Что **нужно** ловить — только то, что (а) XML 1.0 запрещает, (б) BCL на этом падает, (в) ядро сегодня **принимает объект** или бросает не то, (г) это меняет смысл POCO или доступность сервиса.
 
 ### 2.1. Несовпавший закрывающий тег сложного типа — целостность
 
-Сгенерированный `DeserializeBody` для типа с дочерними элементами:
+Сгенерированный `DeserializeBody` для типа с дочерними элементами (`ClassSourceProducer.GenerateDeserializeMembers`):
 
-```
-if (child.IsEmpty) break;          // конец ввода
-if (child.IsEndTag) break;         // любой закрывающий тег
+```csharp
+if (child.IsEmpty) break;   // XmlHead.IsEmpty == Kind is EndOfInput, то есть конец ввода
+if (child.IsEndTag) break;  // любой закрывающий тег
 ```
 
 Имя закрывающего тега **не сверяется**. Тело скалярного члена (`ReadTextBody` → `EndTagLength`) сверяется; тело класса — нет.
@@ -85,13 +94,15 @@ if (child.IsEndTag) break;         // любой закрывающий тег
 <XmlObject2><IntProperty>1</IntProperty>
 ```
 
-После последнего ребёнка `ReadHead` возвращает `EndOfInput`, цикл выходит. Скаляр без закрытия падает (`Closing tag not found`); класс — нет.
+После последнего ребёнка `ReadHead` возвращает `EndOfInput`, цикл выходит. Скаляр без закрытия падает (`Closing tag not found.`); класс — нет.
 
 Для POCO это главная угроза целостности: атакующий обрезает документ чужим `</…>` или просто не закрывает корень, приложение получает «успешный» частично заполненный объект.
 
+**Важно для §5.2:** таких циклов в генераторе **два**, не один. Второй — в `GenerateDeserializeMember`, ветка коллекции: там тем же `IsEmpty` / `IsEndTag` закрывается элемент-контейнер (`</MyList>`). Третье место — `SkipBody`, и оно имён не сверяет вовсе (см. §5.2, «Что остаётся слепым»).
+
 ### 2.2. Второй корень и хвост после документа — целостность / контрабанда
 
-Публичный `Deserialize` корня игнорирует `bodyConsumed` (`out _`). Всё после первого элемента не смотрится.
+Приватный `Deserialize(inj, fullNode, xmlnsAttributeName, out result)`, через который проходит публичный корневой вход, игнорирует `bodyConsumed` (`out _`). Всё после первого элемента не смотрится.
 
 ```xml
 <XmlObject2><IntProperty>1</IntProperty></XmlObject2><XmlObject2><IntProperty>2</IntProperty></XmlObject2>
@@ -104,11 +115,11 @@ if (child.IsEndTag) break;         // любой закрывающий тег
 - BCL: `There are multiple root elements` / `Data at the root level is invalid`.
 - Ядро: **приняло** первый объект (`IntProperty = 1`).
 
-Для HTTP-тела это «первый документ победил, хвост съели». Аудитор, WAF или второй парсер могут увидеть другой документ. Для POCO достаточно правила XML 1.0: один корень, после него только `S`.
+Для HTTP-тела это «первый документ победил, хвост съели». Аудитор, WAF или второй парсер могут увидеть другой документ.
 
 ### 2.3. Повторяющиеся атрибуты — целостность (HTTP parameter pollution)
 
-XML 1.0 запрещает два атрибута с одним qualified name. README это уже называет (`No duplicate-attribute detection`, берётся первое совпадение). Прогон:
+XML 1.0 запрещает два атрибута с одним qualified name. README это уже называет (дубль молча резолвится в первое совпадение). Прогон:
 
 ```xml
 <AttributeSubject id="1" id="2" Tag="x" kind="zero-value" flag="false" />
@@ -117,67 +128,79 @@ XML 1.0 запрещает два атрибута с одним qualified name.
 - BCL: `'id' is a duplicate attribute name`.
 - Ядро: **приняло** `Id = 1` (первое значение).
 
-Угроза ровно там, где у типа есть `[XmlAttribute]` (и `xsi:type` / `xsi:nil`: два `xsi:type` — тоже дубль). На документе без атрибутов проверки нет и платить не за что.
+Угроза ровно там, где у типа есть `[XmlAttribute]` (и `xsi:type` / `xsi:nil`: два `xsi:type` — тоже дубль). На голове без атрибутов проверки нет и платить не за что: `XmlHead.HasAttributes` уже false и для `<Foo>`, и для `<Foo/>`.
 
-### 2.4. Битый синтаксис атрибута — отказ в обслуживании / неверный объект
+### 2.4. Битый синтаксис атрибута — неверный объект, а не отказ
 
-`ParseFirstFoundAttribute` берёт `trimmed[iofa0]` / `trimmed[iofa2]` / `trimmed[iofa3]` **без** проверки `IndexOf == -1`. На well-formed голове это не стреляет; на битой:
+Здесь первая редакция была неточна, а §11/§15 первой редакции — прямо неверны. Актуальное состояние после ремонта границ (§5.1):
 
 | Вход | BCL | Ядро сегодня |
 |---|---|---|
-| `id=1` (без кавычек) | unexpected token, ожидались `"`/`'` | `FormatException` («`x` is not in a correct format») — разобрало не то |
-| `id="1` (нет закрывающей кавычки) | unexpected token | `Closing quote not found` (через `FindUnquotedGt`) |
-| `id Tag="x"` (нет `=`) | expected `=` | **приняло**, `Id = 0`, `Tag` пустой |
+| `<S id=1/>` (нет кавычек, дальше конец головы) | unexpected token, ожидались `"`/`'` | `InvalidOperationException("Opening quote not found for attribute value.")` |
+| `<S id="1/>` (нет закрывающей кавычки) | unexpected token | `InvalidOperationException("Closing quote not found for attribute value.")` |
+| `<S id=1 Tag="x"/>` (нет кавычек, дальше ещё атрибут) | unexpected token | **разобрало `id="x"`**: открывающая кавычка взята у `Tag`. Для `int`-члена — `FormatException` из чужого токена, для `string`-члена — тихая подстановка чужого значения, а `Tag` при этом теряется |
+| `<S id Tag="x"/>` (нет `=`) | expected `=` | **приняло**: имя атрибута разобрано как `"id Tag"`, значение `"x"`; ни `id`, ни `Tag` не совпали ни с чем, оба члена остались с дефолтами |
+| `<S a = "1"/>` — **легальный XML** (`Eq ::= S? '=' S?`) | читает `a="1"` | **атрибут не найден**: имя разобрано как `"a "` (с пробелом), с `"a"` не совпало, член остался с дефолтом |
 
-Это не XXE. Это либо падение с «не тем» исключением (обход `catch (InvalidOperationException)`), либо тихий неверный POCO. Лечится проверкой границ в том же методе, который и так ходит по атрибутам — **сделано**, см. §5.1: падать с bounds-исключением ядро больше не может, но «приняло не то» (первые две строки таблицы) остаётся вопросом строгости и ждёт стражей.
+Причина у трёх последних строк одна: имя атрибута обрывается только на `=`, `/`, `>` или `:`, а поиск `=` и открывающей кавычки идёт вперёд по всей голове и спокойно перешагивает через пробел и через границу соседнего атрибута. Ремонт границ (`IndexOf < 0` → throw) эту дыру не закрывает и закрыть не может — индексы-то нашлись.
 
-`docs/xmlserializer-compat.md` писал про бесконечный цикл из `IndexOf('<') == -1`. В `ReadTextBody` / `SkipBody` / `SkipToTag` это уже throw. Дыра осталась в разборе атрибутов.
+Последняя строка — не строгость, а **баг на валидном вводе**: `<S a = "1"/>` XmlSerDe сегодня молча теряет (проверено прогоном `XmlScan.ParseAttribute`; `a= "1"` при этом работает — ломает именно пробел *перед* `=`). Поэтому §5.1 — не только про отказ битому вводу, но и про починку легального.
+
+Это не XXE. Это либо падение с «не тем» исключением (обход `catch (InvalidOperationException)` пользователем, ожидавшим ошибку документа), либо тихий неверный POCO с *чужим* значением. Требование §5.1 — доделать always-on проверку так, чтобы строки 3 и 4 стали ошибкой. Флагом это не делается (см. §4.1).
+
+`docs/xmlserializer-compat.md` писал про бесконечный цикл из `IndexOf('<') == -1`. В `ReadTextBody` / `SkipBody` / `SkipToTag` это уже throw, в `ParseAttribute` — проверка «разбор сдвинулся вперёд» (`TotalLength <= 0` → throw). Эта дыра закрыта.
 
 ### 2.5. Запрещённые Char во входном тексте — низкий приоритет, дорогой наивный скан
 
 ```xml
-<XmlObject2><StringProperty>a&#x1;… нет: литеральный U+0001</StringProperty></XmlObject2>
+<XmlObject2><StringProperty>…литеральный U+0001…</StringProperty></XmlObject2>
 ```
 
 - BCL: `hexadecimal value 0x01, is an invalid character`.
-- Ядро: **приняло** строку длины 3 с U+0001 внутри.
+- Ядро: **приняло** строку с U+0001 внутри.
 
-Для POCO это почти никогда не эксплойт: дальше поле — `string`, не разметка. Имеет смысл только как паритет с BCL на compat. **Запрещено** реализовывать полным проходом `XmlCharGuard` по всему документу (см. §3): на REGULAR это ~5 µs, больше самого разбора.
+Для POCO это почти никогда не эксплойт: дальше поле — `string`, не разметка. Имеет смысл как паритет с BCL на compat и как симметрия к `XmlFeature.CharGuard`, который то же самое делает на выходе. **Запрещено** реализовывать полным проходом `XmlCharGuard` по всему документу (см. §3): на REGULAR это ~5 µs, больше самого разбора.
 
 ### 2.6. Что уже ловится и дублировать не надо
 
-Прогон, ядро уже бросает:
+Прогон, ядро уже бросает (`XmlScan.EndTagLength`, `ReadTextBody`, `SkipBodyCore`, декодер):
 
-- обрезанный *скаляр*: `Closing tag not found`;
-- несовпавший close *скаляра*: `Mismatched closing tag found for StringProperty`;
-- необъявленная сущность: `Reference to undeclared entity '&nbsp;'…`.
+- обрезанный *скаляр*: `Closing tag not found.`;
+- закрывающий тег скаляра не на месте: `Closing tag not found for {name}`;
+- несовпавший close *скаляра*: `Mismatched closing tag found for {name}`;
+- имя совпало, а `>` не там: `Broken closing tag found for {name}`;
+- незакрытый end tag при skip: `Closing '>' not found for end tag.`;
+- разметка там, где хост её не понимает: `Unexpected processing instruction, comment, CDATA or DOCTYPE.`;
+- литеральный `<` в тексте элемента и необъявленная сущность — из декодера.
 
-Форму исключений на этих путях всё равно привести к §6, когда включены стражи (обёртка + `XmlException`), но новых сканеров под них не писать.
+Новых сканеров под это не писать. Но **все** эти тексты — часть §6: при включённых стражах они обязаны доехать до вызывающего в форме §6, а не только те два, что перечисляла первая редакция.
+
+И одна оговорка, из-за которой этот список не совсем «трогать не надо»: первая строка — сверка имени, за которую default платит на **каждом** скалярном члене, то есть по классификации §2 это страж, включённый всем. Кандидат на переезд под `MatchingEndTags` — §5.7.
 
 ---
 
-## 3. Сколько это стоит (замер до реализации)
+## 3. Сколько это стоит (оценка до реализации)
 
-Машина та же семья, что в README (Windows, net10.0, Release). Методика **не** BenchmarkDotNet: `Stopwatch`, 50k итераций после прогрева, изолированные куски кандидатов. Абсолютные µs десериализации здесь **не** переносить в README — они выше цифр BDN из-за фабрики `InfoContainer` и шума. Сравнивать **добавку** с базой README: REGULAR XmlSerDe ≈ **2.07 µs**, DEEP ≈ **2.82 µs**.
+Цифры ниже сняты `Stopwatch`-ом на изолированных кусках кандидатов (50k итераций после прогрева) **до** того, как в ядро вмержены opt-in фичи. Они годятся ровно на одно: отсечь заведомо плохие алгоритмы. Ни в README, ни в приёмку они не идут; инструмент измерения готовой работы — §12.
 
 | Кандидат | Как мерили | Стоимость | Вердикт |
 |---|---|---|---|
 | `XmlReader.Create` + `while (Read)` как pre-pass | REGULAR целиком | **~15 µs** (≥ всего быстрого пути) | Запрещён. Именно поэтому «не через XmlReader» |
 | `XmlCharGuard` по **всему** документу | REGULAR / DEEP | **~5.3 µs / ~1.4 µs** | Запрещён как алгоритм стража. Линейно по разметке, не по строковым членам |
 | Второй проход `ScanHead` по документу в поисках дублей атрибутов | REGULAR / DEEP / 4-атрибутная голова | **~2.7 µs / ~5.7 µs / ~0.6 µs** | Запрещён. На DEEP атрибутов нет, а скан голов всё равно платится. Только **вплавить** в уже разобранную голову с `HasAttributes` |
-| `SequenceEqual` имени закрывающего тега × N | 26 имён / 100 имён, два разных спана | **~6 нс/сравнение** (~0.16 µs на REGULAR, ~0.56 µs на DEEP в изолированном цикле с `NoInlining`) | Вплавить в уже существующую ветку `IsEndTag`: голова уже содержит `DeclaredNodeType`. Добавка в горячем пути — доли процента… низкие единицы % на DEEP |
-| Скан хвоста «только `S`» | пустой leftover | **~15 нс** | Вплавить в корневой `Deserialize` после `bodyConsumed`. На пустом хвосте бесплатно |
+| `SequenceEqual` имени закрывающего тега × N | 26 имён / 100 имён, два разных спана | **~6 нс/сравнение** | Вплавить в существующую ветку `IsEndTag`: имя уже лежит в голове |
+| Скан хвоста «только Misc» | пустой leftover | **~15 нс** | Вплавить в корневой `Deserialize` после `bodyConsumed`. На пустом хвосте бесплатно |
 
-Итого ожидаемая цена **полного набора**, если делать как в §5, а не наивными пре-пассами:
+Ожидаемая цена **полного набора**, если делать как в §5:
 
-| Документ | Что реально исполняется | Оценка добавки к сегодняшнему Deserialize |
+| Документ | Что реально исполняется | Ожидание |
 |---|---|---|
-| DEEP (100 уровней, 0 атрибутов, 1 строка) | 100 `SequenceEqual` на close + пустой leftover | **низкие единицы %**, цель &lt; 5% |
-| REGULAR (мало атрибутов `xsi:*`, строки есть) | close-check на сложных элементах + uniqueness на головах с атрибутами + leftover + Char на декодированных строках | **порядка 5–10%**, не 2× |
-| Голова с 4 `[XmlAttribute]` | uniqueness = ещё один проход 4 коротких имён по уже найденной голове | десятки–сотни нс на такой элемент |
+| DEEP (100 уровней, 0 атрибутов, 1 строка) | 100 `SequenceEqual` на close + пустой хвост | **низкие единицы %** |
+| REGULAR | close-check на сложных элементах + uniqueness на головах с атрибутами + хвост + Char на строках, доехавших до POCO | **порядка 5–10%** |
+| Голова с 4 `[XmlAttribute]` | uniqueness = попарное сравнение 4 коротких имён по уже найденной голове | десятки–сотни нс на такой элемент |
 | Native **без** атрибута | ни одного из этих вызовов | **0** |
 
-После реализации переснять BDN (REGULAR / DEEP, native default vs native+`SystemXmlCompatible` vs compat) и вписать в README. Цифры этого раздела — порядок величины и запрет на плохие алгоритмы, не SLA.
+Базы для сравнения брать **из того же прогона**, что и замер стражей (§12), а не из этого раздела и не из старой таблицы README: цифры README менялись вместе с фичами (например, DEEP net10 сейчас 3.139 µs, REGULAR — 2.063 µs, и это уже другой снимок, чем был при написании первой редакции).
 
 ---
 
@@ -185,7 +208,7 @@ XML 1.0 запрещает два атрибута с одним qualified name.
 
 ### 4.1. Перечисление
 
-В `XmlSerDe.Common`, `[Flags]`, имя `XmlGuard`.
+В `XmlSerDe.Common`, `[Flags]`, имя `XmlGuard`. Рядом с `XmlFeature`, тем же стилем.
 
 ```csharp
 [Flags]
@@ -198,13 +221,16 @@ public enum XmlGuard
     /// тело не может кончиться <c>EndOfInput</c> без этого тега.
     /// Без флага любой <c>&lt;/…&gt;</c> закрывает текущий класс, отсутствие
     /// закрытия — успех с частично заполненным объектом.
-    /// Скалярные тела уже сверяют имя (этот флаг их не отключает).
+    /// Скалярные тела сегодня сверяют имя всегда; переезжает ли эта сверка
+    /// под флаг - решается замером, см. §5.7. Чужое поддерево, уходящее
+    /// в skip, имён не сверяет и с флагом.
     /// </summary>
     MatchingEndTags = 1 << 0,
 
     /// <summary>
-    /// После корня допустимы только символы XML S production
-    /// (#x20 \| #x9 \| #xD \| #xA). Второй элемент или мусор — ошибка.
+    /// После корня допустим только Misc: пробелы XML S production
+    /// (#x20 | #x9 | #xD | #xA), а у хоста с <see cref="XmlFeature.Markup"/> —
+    /// ещё комментарии и processing instructions. Второй элемент или мусор — ошибка.
     /// </summary>
     SingleRoot = 1 << 1,
 
@@ -215,8 +241,8 @@ public enum XmlGuard
     UniqueAttributes = 1 << 2,
 
     /// <summary>
-    /// Декодированный текст элемента и значение атрибута должны состоять
-    /// из Char XML 1.0 §2.2. Без флага U+0001 в строке члена принимается.
+    /// Строка, доехавшая до POCO (текст элемента, значение атрибута), должна
+    /// состоять из Char XML 1.0 §2.2. Без флага U+0001 в строке члена принимается.
     /// Не путать с <see cref="XmlFeature.CharGuard"/>: тот — сериализация.
     /// </summary>
     IllegalChars = 1 << 3,
@@ -235,11 +261,11 @@ public enum XmlGuard
 }
 ```
 
-Добавлять новые члены в этот enum в рамках задачи **нельзя** без правки этого документа.
+Составных членов, включающих друг друга (как `CData = Markup | …` у фич), здесь нет: у каждого стража своя точка вставки и своя цена. Добавлять новые члены в рамках задачи **нельзя** без правки этого документа.
 
 `XmlGuard.None` и отсутствие атрибута — одно и то же.
 
-Синтаксис атрибутов (`=`, кавычки, `IndexOf == -1`) **не** является членом enum: это всегда-включённый ремонт `ParseFirstFoundAttribute` (см. §5.1). На well-formed документе ветки не берутся. Выключать «разрешить IndexOutOfRange» незачем.
+Синтаксис атрибутов (`=`, кавычки, границы имени) **не** является членом enum: это всегда-включённый ремонт (§5.1). Причина не изменилась: «разрешить читать значение соседнего атрибута» — не тот режим, который кому-то нужен, а на well-formed голове проверки не срабатывают. Цена — §5.1.
 
 ### 4.2. Атрибут
 
@@ -258,16 +284,18 @@ public sealed class XmlGuardsAttribute : Attribute
 }
 ```
 
-Правила — как у `[XmlFeatures]`:
+Правила — как у `XmlFeaturesAttribute`, вплоть до формы кода:
 
 - Несколько атрибутов на одном классе **объединяются через OR**.
 - Атрибут не на хосте не читается и не диагностируется.
 - `[XmlGuards(XmlGuard.None)]` ≡ нет атрибута.
 - Не расширять `[XmlSubject]` и не класть стражи вторым аргументом в `[XmlFeatures]`.
 
+Чтение — копия `ClassSourceProducer.ReadXmlFeatures` под новый тип атрибута (тот же обход `AttributeData`, то же приведение `int`/`long`).
+
 ### 4.3. Compat
 
-Сгенерированный compat-сериализатор получает `XmlGuard.SystemXmlCompatible` **внутри генератора**. Пользовательский `[XmlSubject]`-хост в той же сборке флаги **не** наследует (то же правило «не используешь drop-in — не платишь», что в [opt-in-xml-features.md](opt-in-xml-features.md) §3.3 и [xmlserializer-compat.md](xmlserializer-compat.md)).
+Сгенерированный compat-сериализатор получает `XmlGuard.SystemXmlCompatible` **внутри генератора**, в том же ctor `ClassSourceProducer`, где он уже получает `XmlFeature.SystemXmlCompatible`. Пользовательский `[XmlSubject]`-хост в той же сборке флаги **не** наследует (то же правило «не используешь drop-in — не платишь», что в [opt-in-xml-features.md](opt-in-xml-features.md) §3.3 и [xmlserializer-compat.md](xmlserializer-compat.md)).
 
 Два хоста в одной сборке (native без стражей и compat со стражами) — два набора методов, как уже два класса.
 
@@ -285,179 +313,231 @@ public sealed class XmlGuardsAttribute : Attribute
 
 ### 5.0. Структура генератора: не лапша из `if`
 
-Это **требование**, не совет. Та же планка, что [opt-in-xml-features.md](opt-in-xml-features.md) §4.5. `ClassSourceProducer` уже большой; стражи ортогональны графу типа (члены, коллекции, `xsi:type`). Если в `GenerateDeserializeMember` / `GenerateDeserializeBodyMethod` / `GenerateRootDeserializeMethod` добавить `if (_guards.HasFlag(MatchingEndTags))` — генератор станет нечитаемым, а пятый страж вставится в десяток мест и разъедется.
+Это **требование**, не совет. Планка та же, что [opt-in-xml-features.md](opt-in-xml-features.md) §4.5, и она уже один раз выдержана: `HostFeatureBinding` существует, `ClassSourceProducer` по фичам в `Generate*` не ветвится. Стражи обязаны лечь тем же образом.
 
-Два binding не сливать в один «всё про XML»: `HostFeatureBinding` — какие конструкции понимать; `HostGuardBinding` — какие нарушения ловить. Producer читает оба. Не делать `HostXmlBinding` с двенадцатью флагами.
+Два binding не сливать в один «всё про XML»: `HostFeatureBinding` — какие конструкции понимать; `HostGuardBinding` — какие нарушения ловить. Producer держит оба поля (`_binding`, `_guards`), собирает их в ctor и дальше только читает.
 
 **Запрещено**
 
-- Размазывать `HasFlag` / `switch (guards)` по методам, которые строят граф типа. Там стражей нет.
+- Размазывать `HasFlag` / `switch (guards)` по методам, которые строят граф типа.
 - Копировать целые шаблоны `DeserializeBody` «со стражами» и «без». Шаблон один.
-- Эмитить в `{Host}.g.cs` лестницу `if (MatchingEndTags) … else …` или комментарии «здесь если SingleRoot». Рецензент, открыв сгенерированный файл, видит либо вызов `EnsureUniqueAttributes`, либо его отсутствие; либо вызов `EnsureEndTagName`, либо голый `break` — без enum и без флагов.
+- Эмитить в `{Host}.g.cs` лестницу `if (MatchingEndTags) … else …` или комментарии «здесь если SingleRoot». Рецензент, открыв сгенерированный файл, видит либо вызов `EnsureUniqueAttributes`, либо его отсутствие; либо `EnsureEndTagName`, либо голый `break` — без enum и без флагов.
 - Клонировать `ReadHead` по комбинации `XmlFeature × XmlGuard` (`ReadHeadGuardedQuoted` и т.п.). Комбинаторный взрыв — та же лапша в Common.
-- Второй объект binding, который producer пересчитывает в каждом `Generate*`. Собрали один раз в ctor producer — дальше только читаем поля.
 - Runtime `if (guards.HasFlag)` в `XmlScan.ReadHead` «на всякий случай, JIT свернёт». Default-хост на этот код не ссылается.
 
 **Обязательно**
 
-`HostGuardBinding.From(XmlGuard)` — чистый тип без `Compilation` и без Roslyn. Юнит: набор флагов → ожидаемые имена методов / сниппеты. Регрессия «включили UniqueAttributes, а хост его не зовёт» ловится без `CSharpGeneratorDriver`.
+`HostGuardBinding.From(XmlGuard)` — чистый тип без `Compilation` и без Roslyn, `#if NETSTANDARD`, как `HostFeatureBinding`. Юнит: набор флагов → ожидаемые сниппеты. Регрессия «включили `UniqueAttributes`, а хост его не зовёт» ловится без `CSharpGeneratorDriver`; файл-ориентир — `XmlSerDe.Tests/HostFeatureBindingFixture.cs`.
 
-Поля binding (имена — ориентир):
+Идиом полей — как у `HostFeatureBinding`: не флаги, а готовые имена методов, куски аргументов и целые операторы, плюс `*Statement` / `*Invocation`-хелперы. Ориентир состава (имена — ориентир, состав — требование):
 
 ```
-EndTagStatement          // default: break;  guard: EnsureEndTagName(...); break;
-EndOfInputStatement      // default: break;  guard: ThrowUnexpectedEof();
-AfterReadHead            // default: пусто;  guard: if (child.HasAttributes) EnsureUniqueAttributes(...)
-RootBodyConsumed         // default: out _;  guard: out bodyConsumed + EnsureNoTrailingMarkup
-DecodeElementText        // имя checked/unchecked; стык с XmlFeature.CData — 2×2 перегрузки декодера, не больше
-DecodeAttributeValue     // то же для атрибутных строк
+EndTagStatement(headVar, expectedNameExpr)   // default: "break;"
+                                             // guard: "EnsureEndTagName(...); break;"
+EndOfInputStatement                          // default: "break;"  guard: "ThrowUnexpectedEof();"
+AfterReadHeadStatement(headVar)              // default: ""
+                                             // guard: "if (h.HasAttributes) EnsureUniqueAttributes(h.FullHead);"
+ExpectedEndNameParameter / ExpectedEndNameArgument(expr)
+                                             // default: "" / "" — сигнатура DeserializeBody не меняется
+                                             // guard: ", roschar expectedEndName" / ", <expr>"
+RootTailStatement(fullNodeVar, headVar, consumedVar)
+                                             // default: "" (и bodyConsumed по-прежнему out _)
+                                             // guard: вызов EnsureNoTrailingMarkup(...)
+GuardedStringStatement(varName)              // default: ""  guard: вызов Char-проверки над строкой
+Wraps                                        // нужна ли корневая обёртка §6
 ```
 
-Все интерполяции в `ClassSourceProducer` используют `_guards.EndTagStatement`, не пересчитывают флаги. Место, куда вставляется close-check — **одно**: ветка `IsEndTag` в `GenerateDeserializeMembers`. Uniqueness — **одно**: сразу после `ReadHead` в том же цикле. SingleRoot — **одно**: корневой `Deserialize`. IllegalChars не торчит из producer, если декодер выбирается тем же binding, что уже выбирает `DecodeElementText` для CDATA; если фичи ещё не вмержены — одно поле имени декодера здесь.
+Точки вставки — **закрытый список**, и он длиннее, чем утверждала первая редакция:
 
-Независимые оси **не** перемножаются с осями `XmlFeature`:
-
-| Страж | Где живёт | Что видит генератор |
+| Страж | Где живёт | Сколько точек |
 |---|---|---|
-| always-on границы атрибута | `ParseFirstFoundAttribute` | ничего; все хосты |
-| `MatchingEndTags` | два поля binding на `IsEndTag` / `IsEmpty` | готовые сниппеты, не `if` в producer |
-| `SingleRoot` | только корневой `Deserialize` | поле: `out _` vs `out consumed` + вызов |
-| `UniqueAttributes` | вызов после `ReadHead`, если `HasAttributes` | поле: имя метода или пусто |
-| `IllegalChars` | `DecodeElementText` / `DecodeAttributeValue` | имя checked-примитива |
+| always-on синтаксис атрибута | `XmlScan.ParseFirstFoundAttribute` | генератор не видит вовсе; все хосты |
+| `MatchingEndTags` | ветки `IsEndTag` / `IsEmpty` в `GenerateDeserializeMembers` **и** в коллекционной ветке `GenerateDeserializeMember`; плюс параметр `DeserializeBody` и аргумент на каждом её вызове | 2 цикла + сигнатура + call sites |
+| `SingleRoot` | `GenerateDeserializeHeadMethod` (забрать `bodyConsumed`) и `GenerateRootDeserializeMethod` (проверить хвост) | 2 |
+| `UniqueAttributes` | сразу после `ReadHead` в тех же двух циклах + голова корня в `GenerateDeserializeHeadMethod` | 3 |
+| `IllegalChars` | выбор декодера (композиция с `CData`), результат `inj.ParseBody` для строк, значение атрибута перед `.ToString()` | 3, см. §5.5 |
 
-Стык с `CData`: четыре имени декодера (`Decode`, `DecodeCData`, `DecodeChecked`, `DecodeCDataChecked`) выбирает **композиция двух binding в одном месте** (`From(features, guards)`-helper или таблица 2×2), не вложенные `if` в `GenerateDeserializeMember`.
+Стык с `CData`: имена декодера (`DecodeElementText`, `DecodeElementTextWithCData` и их checked-двойники) выбирает **композиция двух binding в одном месте** — helper вида `From(features, guards)` или таблица 2×2, — не вложенные `if` в `GenerateDeserializeMember`.
 
 **Как выглядит сгенерированный `DeserializeBody`**
 
-Как сегодня: цикл `ReadHead` → сравнение имени → `ReadTextBody` / рекурсия. Отличаются только вставленные вызовы из binding. В `.g.cs` нет `XmlGuard`, нет `HasFlag`.
+Как сегодня: цикл `ReadHead` → сравнение имени → `ReadTextBody` / рекурсия. Отличаются только вставленные из binding сниппеты и — у хоста со стражами — лишний параметр. В `.g.cs` нет `XmlGuard`, нет `HasFlag`.
 
 **Как не структурировать**
 
-```
+```csharp
 // в ClassSourceProducer.GenerateDeserializeMembers — нельзя
 if (_guards.HasFlag(XmlGuard.MatchingEndTags))
     emit EnsureEndTagName(...)
 else
     emit break
-```
 
-```
 // в том же методе — нельзя
 emit "if (guards.HasMatchingEndTags) { ... } else { break; }"
-```
 
-```
 // можно
-emit $"{_guards.EndTagStatement}"
+emit $"{_guards.EndTagStatement("child", "expectedEndName")}"
 ```
 
 Producer по-прежнему ветвится по *типу члена* — эта ось остаётся. Стражи в неё не вплетаются.
 
-В ревью `ClassSourceProducer`: поиск `HasFlag` / `XmlGuard.` вне ctor/присвоения binding — замечание, блокирующее приёмку. Исключение — комментарий, ссылающийся на этот раздел.
+В ревью `ClassSourceProducer`: поиск `HasFlag` / `XmlGuard.` вне ctor и вне присвоения binding — замечание, блокирующее приёмку. Исключение — комментарий, ссылающийся на этот раздел.
 
 **Недостаточно для приёмки**
 
 - «добавили `bool matchingEndTags` в `ReadHead` и генератор передаёт `true`/`false`» — runtime-флаг, default всё равно тащит ветку;
 - «в `GenerateDeserializeMembers` четыре `if (HasFlag)`» — поведение может совпасть, структура — нет.
 
----
-
 Принцип детекции: вплавить в уже существующий курсор, не делать пре-pass. В рантайме на default-пути **нет** `if (guards.HasFlag)`.
 
-### 5.1. Always-on: границы в `ParseFirstFoundAttribute` — **сделано**
+### 5.1. Always-on: разбор атрибута
 
-После каждого `IndexOf` / `IndexOfAny`: если `&lt; 0` — `throw`, не `trimmed[-1]`, не «съесть соседний атрибут».
+Две половины, и путать их не надо.
 
-Это чинит таблицу §2.4 на **всех** хостах. Happy path: одно сравнение с `-1`, предсказано как false. В бенчмарк default это не должно быть видно.
+**Границы — сделано.** После каждого `IndexOf` / `IndexOfAny` в `ParseFirstFoundAttribute`: если `< 0` — `throw`, не `trimmed[-1]` и не `Slice` с отрицательным индексом. Сделано вместе с двумя соседними местами того же рода: в `ParseAttribute` — выход по концу головы (`index >= internalsOfHead.Length`) и требование двигаться вперёд (`TotalLength <= 0` → throw, иначе цикл вечный), в `XmlSerDe.Compat/XmlPrologue` — незакрытое `<?xml` (было `Slice(-1 + 2)`, то есть разбор с середины объявления).
+
+Инвариант закреплён корпусом — `XmlSerDe.Tests/MalformedInputFixture.cs`: все префиксы, все удаления и все замены одного символа на разметочный для трёх документов, плюс битые головы и незакрытая разметка. Требование: результат либо объект, либо `InvalidOperationException` / `FormatException` / `OverflowException`; `IndexOutOfRangeException` и `ArgumentOutOfRangeException` — провал теста. Корпус нашёл случай, который руками не пишется: потерянный `=` в `p3:type"…"`.
+
+**Синтаксис — сделано.** Ремонт границ не закрывает строки 3–5 таблицы §2.4, потому что там все индексы находятся — просто не там, где надо. Требуется, тоже always-on и тоже не флагом, разбирать голову по XML 1.0 §3.1 `Attribute ::= Name Eq AttValue`, `Eq ::= S? '=' S?`:
+
+1. **Имя кончается на `S` так же, как на `=`, `/`, `>`, `:`.** Реализуется расширением уже существующего набора `AttributeNameEndValues` (и строки-двойника в netstandard-ветке): дополнительного прохода по имени не появляется — тот же один векторизованный поиск, просто с более широким набором. Ловит `id Tag="x"` и заодно чинит `a = "1"`.
+2. **После имени — `S*`, затем обязательный `=`.** Если первый непробельный символ после имени не `=` (и не `:` в префиксной ветке) — ошибка. Это то, что отличает «легальный пробел вокруг `=`» от «пропущенного `=`».
+3. **После `=` — `S*`, затем обязательная кавычка.** Сейчас берётся первая найденная кавычка, чем бы ни был текст до неё. Ловит `id=1 Tag="x"`: до кавычки стоит `1 Tag=`, а это не пробелы.
+
+Всё три — по уже нарезанным спанам, без второго прохода по голове: на well-formed голове п. 1 стоит ровно столько же, сколько сегодняшний поиск, а сегменты `S*` в пп. 2–3 имеют нулевую длину. Если замер (§12) покажет, что это видно в default, — обсуждать надо не отмену проверки, а её реализацию; молча читать значение соседнего атрибута и молча терять легальный атрибут ядро не должно.
+
+Исключения этих проверок — по §6: тип `XmlDocumentException`, текст по таблице §6 (`'{token}' is an unexpected token. The expected token is '"' or '''.` / `… '='.`).
 
 Не делать из этого флаг.
 
-Сделано вместе с двумя соседними местами того же рода: в `ParseAttribute` — выход
-по концу головы (`index >= internalsOfHead.Length`) и требование двигаться вперёд
-(`TotalLength <= 0` → throw, иначе цикл вечный), в `XmlSerDe.Compat/XmlPrologue` —
-незакрытое `<?xml` (было `Slice(-1 + 2)`, то есть разбор с середины объявления).
-Исключение пока обычное `InvalidOperationException`, не форма §6: та появится
-вместе с остальными стражами.
-
-Инвариант закреплён корпусом — `XmlSerDe.Tests/MalformedInputFixture.cs`: все
-префиксы, все удаления и все замены одного символа на разметочный для трёх
-документов, плюс битые головы и незакрытая разметка. Требование: результат либо
-`InvalidOperationException`/`FormatException`; `IndexOutOfRangeException` и
-`ArgumentOutOfRangeException` — провал теста. Корпус нашёл случай, который руками
-не пишется: потерянный `=` в `p3:type"…"`.
-
 ### 5.2. `MatchingEndTags`
 
-`DeserializeBody` должен знать ожидаемое имя (имя типа / `[XmlRoot]` / `[XmlElement]` того члена, чьё тело сейчас разбирается). Сейчас в метод оно не передаётся — передать `roschar expectedEndName` с головы, которая уже прочитана.
+**С чем сверять.** С именем **открывающего тега**, которое уже прочитано и лежит в `XmlHead.DeclaredNodeType`, — не с именем типа и не с `[XmlElement]` члена. Причины: у корня генератор допускает два имени сразу (`[XmlType]` и `[XmlRoot]`, см. `GenerateDeserializeHeadedMethod`), а у полиморфного члена тело разбирает `DeserializeBody` производного типа, тогда как в документе стоит имя члена. Well-formedness — это свойство пары тегов в документе, а не маппинга.
 
-На `child.IsEndTag`:
+**Как передать.** `DeserializeBody` имени не знает — оно осталось у вызывающего. Добавить параметр `roschar expectedEndName` **только у хоста со стражем** (поля `ExpectedEndNameParameter` / `ExpectedEndNameArgument` в binding); у default-хоста сигнатура не меняется и лишний спан не передаётся. Аргумент на каждом вызове берётся из уже имеющейся головы:
 
-- default: как сейчас, любой close заканчивает тело;
-- страж: `SequenceEqual(child.DeclaredNodeType, expectedEndName)` (плюс XML `S` перед `>`? **нет** — сегодня `EndTagLength` для скаляров требует `>` сразу после имени; не расширять в этой задаче). Несовпадение → §6, inner как у BCL без позиции: `The '{expected}' start tag does not match the end tag of '{actual}'.`
+| Вызов | Что передавать |
+|---|---|
+| `GenerateDeserializeHeadedMethod` → `DeserializeBody` (свой тип и ветка `xsi:type`) | `xmlNode.DeclaredNodeType` |
+| `GenerateDeserializeMember` → `DeserializeBody` члена | `childDeclaredNodeType` |
+| коллекционная ветка → `DeserializeHeaded` элемента | голова элемента (`child2`) |
 
-На `child.IsEmpty` (конец ввода):
+**Что вставить.** В обоих циклах (§5.0):
 
-- default: `break`, объект принят;
-- страж: ошибка, inner в духе `Unexpected end of file has occurred.` Список незакрытых элементов **не обязателен** (для него нужен стек имён; это цена и сложность без выигрыша в security). Не строить стек только ради текста BCL.
+- `IsEndTag`, default: как сейчас, любой close заканчивает тело;
+- `IsEndTag`, страж: `EnsureEndTagName(child.DeclaredNodeType, expectedEndName)`. Несовпадение → §6, inner как у BCL без позиции: `The '{expected}' start tag does not match the end tag of '{actual}'.` Пробелы перед `>` в закрывающем теге — **вне** задачи: скалярный `EndTagLength` их сегодня тоже не допускает, и расходиться этим двум местам нельзя;
+- `IsEmpty` (конец ввода), default: `break`, объект принят;
+- `IsEmpty`, страж: ошибка, inner `Unexpected end of file has occurred.` Список незакрытых элементов **не обязателен** (для него нужен стек имён; это цена и сложность без выигрыша в security).
 
-Скалярный `EndTagLength` уже бросает. При включённых стражах обернуть его исключение в форму §6 (один helper `ThrowXmlDocumentError`), не писать вторую сверку имени.
+Скалярный `EndTagLength` уже бросает — второй сверки имени не писать, только довезти форму §6.
+
+**Что остаётся слепым — и это записано, а не забыто.** `SkipBodyCore` считает баланс тегов, не сверяя имён вовсе. Значит и со стражем `<Unknown><A></B></Unknown>` внутри известного типа будет принят, а BCL на нём падает. Считать имена в skip — это стек имён на всю глубину чужого поддерева, то есть ровно та цена, от которой отказались в EOF-сообщении. Решение: **skip остаётся слепым**, расхождение фиксируется тестом и строкой в README (§13.2). Приёмка §11.3 сверяется с BCL по матрице §2, а не по «любому битому документу».
 
 ### 5.3. `SingleRoot`
 
-Корневой `Deserialize` сегодня:
+Сегодня хвост теряется в `GenerateDeserializeHeadMethod`: голова читается, тело отдаётся в `DeserializeHeaded`, а `bodyConsumed` уходит в `out _`. Публичный корневой метод (`GenerateRootDeserializeMethod`) не знает ни длины головы, ни съеденного тела.
 
-```
-Deserialize(…, xmlFullNode, …, out result, out _);
-```
+Со стражем:
 
-Со стражем: забрать `bodyConsumed`, взять хвост `xmlFullNode.Slice(head + bodyConsumed)`, допустить только `S`. Любой другой символ → inner `Data at the root level is invalid.` (мусор) либо `There are multiple root elements.` (хвост начинается с `<`). Различать по первому непробельному: `<` vs остальное. Позицию не считать.
+1. `GenerateDeserializeHeadMethod` перестаёт терять числа: `out var bodyConsumed`, и хвост считается прямо там, где под рукой и `fullNode`, и `xmlNode.TotalLength`. Хвост = `fullNode.Slice(xmlNode.TotalLength + bodyConsumed)`.
+2. Проверка — один вызов `EnsureNoTrailingMarkup(tail)`.
+3. Без стража — по-прежнему `out _`, и ни одного лишнего сложения.
 
-Без стража по-прежнему `out _`.
+Публичную корневую обёртку трогать не нужно; менять её сигнатуру, чтобы «поднять bodyConsumed наверх», запрещено.
 
-Не сканировать документ с начала повторно.
+**Что допускается в хвосте.** XML после корня разрешает Misc: пробелы, комментарии, PI. Для default-хоста (без `XmlFeature.Markup`) комментарий и PI — и так ошибка разбора, поэтому хвост = только `S`. Для хоста с `Markup` (а `XmlFeature.SystemXmlCompatible` его включает, значит **весь compat**) хвост = `S` + комментарии + PI, иначе фасад начнёт падать на well-formed документе `</root><!-- bye -->`, который BCL читает молча. Это регрессия, а не «цель задачи». Реализация: `EnsureNoTrailingMarkup` имеет две формы, и выбирает их композиция binding, как декодер в §5.5 — не runtime-флаг.
+
+Ошибки: первый непробельный символ `<` → `There are multiple root elements.`, иначе → `Data at the root level is invalid.` Позицию не считать. Документ с начала повторно не сканировать.
 
 ### 5.4. `UniqueAttributes`
 
-Только если `head.HasAttributes`. Не вызывать на DEEP-подобных головах без атрибутов.
+Только если `head.HasAttributes` — на DEEP-подобных головах и на `<Foo/>` вызова нет вовсе.
 
-Алгоритм: один проход уже существующим `ParseFirstFoundAttribute` от конца имени до конца головы. Qualified name = prefix + `:` + local (или local). Сравнение с уже увиденными: `stackalloc` срезов в `FullHead`, до ~16 имён без кучи; больше 16 на POCO не бывает, если вдруг — бросать как дубль или расти на стеке, не `List`. Дубль → inner `'id' is a duplicate attribute name.` (подставить local name, как BCL; префикс в тексте BCL обычно не пишет для `id`).
+Алгоритм: один проход по уже разобранной голове тем же кодом, что и так ходит по атрибутам (`ParseAttribute` / `ParseFirstFoundAttribute`), от конца имени до конца головы, сравнивая qualified name (`prefix` + `:` + `local`, или `local`) с уже увиденными.
 
-Вызов из сгенерированного кода сразу после `ReadHead`, не из второго `IndexOf('<')` по документу. Не менять «берётся первое» для default.
+Как хранить увиденное:
+
+- **Нельзя** `stackalloc` срезов: `Span<ReadOnlySpan<char>>` в C# незаконен, `roschar` — ref struct. Первая редакция предлагала именно это; предложение отозвано.
+- **Нельзя** «больше N имён — считать дублем»: это отказ на валидном документе.
+- **Можно** попарное сравнение без хранения вовсе: атрибут *k* сверяется с уже пройденными повторным проходом по голове. Для реальных голов (единицы атрибутов) это дешевле любой структуры и не аллоцирует ни байта.
+- **Можно**, если попарное окажется видно на голове с 8+ атрибутами, `stackalloc` пар `(offset, length)` в `FullHead` — `Span<int>` законен, — с ростом на попарный путь при переполнении буфера. Не `List`, не массив из кучи. **Сделано**: оказалось видно, и хорошо видно, — на голове из двенадцати атрибутов попарный вариант стоит 2.37x против 1.40x. На голове из двух не видно ничего (§17 п. 7).
+
+Дубль → §6, inner `'{name}' is a duplicate attribute name.` (local name, как у BCL).
+
+Вызов из сгенерированного кода сразу после `ReadHead`, не из второго `IndexOf('<')` по документу. Поведение default («берётся первое») не менять.
 
 Генератор **не** обязан сливать этот проход с присвоением `[XmlAttribute]`-членов в один (сейчас каждый член ищет себя сам). Слияние — отдельная оптимизация, не эта задача.
 
+**Оговорка про namespaces.** Сверяется литеральный qualified name. Два префикса, связанных с одним URI (`xsi:type` и `p3:type` при `FlexibleXsiPrefix`), формально дублируют атрибут по expanded name, и BCL это поймает, а страж — нет. Осознанно вне скоупа: общего резолва префиксов в ядре нет (§2), и заводить его ради этого случая — не эта задача. Записать в README как известное расхождение.
+
 ### 5.5. `IllegalChars`
 
-Только декодированные значения, которые станут `string` (тело элемента, значение атрибута). Не разметка, не `int.Parse`.
+Проверяются **только строки, доехавшие до POCO**: текст элемента и значение атрибута. Не разметка, не имена, не тела, которые уйдут в `int.Parse`.
 
-В fast-path `DecodeElementText`, где сейчас `IndexOfAny('&','<') < 0` → `ToString()`: перед этим `XmlCharGuard.EnsureValidXmlChars` в checked-перегрузке. В ветке с ссылками — проверка code point уже почти есть для CharRef; литеральный U+0001 в «сыром» куске тоже должен отсекаться.
+Точек ровно три, и все три существуют потому, что путь строки в ядре не один:
 
-Исключение inner: `'{c}', hexadecimal value 0xHH, is an invalid character.` без `Line N, position M`.
+1. **Хост с `CData`** (в том числе весь compat) декодирует текст сам: `XmlTextDecoder.DecodeElementTextWithCData`. Здесь нужен checked-двойник, в котором в fast-path (`IndexOfAny('&','<') < 0` → `ToString()`) перед возвратом стоит проверка Char, а в ветке со ссылками отсекается и литеральный запрещённый символ в «сыром» куске (проверка code point для CharRef там уже почти есть). Итого 2×2 имени декодера, выбираемых композицией binding.
+2. **Хост без `CData`** строку не декодирует сам: генератор пишет `inj.ParseBody(text, out string s)`, и обходить пользовательский инжектор из-за стража нельзя — ровно по той же причине, по которой этого не делает `CData`-фича ([opt-in-xml-features.md](opt-in-xml-features.md) §16, п. 8). Здесь проверка ставится **на результат**: один вызов Char-проверки над полученной строкой (`GuardedStringStatement`). Это лишний проход по строке — цена честная и её надо назвать в README, а не спрятать.
+3. **Значение атрибута** декодируется внутри `XmlScan.ParseAttribute`, и генератор в это не вмешивается — он получает уже готовый `ParsedAttribute.Value`. Проверка ставится в сгенерированном присваивании строкового `[XmlAttribute]`-члена, над `Value` **перед** `.ToString()`. Новой перегрузки `ParseAttribute` не заводить: клон метода ради флага — то же, что клон `ReadHead` (§5.0).
 
-Default-декодер **не** зовёт guard (как default-сериализация без `XmlFeature.CharGuard`).
+Исключение inner: `'{c}', hexadecimal value 0x{hh}, is an invalid character.` без `Line N, position M`.
+
+Существующий `XmlCharGuard.EnsureValidXmlChars` бросает `ArgumentException` с позицией в тексте — это форма *сериализации* (`XmlFeature.CharGuard`), и она остаётся как есть. Для входа нужна вторая точка входа с броском по §6; сам обход символов переиспользовать, а не писать второй.
+
+Default-декодер guard **не** зовёт — как default-сериализация не зовёт `XmlCharGuard`.
 
 ### 5.6. Запрещённые реализации
 
-```
+```csharp
 // нельзя: pre-pass
 using var r = XmlReader.Create(...);
 while (r.Read()) { }
 Deserialize(span, out obj);
-```
 
-```
 // нельзя: второй скан документа
 foreach (tag in document) EnsureUniqueAttributes(tag);
-```
 
-```
 // нельзя: CharGuard(xmlFullNode) на корне
-```
 
-```
 // нельзя в ClassSourceProducer.GenerateDeserializeMember
 if (_guards.HasFlag(XmlGuard.MatchingEndTags)) emit ...
+
+// нельзя: Span<roschar> где угодно (не компилируется)
 ```
+
+### 5.7. Открытый вопрос: сверка имени скаляра переезжает под флаг или нет
+
+Единственное место задачи, где решение принимается **после** замера, а не до него. Записано, чтобы «оставили как было» не оказалось решением по умолчанию.
+
+**В чём дело.** `EndTagLength` сверяет имя закрывающего тега на каждом скалярном члене — `SequenceEqual` по имени плюс позиционные проверки `/` и `>`. По классификации §2 это ровно страж (`MatchingEndTags` для скаляров), только включённый всем и всегда. То есть default сегодня платит за строгость, которую эта задача делает опциональной для сложных типов. Верхняя оценка цены: ~6 нс на сравнение (§3) × число скалярных членов; на REGULAR это до ~0.1 µs при базе ~2.06 µs, то есть **до ~5%** — величина того же порядка, что бюджет всех стражей вместе.
+
+**Что мерить.** Дополнительная строка лестницы §12: «default минус `SequenceEqual` в `EndTagLength`», на REGULAR и на DEEP. Одна строка, один прогон, никаких новых хостов — правка одного метода за `#if` на время замера.
+
+**Правило решения.**
+
+- Дельта уверенно выше шумового порога (~3%) → сверка имени скаляра переезжает под `MatchingEndTags`: default становится **быстрее** сегодняшнего, а хост со стражем сохраняет сегодняшнюю строгость. Правится doc-comment §4.1, строка §2.6 и тесты §11.1 (default начинает **принимать** `</Wrong>` и на скаляре тоже).
+- Дельта в шуме → остаётся как есть, и в §16 пишется «мерили, шум», а не молчание.
+
+**Что снимать нельзя ни при каком результате.** Позиционную часть `EndTagLength`: `/` на `+1` и `>` на `+2+len`. Это единственное, что удерживает разбор скаляра внутри ноды — спан тела не обрезан справа, и `<A><B></A>` ловится только здесь (в коде это записано отдельным комментарием). Позиционная часть неявно требует совпадения **длины** имени, поэтому остаточный риск после снятия `SequenceEqual` — только чужой close той же длины (`</Fop>` вместо `</Foo>`), то есть ровно тот класс, которым и заведует `MatchingEndTags`.
+
+**Порядок.** Вопрос решается на этапе замера, а не при реализации `MatchingEndTags`: до тех пор скалярная сверка остаётся всегда-включённой, и ни один тест на неё не опирается как на «страж».
+
+**Результат замера: не переезжает, потому что отделить не удалось.** Обе половины
+вопроса упёрлись в один и тот же инструмент. Внутри одного round-robin сравнить
+нельзя: у сверки нет выключателя, значит нет и второго хоста, а появится он ровно
+тогда, когда решение уже принято. Кросс-процессный A/B (сборка со снятым
+`SequenceEqual` против обычной, по четыре прогона) дал REGULAR 1855–1913 нс против
+1922–1979 нс и DEEP 2849–2933 против 2875–3046 - то есть на REGULAR около 3.5%
+в пользу снятия, на DEEP ничего. Но контрольный замер того же самого default
+между процессами в тот же час дал разброс 1841–1996 нс, то есть ±5%: измеряемый
+эффект меньше дрейфа инструмента.
+
+Вывод по правилу выше («уверенно выше шумового порога»): **нет**, сверка остаётся
+всегда-включённой. Цена вопроса - единицы процентов на документах со многими
+скалярными членами и ноль на DEEP; плата за переезд - default перестаёт замечать
+чужой закрывающий тег той же длины у скалярного тела. Вопрос закрыт числом,
+а не молчанием; переоткрывать его имеет смысл только с инструментом, который
+меряет одну сборку против другой в одном процессе.
 
 ---
 
@@ -470,42 +550,49 @@ InvalidOperationException("There is an error in the XML document.")
   InnerException: XmlException(сообщение без "Line N, position M.")
 ```
 
-Сообщения inner снимать с BCL, вырезая хвост ` Line {n}, position {m}.` и вхождения ` on line {n} position {m}` / ` on line {n}`. Не выдумывать новые формулировки, если BCL уже дал текст.
+### 6.1. Три уровня, и каждый решает свою задачу
 
-Зафиксированные прогоном (позиция снята):
+1. **Ядро (`XmlScan`, декодер) бросает `XmlDocumentException`** — новый тип в `XmlSerDe.Common`, `: InvalidOperationException`, тексты **сегодняшние**. Смысл типа один: отличить «документ битый» от «упало что-то ещё» (пользовательский инжектор, фабрика, `FormatException` из числа). Без этого различия обёртка уровня 2 либо врёт про чужие исключения, либо ловится по тексту.
+2. **Корневой метод хоста со стражами** (любой флаг ≠ `None`, и потому весь compat) оборачивает: `catch (XmlDocumentException e)` → `InvalidOperationException("There is an error in the XML document.", new XmlException(e.Message))`. Один helper в `Common`, один `try` на весь разбор — не по обёртке на примитив. Хост без стражей обёртки не порождает вовсе.
+3. **Compat** свою обёртку `DeserializationFailed` сохраняет; на вход ей приходит уже готовая пара из уровня 2, второй раз в `InvalidOperationException` заворачивать нечего — цепочка обязана совпасть с BCL (`IOE` → `XmlException`), а не быть `IOE` → `IOE`.
+
+Цена нового типа названа заранее: `Assert.Throws<InvalidOperationException>` — сравнение по точному типу, поэтому существующие точечные проверки в `SinglePassParserFixture` и `XmlTextDecoderFixture` придётся перевести на базовый тип (или на новый). `catch (InvalidOperationException)` в пользовательском коде и в `MalformedInputFixture` продолжает работать без правок — это и есть причина наследоваться от `InvalidOperationException`, а не от `Exception`.
+
+Native **без** стражей: сегодняшние `XmlDocumentException` с сегодняшними текстами и без `XmlException` внутри. Не заставлять default платить аллокацией `XmlException` на ошибках, которые и так ловят тесты ядра.
+
+### 6.2. Тексты inner
+
+Снимать с BCL, вырезая хвост ` Line {n}, position {m}.` и вхождения ` on line {n} position {m}` / ` on line {n}`. Не выдумывать новые формулировки, если BCL уже дал текст.
 
 | Ситуация | Inner `XmlException.Message` |
 |---|---|
-| EOF / нет закрытия | `Unexpected end of file has occurred.` (без списка элементов — см. §5.2) |
+| EOF / нет закрытия | `Unexpected end of file has occurred.` (без списка элементов — §5.2) |
 | Несовпавшие теги | `The '{start}' start tag does not match the end tag of '{end}'.` |
 | Второй корень | `There are multiple root elements.` |
 | Мусор после корня | `Data at the root level is invalid.` |
 | Дубль атрибута | `'{name}' is a duplicate attribute name.` |
 | Нет кавычки у атрибута | `'{token}' is an unexpected token. The expected token is '"' or '''.` |
-| Нет `=` | `'{token}' is an unexpected token. The expected token is '='.` |
+| Нет `=` / пробел в имени | `'{token}' is an unexpected token. The expected token is '='.` |
 | Нелегальный Char | `'{ch}', hexadecimal value 0x{hh}, is an invalid character.` |
-| Необъявленная сущность | как сейчас у декодера **или** BCL `Reference to undeclared entity '{name}'.` — при стражах лучше BCL-форма, без нашей длинной лекции про DTD |
+| Необъявленная сущность | BCL-форма `Reference to undeclared entity '{name}'.` вместо нашей длинной лекции про DTD |
+| Разметка, не понятая хостом | наш текст (`Unexpected processing instruction, comment, CDATA or DOCTYPE.`): у BCL этой ситуации нет, у него разметка всегда легальна |
 
-Внешняя обёртка:
-
-- **Compat** уже делает `DeserializationFailed`; внутренности сканера должны быть `XmlException`, чтобы цепочка совпала с BCL (`IOE` → `XmlException`), а не `IOE` → `InvalidOperationException("Closing tag not found")`.
-- **Native со стражами**: та же обёртка в корневом `Deserialize` (один helper). Не оборачивать каждый примитив трижды.
-- **Native без стражей**: сегодняшние голые `InvalidOperationException` с текущими текстами **сохранить**. Не заставлять default платить аллокацией `XmlException` на ошибках, которые и так ловят тесты ядра.
+Тексты §2.6 (`Closing tag not found for X`, `Mismatched closing tag found for X`, `Broken closing tag found for X`, `Closing '>' not found for end tag.`) — тоже часть контракта: при включённых стражах они обязаны попасть в inner в форме BCL из строк 1–2 этой таблицы, а не доехать до вызывающего as is.
 
 Не требовать совпадения `XmlException.LineNumber` / `LinePosition` (у BCL без `IXmlLineInfo` они 0). Не требовать совпадения `SourceUri`.
 
-`FormatException` с разбора `int` на **well-formed** `<Number>abc</Number>` — это не malformed XML, стражи его не трогают. `id=1` (не well-formed) не должен доходить до `int.Parse` «чужого» токена: сначала синтаксис атрибута (§5.1).
+`FormatException` с разбора `int` на **well-formed** `<Number>abc</Number>` — не malformed XML, стражи его не трогают и в `XmlException` не превращают. А `<S id=1 Tag="x"/>` до `int.Parse` чужого токена доходить не должен: сначала синтаксис атрибута (§5.1, вторая половина).
 
 ---
 
 ## 7. Поведение compat-слоя
 
-`ClassSourceProducer` / compat-producer вызывается с `XmlGuard.SystemXmlCompatible`. Пользователь атрибут не пишет.
+`ClassSourceProducer` для compat-хоста вызывается с `XmlGuard.SystemXmlCompatible` — там же, где сегодня передаётся `XmlFeature.SystemXmlCompatible`. Пользователь атрибут не пишет.
 
 Тесты:
 
 - Все кейсы §2.1–2.5 на фасаде бросают `IOE` с сообщением без позиции, inner `XmlException`.
-- Well-formed документ, который сегодня ускоряется, по-прежнему `IsAccelerated` и round-trip.
+- Well-formed документ, который сегодня ускоряется, по-прежнему `IsAccelerated` и round-trip. Отдельно — документ с Misc после корня (`</root><!-- bye -->`, `<?pi?>`): он **не** должен начать падать (§5.3).
 - Native-хост без `[XmlGuards]` в том же процессе **принимает** `</Wrong>` на сложном типе — доказательство изоляции.
 - Подключение compat не меняет сгенерированный текст native-хоста.
 
@@ -525,52 +612,61 @@ InvalidOperationException("There is an error in the XML document.")
 | | `XmlFeature` | `XmlGuard` |
 |---|---|---|
 | Вопрос | понимать ли эту конструкцию | отказать ли, если XML 1.0 это запрещает |
-| Default native | выключено (после задачи фич) | выключено |
+| Default native | выключено | выключено |
 | Compat | `XmlFeature.SystemXmlCompatible` | `XmlGuard.SystemXmlCompatible` |
-| Пример | без `Markup` комментарий между элементами — ошибка, а не пропуск | со стражами битая голова атрибута — `XmlException`, не `FormatException` |
+| Пример | без `Markup` комментарий между элементами — ошибка, а не пропуск | со стражами битая голова атрибута — ошибка документа, а не `FormatException` |
 
-Реализовывать стражи можно **до, после или параллельно** с [opt-in-xml-features.md](opt-in-xml-features.md). Если фичи ещё не вмержены: стражи вешать на текущий полный сканер (он уже quote-aware). Если фичи уже есть: `UniqueAttributes` зовётся после того `ReadHead`, который выбрал feature-binding; не плодить `ReadHeadGuardedQuoted`.
+Фичи уже реализованы, поэтому стражи вешаются на существующий сканер: quote-aware разбор головы перестал быть фичей и включён всегда ([opt-in-xml-features.md §17](opt-in-xml-features.md#17-свёртка-набора-флагов-после-замера)), значит `UniqueAttributes` всегда работает на полной голове, а не на обрезанной по первому `>`.
 
-Конфликт не предусматривается: quote-aware разбор головы перестал быть фичей и включён всегда (см. [opt-in-xml-features.md §17](opt-in-xml-features.md#17-свёртка-набора-флагов-после-замера)), поэтому `UniqueAttributes` всегда работает на полной голове, а не на обрезанной по первому `>`.
+Оси независимы **по смыслу**, но встречаются в трёх точках, и каждая должна быть решена композицией binding в одном месте, а не `if`-ами:
+
+| Точка | Что зависит от фич | Что зависит от стражей |
+|---|---|---|
+| Хвост документа (§5.3) | допустимы ли комментарии/PI после корня (`Markup`) | проверяется ли хвост вообще (`SingleRoot`) |
+| Декодер текста (§5.5) | `DecodeElementText` vs `…WithCData`; идёт ли строка через `IInjector` | checked-вариант или нет (`IllegalChars`) |
+| Форма исключения (§6) | — | нужна ли корневая обёртка (любой флаг) |
+
+Больше пересечений быть не должно. Появится четвёртое — это правка документа, а не «ещё один `if`».
 
 ---
 
 ## 9. Что менять в коде (ориентир)
 
-- **Common:** enum, атрибут, границы в `ParseFirstFoundAttribute`, `EnsureUniqueAttributes`, `EnsureNoTrailingMarkup`, checked-декодер, helper `ThrowXmlDocumentError` / создание `XmlException`.
-- **Generator:** чтение `[XmlGuards]` (OR); compat всегда полный набор; `HostGuardBinding`; сниппеты в `DeserializeBody` и корневом `Deserialize`; вызов uniqueness после `ReadHead` при `HasAttributes`.
-- **Compat:** убедиться, что inner уже `XmlException`, не двойная обёртка `IOE`→`IOE`.
+- **Common:** `XmlGuard`, `XmlGuardsAttribute`, `XmlDocumentException`, синтаксические проверки в `ParseFirstFoundAttribute` (§5.1), `EnsureEndTagName` / `ThrowUnexpectedEof`, `EnsureUniqueAttributes`, `EnsureNoTrailingMarkup` (две формы), checked-декодеры и Char-проверка для входа, helper корневой обёртки §6. Всё новое — с netstandard2.0-веткой там, где на net8+ используется `SearchValues`/`IndexOfAny(SearchValues)`: в `XmlScan` такой `#if`-паттерн уже принят.
+- **Generator:** чтение `[XmlGuards]` (OR), compat всегда полный набор, `HostGuardBinding`, композиция с `HostFeatureBinding` в одном месте, сниппеты в двух циклах, в `GenerateDeserializeHeadMethod` и в присваивании строковых атрибутов.
+- **Compat:** убедиться, что цепочка `IOE` → `XmlException` не превращается в `IOE` → `IOE`; `XmlPrologue` уже чинен.
 - **Tests / README / бенчмарки / приёмка документации:** §11–§14.
 
 Не смешивать с рефакторингом `XmlNode2`, новыми BCL-атрибутами, лимитами размера.
 
-`XmlNode2` (публичный, не hot path): либо те же стражи по переданному `XmlGuard`, либо остаётся «как сейчас». Тесты стражей сериализатора гоняют **сгенерированный** `Deserialize`.
+`XmlNode2` (публичный; сгенерированный hot path его не зовёт, но `XmlSerDe.Compat/XmlPrologue.Cut` зовёт `XmlNode2.SkipPrologMisc`, то есть он на пути фасада): стражей туда не заводить, поведение оставить как есть. Тесты стражей гоняют **сгенерированный** `Deserialize`.
 
 ---
 
 ## 10. Ограничения реализации
 
-1. **Не XmlReader и не второй проход по документу.** См. §3 и §5.6.
-2. **Не runtime-флаг в горячем цикле** на default-пути. Default не вызывает стражи.
+1. **Не `XmlReader` и не второй проход по документу.** См. §3 и §5.6.
+2. **Не runtime-флаг в горячем цикле** на default-пути. Default не вызывает стражи и не тащит лишних параметров.
 3. **Compat не заражает native.**
 4. **Не платить uniqueness на головах без атрибутов.**
-5. **Не сканировать Char по разметке.**
-6. **Генератор не лапша.** Подробности, запреты, обязательный binding и «недостаточно» — §5.0. Этот пункт не ослабляет §5.0.
-7. **netstandard2.0 / net8 / net10.** Стражи не живут только под `#if NET8_0_OR_GREATER`.
-8. **Инкрементальность:** правка `[XmlGuards]` → `Generate` не `Cached`.
+5. **Не сканировать Char по разметке**; проверяются только строки, доехавшие до POCO.
+6. **Генератор не лапша** — §5.0 целиком, включая закрытый список точек вставки.
+7. **netstandard2.0 / net8 / net10.** Стражи не живут только под `#if NET8_0_OR_GREATER`; у каждого нового примитива с векторным поиском есть netstandard-ветка.
+8. **Инкрементальность:** правка `[XmlGuards]` → `Generate` не `Cached`, посторонний комментарий → `Cached`.
 9. **Список незакрытых тегов в EOF-сообщении не обязателен.**
-10. **Документация и цифры BDN** — §13. Без таблицы стоимости из прогона задача не принята.
+10. **`SkipBody` остаётся слепым к именам** (§5.2) — это принятое расхождение с BCL, а не недоделка.
+11. **Документация и цифры** — §13. Без таблицы стоимости из прогона задача не принята.
 
 ---
 
 ## 11. Тесты
 
-Три семейства хостов:
+Три семейства хостов. Ориентир по форме — уже существующие `XmlSerDe.Tests/XmlFeatureHosts.cs` и `Complex/FeatureLadderHosts.cs`; фикстуры — по образцу `XmlFeatureFixture` / `XmlFeatureGeneratorFixture` / `HostFeatureBindingFixture`.
 
 | Семейство | Атрибут | Зачем |
 |---|---|---|
-| Default | нет | POCO round-trip; битый ввод §2 **принимается** там, где сегодня принимается |
-| Per-guard | ровно один флаг | ловит своё; соседнее нарушение без своего флага — нет (кроме always-on синтаксиса атрибута) |
+| Default | нет | POCO round-trip; битый ввод §2 **принимается** там, где принимается сегодня |
+| Per-guard | ровно один флаг | ловит своё; соседнее нарушение без своего флага — нет |
 | Full / Compat | `SystemXmlCompatible` / фасад | паритет с BCL по типу и тексту без позиции |
 
 Нельзя доказывать `MatchingEndTags` только на хосте с `SystemXmlCompatible`.
@@ -581,72 +677,79 @@ InvalidOperationException("There is an error in the XML document.")
 - `<XmlObject2>…</Wrong>` — **успех**, как сегодня (тест фиксирует принятие, чтобы страж не включили «всем»);
 - второй корень — **успех**, первый объект;
 - дубль `id` — **успех**, первое значение;
-- `id=1` — после always-on ремонта **ошибка** (это не флаг; тест на любом хосте).
+- U+0001 в строке — **успех**;
+- `<S id=1/>`, `<S id="1/>`, `<S id=1 Tag="x"/>`, `<S id Tag="x"/>` — **ошибка** документа (always-on, §5.1). Последние два — новые: сегодня они дают неверный объект или чужое значение;
+- `<S a = "1"/>`, `<S a ="1"/>`, `<S a= "1"/>`, `<S p:a = "1"/>` — **успех**, `a = "1"` (always-on, §5.1). Первые два сегодня молча теряют атрибут; тест обязан быть красным до этапа и зелёным после.
 
 ### 11.2. По одному флагу
 
-- только `MatchingEndTags`: `</Wrong>` на классе → ошибка; второй корень всё ещё успех;
-- только `SingleRoot`: второй корень / `not-xml` → ошибка; `</Wrong>` на классе всё ещё успех;
-- только `UniqueAttributes`: дубль `id` → ошибка; `</Wrong>` успех;
-- только `IllegalChars`: U+0001 в строке → ошибка; дубль `id` успех.
+- только `MatchingEndTags`: `</Wrong>` на классе → ошибка; на коллекции (`</MyList>` заменён) → ошибка; обрезанный класс без закрытия → ошибка; второй корень всё ещё успех;
+- только `SingleRoot`: второй корень / `not-xml` после корня → ошибка; `</Wrong>` на классе всё ещё успех; хвост из пробелов → успех;
+- только `UniqueAttributes`: дубль `id` → ошибка; два `xsi:type` → ошибка; `</Wrong>` успех; голова без атрибутов не задета;
+- только `IllegalChars`: U+0001 в тексте элемента → ошибка; U+0001 в значении атрибута → ошибка; дубль `id` успех. Проверить **оба** пути строки: хост с `CData` (декодер) и без него (через `IInjector`).
 
-Always-on: `id=1`, `id Tag="x"` → ошибка на любом из этих хостов.
+Always-on (§5.1) — на любом из этих хостов и на default.
 
 ### 11.3. Полный набор / compat
 
-Сличить с BCL на одном и том же документе: тип наружного исключения, сообщение наружного (без позиции), тип inner. Текст inner — BCL минус позиция, с оговоркой §6 про список незакрытых тегов.
+Сличить с BCL на одном и том же документе: тип наружного исключения, сообщение наружного (без позиции), тип inner. Текст inner — BCL минус позиция, с оговорками §5.2 (список незакрытых тегов), §5.2 (skip слеп) и §5.4 (expanded name).
 
-Корпус минимум: все строки прогона §2 плюс well-formed контроль.
+Корпус минимум: все строки прогона §2 плюс well-formed контроль, плюс документ с Misc после корня (§5.3).
 
-### 11.4. Сгенерированный текст
+### 11.4. Ловушки, без которых страж «работает» и ломает валидное
+
+- `MatchingEndTags` не должен срабатывать на штатном выходе: тело из одних пробелов, пустая коллекция, `<Foo/>`, последний член перед `</Root>`, элемент после пропущенного чужого поддерева. Если хоть один валидный документ выходит из цикла через `EndOfInput`, `ThrowUnexpectedEof` ломает его — этот тест обязан быть красным до реализации и зелёным после.
+- `SingleRoot` на compat: комментарий и PI после корня — успех.
+- `UniqueAttributes` на голове с 8+ атрибутами без дублей — успех (проверка на «переполнили буфер и объявили дублем»).
+- `IllegalChars`: легальные CR/LF/TAB и суррогатная пара U+10000 проходят.
+
+### 11.5. Сгенерированный текст
 
 Через `GeneratorHarness`:
 
-- хост без `[XmlGuards]`: в `{Host}.g.cs` нет `EnsureUniqueAttributes`, `EnsureNoTrailingMarkup`, checked-decode;
+- хост без `[XmlGuards]`: в `{Host}.g.cs` нет `EnsureUniqueAttributes`, `EnsureNoTrailingMarkup`, `EnsureEndTagName`, checked-декодера, корневой обёртки §6 **и** лишнего параметра `expectedEndName`;
 - хост с одним флагом: есть только его примитив;
-- compat-класс содержит полный набор, в исходнике пользователя `[XmlGuards]` нет.
+- compat-класс содержит полный набор, в исходнике пользователя `[XmlGuards]` нет;
+- в `.g.cs` нет ни `XmlGuard`, ни `HasFlag`.
 
 Юнит на `XmlGuard` → `HostGuardBinding` без Roslyn.
 
-### 11.5. Инкрементальность
+### 11.6. Инкрементальность
 
-Как в [opt-in-xml-features.md](opt-in-xml-features.md) §10.4, для `[XmlGuards]`.
+Как в [opt-in-xml-features.md](opt-in-xml-features.md) §10.4, для `[XmlGuards]`: правка значения → `Generate`, посторонний комментарий → `Cached`.
 
-### 11.6. Регрессия
+### 11.7. Регрессия
 
-Существующие round-trip и `Interop/*` на well-formed документах зелёные на default. `BrokenXmlOnDeserialize_ThrowsLikeSystemXml_Test` в compat остаётся зелёным и начинает покрывать inner `XmlException`, если ещё не покрывает.
+Существующие round-trip и `Interop/*` на well-formed документах зелёные на default. `BrokenXmlOnDeserialize_ThrowsLikeSystemXml_Test` в compat остаётся зелёным и начинает проверять inner `XmlException`, а не только «inner не null».
 
 ---
 
 ## 12. Бенчмарки
 
-Цифры в пользовательской документации — **только** из `XmlSerDe.PerformanceTests` / BenchmarkDotNet, тот же прогон и те же категории, что таблица Performance в README. Оценки §3 (Stopwatch, изолированные куски, «порядка 5–10%») в README **не копировать**. После реализации §3 этого документа переписать фактом BDN или пометить «оценка до реализации, актуально: README».
+Инструмент — тот же, которым мерилась цена фич, и по той же причине: BDN-прогон на трёх TFM отвечает на вопрос «сколько стоит десериализация», а здесь вопрос другой — «сколько стоит **дельта** от одного флага», и она лежит в единицах процентов. Требование «в README только BDN» из первой редакции отменено (§16): README уже публикует probe-таблицу «Cost of turning a flag on», и цифры стражей обязаны быть с ней сопоставимы.
 
-`Program.Main` по-прежнему не раздувать четвёртым рантаймом. Serialize — net10; deserialize — три TFM, как сейчас.
+1. **Лестница хостов** — второе семейство рядом с `FeatureLadderHosts`: те же тип, exhauster и документ, отличие только в `[XmlGuards]`. Прогон — тем же способом, что `FeatureCostProbe` (пин на ядро, прогрев, round-robin, минимум по раундам, медиана трёх запусков, шумовой порог ~3%). Ключ командной строки — рядом с `--feature-cost`.
+2. **Строки лестницы:** default → `+ MatchingEndTags` → `+ SingleRoot` → `+ UniqueAttributes` → `+ IllegalChars` = `SystemXmlCompatible`. Плюс две контрольные строки: «default + always-on §5.1» — синтаксические проверки атрибута платят **все**, и если они видны, это регрессия default, а не цена стража; и «default − сверка имени скаляра» — это замер, которым закрывается §5.7.
+3. **Два документа:** REGULAR (атрибуты и строки есть) и DEEP (100 уровней, атрибутов нет). DEEP отвечает за `MatchingEndTags`, REGULAR — за `UniqueAttributes` и `IllegalChars`. 2^n комбинаций не нужны. *Добавлен третий, WIDE:* тот же REGULAR с десятью лишними атрибутами на голову. Он не про цену флага, а про выбор реализации внутри `UniqueAttributes` — на POCO-голове из двух атрибутов линейный и квадратичный варианты неразличимы, и без этого документа выбирать было бы не по чему (§17 п. 7).
+4. **BDN** остаётся источником *базовых* строк README (REGULAR / DEEP, native default) и категории для compat, как сегодня. `Program.Main` четвёртым рантаймом не раздувать: serialize — net10, deserialize — три TFM, как сейчас.
+5. Compat отдельной строкой не обязателен, если native + `SystemXmlCompatible` порождает тот же набор примитивов. Разъедется — отдельная строка.
 
-Обязательно в прогоне:
+Ожидание (стоп-кран в ревью, не SLA в README): DEEP со всеми стражами — низкие единицы %, REGULAR — порядка 5–10%. **2× и выше — реализация сделала запрещённый полный скан**, приёмка нет. Не объяснять это «XML так дорог».
 
-1. **REGULAR / DEEP default native** — основная строка README, как сегодня. Always-on ремонт `ParseFirstFoundAttribute` не должен быть виден: если default уехал больше чем на шум BDN относительно предыдущего README, это регрессия, не «цена стражей».
-2. **REGULAR / DEEP + `XmlGuard.SystemXmlCompatible`** на native-хосте-двойнике (тот же XML, второй partial-класс с атрибутом). Это строка «сколько стоит включить все стражи».
-3. **По флагу, точечно**, если полный набор маскирует дорогой страж: как минимум `UniqueAttributes` на документе с атрибутами и `IllegalChars` на REGULAR со строками. Не обязательно 2^n комбинаций. Источник — тот же BDN или узкий fixture в `PerformanceTests`, не Stopwatch из чата.
-4. Compat на том же документе не обязателен третьей строкой README, если native+`SystemXmlCompatible` генерирует тот же набор примитивов, что фасад. Если разъедется — отдельная строка.
+Таблица в README (колонки обязательны):
 
-Ожидание (не SLA в README, а стоп-кран в ревью): DEEP со всеми стражами &lt; 5% к default, REGULAR порядка 5–10%. **2× и выше — реализация сделала запрещённый полный скан**, приёмка нет. Не объяснять это «XML так дорог».
-
-Не включать в основной прогон микробенчмарк `XmlReader` pre-pass: он уже измерен в §3 и запрещён.
-
-Таблица стоимости в README (колонки обязательны):
-
-| | REGULAR mean / ratio к default | DEEP mean / ratio к default | Allocated |
+| | REGULAR ×default | DEEP ×default | Allocated |
 |---|---|---|---|
 | native default | 1.00 | 1.00 | как сейчас |
-| + MatchingEndTags | | | |
-| + SingleRoot | | | |
-| + UniqueAttributes | | | |
-| + IllegalChars | | | |
+| + `MatchingEndTags` | | | |
+| + `SingleRoot` | | | |
+| + `UniqueAttributes` | | | |
+| + `IllegalChars` | | | |
 | `SystemXmlCompatible` | | | |
 
-Если одиночный флаг в шуме BDN — в ячейке «шум / &lt;X%», не выдуманные наносекунды. Полный набор — всегда число с того же прогона, что default.
+Если одиночный флаг в шуме — так и писать («шум / <3%»), а не выдумывать наносекунды. Полный набор — всегда число из того же прогона, что default.
+
+Не включать в прогон микробенчмарк `XmlReader` pre-pass: он измерен в §3 и запрещён.
 
 ---
 
@@ -663,19 +766,20 @@ Always-on: `id=1`, `id Tag="x"` → ошибка на любом из этих �
 - пример узкого флага и пример `SystemXmlCompatible`;
 - что compat включает полный набор **сам**;
 - что это не `XmlReader`, не схема, unknown elements по-прежнему skip;
-- always-on: битый синтаксис атрибута бросает и без атрибута (единственный breaking native);
-- куда смотреть за стоимостью (таблица §12).
+- always-on: битый синтаксис атрибута бросает и без атрибута — единственный breaking для native;
+- куда смотреть за стоимостью (§12).
 
-Обязательные правки README (места сегодняшнего текста — ориентир):
+Обязательные правки README — по **текущему** тексту, а не по тому, что было до фич:
 
-- **Limitations** — фраза «No malformed-XML input protection» заменяется, не удаляется смысл. Формулировка: default этого не делает; флаг / compat — делает. Не обещать «теперь всегда безопасно».
-- Подраздел **Opt-in XML guards** рядом с Opt-in XML features (или общий «Opt-in», если фичи уже в README): таблица флагов, два примера, compat.
-- **Drop-in / untrusted input** (там, где сейчас «facade does not add well-formedness validation») — фасад **добавляет** стражи; native без атрибута — нет.
-- **Performance** — база по-прежнему default; абзац + таблица стоимости стражей из прогона §12.
-- **Test coverage map** — новые семейства хостов §11.
-- Release notes / breaking: always-on атрибуты; compat отказывает на втором корне и дубле атрибута.
+- **Limitations**, пункт «No well-formedness *validation* of input»: смысл не удалять, а разделить — default этого не делает; `[XmlGuards]` / compat делают, с оговорками §5.2 (skip) и §5.4 (expanded name). Фразу про инвариант «никогда не bounds-исключение» и про fuzz-корпус сохранить: она про другое и остаётся верной.
+- Раздел рядом с **Opt-in XML features**: таблица флагов `XmlGuard`, два примера, compat. Обе оси должны читаться как соседи, а не как один механизм.
+- **Drop-in / untrusted input** — сегодня там дважды сказано, что фасад well-formedness не добавляет (в разделе про маршруты и в списке «когда не стоит»). После задачи фасад её добавляет; native без атрибута — нет.
+- Таблица расхождений compat, строка «malformed document to `Deserialize`»: сегодня она обещает «same type, message without the position», хотя inner у нас не `XmlException`. После §6 обещание становится правдой — но проверить и написать явно, что совпадает и наружный тип, и inner.
+- **Performance** — база по-прежнему default; абзац + таблица §12.
+- **Test coverage map** — новые семейства хостов и фикстуры §11.
+- Release notes / breaking: always-on синтаксис атрибута; compat отказывает на втором корне, дубле атрибута, несовпавшем close.
 
-`docs/xmlserializer-compat.md`: абзац про недоверенный ввод — не «надо закрыть или fallback», а статус этой задачи (после реализации — «сделано, ссылка»). Native в той же сборке не наследует стражи.
+`docs/xmlserializer-compat.md`: раздел про недоверенный ввод уже ссылается на этот документ как на план — после реализации заменить на «сделано» со ссылкой на README. Native в той же сборке стражи не наследует.
 
 Не оставлять противоречий: README, этот файл и compat-док не должны одновременно утверждать «защиты нет» и «compat защищает».
 
@@ -683,26 +787,28 @@ Always-on: `id=1`, `id Tag="x"` → ошибка на любом из этих �
 
 - Не писать, что ядро ловит XXE/DTD — их нет, и стражи их не добавляют.
 - Не писать, что unknown element или дубль `<Total>` — ошибка; оба читателя skip / last-wins.
+- Прямо назвать три известных расхождения с BCL даже при полном наборе: имена внутри пропускаемого чужого поддерева не сверяются (§5.2), дубль по expanded name не ловится (§5.4), позиции в исключении нет (§6).
 - Исключения: наружное сообщение — форма BCL без позиции; inner — `XmlException`; не обещать `LineNumber`.
-- Стык с `XmlFeature.CharGuard`: сериализация vs вход. Не называть оба одним именем в README без пояснения.
-- Примеры XML в README должны совпадать с контрактом: default-пример без стражей не должен притворяться, что `</Wrong>` бросает.
+- Стык с `XmlFeature.CharGuard`: сериализация vs вход. Не называть оба одним словом без пояснения.
+- Примеры XML в README должны совпадать с контрактом: default-пример не должен притворяться, что `</Wrong>` бросает.
 - Тесты §11 — источник правды для формулировок «принимает / бросает». Если README говорит иное — чинить README или тест, не оставлять расхождение.
 
-### 13.3. Цифры benchmark
+### 13.3. Цифры
 
-- В README только BDN из §12, с оговоркой про машину/SDK, как в существующей таблице Performance.
-- Запрещено переносить Stopwatch-оценки §3 («~15 нс leftover», «~5 µs CharGuard по документу») в пользовательский текст как цену включённых стражей. §3 — запрет плохих алгоритмов.
-- Ratio считать к **default native того же прогона**, не к старой таблице README из другого коммита.
+- В README — цифры из прогона §12, с оговоркой про машину/SDK, как в существующих таблицах.
+- Оценки §3 (Stopwatch, изолированные куски, «~15 нс», «~5 µs») в пользовательский текст **не переносить**: это запрет плохих алгоритмов, а не цена включённых стражей.
+- Ratio считать к **default того же прогона**, не к таблице README из другого коммита: базы менялись вместе с фичами.
 - Если страж в шуме — так и написать. Не округлять шум до «0%» рядом с полным набором, у которого есть число.
-- Allocated: стражи не должны выделять на happy path (никакого `List` имён атрибутов, никакого `XmlReader`). Если Allocated default вырос — регрессия always-on или аллоцирующий uniqueness.
+- Allocated: стражи не должны выделять на happy path (никакого `List` имён атрибутов, никакого `XmlReader`). Вырос Allocated у default — регрессия always-on или аллоцирующий uniqueness.
 
 ### 13.4. Этот документ
 
 После реализации:
 
 - статус «реализовано»;
-- §3: либо заменить цифрами BDN, либо явная пометка «оценка до реализации, актуально: README»;
-- короткий раздел расхождений с текстом (как [perf-single-pass-parser.md](perf-single-pass-parser.md) §6). Требования не переписывать задним числом.
+- §3 остаётся помеченным как оценка до реализации, актуальные цифры — README;
+- §5.7 закрыт: записано число, решение и его следствия;
+- расхождения реализации с текстом записываются отдельным разделом (§17), а не правкой требований задним числом - как [opt-in-xml-features.md §16](opt-in-xml-features.md).
 
 ---
 
@@ -710,23 +816,27 @@ Always-on: `id=1`, `id Tag="x"` → ошибка на любом из этих �
 
 Работа сделана, если одновременно:
 
-1. Native-хост без `[XmlGuards]` не вызывает примитивов стражей (доказано тестом сгенерированного текста). Well-formed POCO round-trip и DEEP/REGULAR default в шуме прежнего BDN.
-2. Каждый флаг из §4.1, кроме составного, имеет тест «только он — своё нарушение ловит, соседнее нет» (§11.2). Always-on синтаксис атрибута покрыт отдельно и зелёный на любом хосте.
-3. `SystemXmlCompatible` на native и compat без пользовательского атрибута проходят матрицу §2 / §11.3 против BCL (тип + наружное сообщение без позиции + inner `XmlException`).
-4. Compat не меняет сгенерированный текст native-хоста в той же сборке.
-5. Default по-прежнему **принимает** `</Wrong>` на классе, второй корень и дубль `id` — иначе стражи включили всем.
-6. README полон по §13.1, корректен по §13.2, таблица стоимости сверена с прогоном §12, а не с оценками §3.
-7. Инкрементальность: смена `[XmlGuards]` сбрасывает generate; посторонний комментарий — нет.
-8. Структура генератора по §5.0: таблица `XmlGuard` → `HostGuardBinding` тестируется юнитом; `ClassSourceProducer` не ветвится по стражам в `Generate*`; в `{Host}.g.cs` нет лестницы по флагам.
-9. Нет `XmlReader` на fast path, нет второго скана документа, нет `CharGuard` по разметке. Allocated happy path не вырос из-за `List`/reader.
+1. Native-хост без `[XmlGuards]` не вызывает примитивов стражей и не получает лишних параметров (доказано тестом сгенерированного текста). Well-formed POCO round-trip зелёный, default в шуме прежнего прогона.
+2. Каждый флаг из §4.1, кроме составного, имеет тест «только он — своё нарушение ловит, соседнее нет» (§11.2), и `MatchingEndTags` покрыт в **обоих** циклах (класс и коллекция).
+3. Ловушки §11.4 зелёные: ни один валидный документ не начал падать.
+4. Always-on синтаксис атрибута (§5.1) отвергает все четыре строки §2.4 и покрыт на любом хосте; `MalformedInputFixture` остаётся зелёным.
+5. `SystemXmlCompatible` на native и compat без пользовательского атрибута проходят матрицу §2 / §11.3 против BCL (тип + наружное сообщение без позиции + inner `XmlException`).
+6. Compat не меняет сгенерированный текст native-хоста в той же сборке; compat не начал падать на Misc после корня.
+7. Default по-прежнему **принимает** `</Wrong>` на классе, второй корень, дубль `id` и U+0001 — иначе стражи включили всем.
+8. README полон по §13.1, корректен по §13.2 (включая три названных расхождения), таблица стоимости — из прогона §12.
+9. Инкрементальность: смена `[XmlGuards]` сбрасывает generate; посторонний комментарий — нет.
+10. Структура по §5.0: `XmlGuard` → `HostGuardBinding` тестируется юнитом; `ClassSourceProducer` не ветвится по стражам в `Generate*`; в `{Host}.g.cs` нет лестницы по флагам.
+11. Нет `XmlReader` на fast path, нет второго скана документа, нет `CharGuard` по разметке, нет `Span<roschar>`. Allocated happy path не вырос.
 
-Недостаточно: «добавили bool в `ReadHead`». Недостаточно: «четыре `if (HasFlag)` в producer». Недостаточно: «README упоминает атрибут, цифр нет». Недостаточно: «бенчмарк гоняли, в README оставили оценки из чата».
+12. §5.7 закрыт числом: контрольная строка лестницы снята, решение принято и записано. Молчание закрытием не считается.
+
+Недостаточно: «добавили bool в `ReadHead`». Недостаточно: «четыре `if (HasFlag)` в producer». Недостаточно: «README упоминает атрибут, цифр нет». Недостаточно: «close-check вставили в один цикл из двух». Недостаточно: «§5.7 оставили как было, не меряя».
 
 ---
 
 ## 15. Миграция
 
-Native без атрибута **ничего не меняет** на well-formed вводе. На битом: синтаксис атрибута без кавычек/`=` начинает бросать (always-on). Это единственный breaking native, и только для ввода, который и так не XML.
+Native без атрибута на well-formed вводе **ничего не меняет**. На битом меняется одно: синтаксис атрибута (нет кавычек, нет `=`, пробел в имени) начинает бросать вместо того, чтобы подставить чужое значение или тихо потерять член. Это единственный breaking native, и только для ввода, который и так не XML.
 
 Кто хочет отказ как у BCL:
 
@@ -738,6 +848,125 @@ public partial class OrderSerializer
 }
 ```
 
-Узко: только `[XmlGuards(XmlGuard.MatchingEndTags)]`, если вход свой, а режет чужой close.
+Узко — только то, что болит:
 
-Compat: после задачи HTTP-тело со вторым корнем или дублем атрибута начнёт бросать, как BCL. Это цель, не регрессия. В release notes compat — breaking для тех, кто опирался на «фасад принял битое».
+```csharp
+[XmlGuards(XmlGuard.MatchingEndTags)]
+```
+
+Compat: после задачи HTTP-тело со вторым корнем, дублем атрибута или чужим закрывающим тегом начнёт бросать, как BCL. Это цель, не регрессия. В release notes compat — breaking для тех, кто опирался на «фасад принял битое».
+
+---
+
+## 16. Правки к первой редакции
+
+Первая редакция писалась до реализации фич и до ремонта разбора атрибутов, и часть её утверждений код опроверг. Требования не переписаны задним числом — вот что именно изменилось и почему.
+
+1. **§5.1 «сделано» относилось только к границам.** Ремонт `IndexOf < 0` не ловит `id=1 Tag="x"` (кавычка берётся у соседа) и `id Tag="x"` (имя разбирается как `"id Tag"`). Первая редакция при этом обещала в §11 и §15, что «always-on уже бросает», а в §6 требовала не доходить до `int.Parse` чужого токена. Добавлена вторая половина §5.1 — разбор по `Attribute ::= Name Eq AttValue`. Заодно выяснилось, что тот же пробел ломает и **валидный** ввод: `<S a = "1"/>` сегодня молча теряет атрибут (§2.4, последняя строка). То есть этот этап — не только новая строгость, но и bugfix.
+2. **«Место вставки close-check — одно» было неверно.** Циклов с `IsEmpty`/`IsEndTag` два: тело класса и элементы коллекции. Плюс `SkipBody` слеп к именам и остаётся таким осознанно (§5.2).
+3. **Ожидаемое имя закрывающего тега — из головы, не из маппинга.** Формулировка «имя типа / `[XmlRoot]` / `[XmlElement]`» разъезжается на корне (два допустимых имени) и на `xsi:type` (тело разбирает производный тип). Добавлена таблица «что передавать» и способ передачи без цены для default.
+4. **`SingleRoot` «после корня только `S`» ломал бы compat.** XML разрешает Misc после корня, `SystemXmlCompatible` включает `Markup`, BCL комментарий после корня читает молча. Хвост теперь зависит от feature-binding (§5.3, §8).
+5. **`stackalloc` срезов невозможен.** `Span<ReadOnlySpan<char>>` в C# незаконен. Взамен — пары `(offset,length)`, которые в `Span<int>` кладутся (реализовано; попарное сравнение осталось запасным путём при переполнении буфера). Оговорка «больше 16 — считать дублем» удалена: это отказ на валидном документе.
+6. **`IllegalChars` промахивался мимо основного пути строк.** Без `CData` строка идёт через `IInjector.ParseBody`, а значение атрибута декодируется внутри `ParseAttribute`, куда генератор не вмешивается. Точек стало три (§5.5), и ни одна не требует клона `ParseAttribute` или обхода инжектора.
+7. **Форма исключения получила носителя.** Always-on ошибки не имеют флага, значит и оси в binding у них нет. Введён `XmlDocumentException` и корневая обёртка у хоста со стражами (§6.1) — с явной ценой: точечные `Assert.Throws<InvalidOperationException>` в двух фикстурах переводятся на базовый тип.
+8. **Список «уже ловится» был неполон** (§2.6): текстов у `EndTagLength`/`SkipBody` больше двух, и все они попадают под §6.
+9. **База для сравнения обновлена.** «DEEP ≈ 2.82 µs» — снимок README, которого больше нет (сейчас 3.139 µs); §3 переведён в разряд «оценка до реализации», базы берутся из того же прогона, что и замер.
+10. **Требование «в README только BDN» отменено.** Цена флага меряется probe-лестницей — так уже сделано для фич, и цифры обязаны быть сопоставимы (§12).
+11. **«Конфликт с фичами не предусматривается» заменено** таблицей трёх реальных точек встречи (§8).
+12. **Добавлен §11.4.** Страж, который ловит нарушение, но роняет валидный документ, проходил бы прежний §11 целиком.
+13. **Добавлен §5.7.** Первая редакция объявляла скалярную сверку имени неприкосновенной («этот флаг их не отключает») — то есть принимала за default решение, что за неё платят все, и не мерила его. Между тем это единственный страж, включённый сегодня всем, и единственный способ сделать default **быстрее** сегодняшнего. Решение переведено в разряд измеряемых с явным правилом и явным запретом на молчаливое «оставили как было».
+
+---
+
+## 17. Расхождения реализации с этим документом
+
+Реализация следует §4-§7 и §10. Ниже - места, где выбранный код не совпал
+с формулировкой, но наблюдаемое поведение совпадает или объяснено.
+
+1. **Точек вставки `IllegalChars` две, а не три, и checked-декодера нет.**
+   §5.5 предлагал 2x2 перегрузки декодера плюс проверку на пути инжектора.
+   Реализация ставит одну и ту же проверку **после** разбора строки: у пути
+   через `IInjector` другого места нет вовсе, а на пути с `CData` проверка
+   декодированного результата стоит ровно тот же один проход, что и проверка
+   внутри декодера. Итог: `XmlCharGuard.EnsureValidInputChars` над результатом
+   разбора строкового члена и над значением атрибута до `.ToString()`. Клонов
+   декодера в `XmlTextDecoder` не появилось.
+
+2. **`EnsureNoTrailingMarkup` называется `EnsureNoTrailingContent`**
+   (и `…ContentMarkup`), по сложившемуся в `XmlScan` правилу `Foo` / `FooMarkup`.
+   Обе формы принимают `(fullNode, consumed)`, а не готовый хвост: смещение
+   складывается внутри, и генератору не приходится эмитить арифметику, которая
+   на битом документе могла бы уехать за границу спана.
+
+3. **Признак «закрывающего тега не будет» едет тем же параметром, что и имя.**
+   §5.2 требовал передавать ожидаемое имя; но у ноды `<Foo/>` тела нет, и
+   требовать от неё закрытия - значит падать на well-formed документе. Поэтому
+   аргумент - `head.IsBodyless ? roschar.Empty : head.DeclaredNodeType`, а конец
+   ввода проверяется как `if (!expectedEndName.IsEmpty) ThrowUnexpectedEof();`.
+   Ловушка §11.4 нашла это в тот же час, когда флаг заработал.
+
+4. **`XmlCharGuard` получил вторую точку входа, а не второй обход.**
+   `EnsureValidXmlChars` (сериализация, `ArgumentException` с позицией) и
+   `EnsureValidInputChars` (вход, `XmlDocumentException` в форме BCL) зовут один
+   `IndexOfIllegalChar`.
+
+5. **Все броски ядра о документе - `XmlDocumentException : InvalidOperationException`.**
+   §6 требовал уметь отличить ошибку документа от чужого исключения; сделано
+   типом, а не текстом. Цена названа заранее и уплачена: точечные
+   `Assert.Throws<InvalidOperationException>` в `SinglePassParserFixture`,
+   `XmlTextDecoderFixture` и одном месте `CompatFixture` переведены на новый тип.
+   `catch (InvalidOperationException)` в пользовательском коде и корпус
+   `MalformedInputFixture` (он ловит по базовому типу) не тронуты.
+
+6. **Фасад различает три случая, а не два.** Уже завёрнутую пару он пропускает
+   как есть (иначе получился бы `IOE` внутри `IOE`), ошибку документа из своего
+   собственного кода - пролог, проверка корня на `xsi:nil` - заворачивает сам,
+   всё остальное как раньше. Отличать по типу, не по тексту.
+
+7. **Цена полного набора на REGULAR - около 1.25x, а не «5-10%» из §3.**
+   Медиана шести прогонов, разброс последней строки 1.22-1.38x. Две трети этой
+   цены - один `UniqueAttributes` (~1.15x); `MatchingEndTags` и `IllegalChars`
+   стоят единицы процентов, `SingleRoot` не отличим от шума, на DEEP не измерим
+   никто. Оценка §3 исходила из голов с короткими атрибутами; в REGULAR каждая
+   голова с атрибутами несёт 41-символьный URI пространства имён, и перечислить
+   атрибуты - значит через него переступить. До стоп-крана (2x, §12) далеко.
+   Аллокации не выросли ни на одной ступени лестницы: 816 B/оп на REGULAR
+   и 3272 B/оп на DEEP у всех хостов, включая полный набор.
+
+   **Хранение увиденных имён (§5.4) доведено до второго варианта и измерено.**
+   Пары `(offset, length)` в `stackalloc Span<int>`, разбор головы один раз;
+   при переполнении буфера (32 имени) - откат на попарный путь, потому что
+   переполнение это не дубль. Что это дало:
+
+   - на REGULAR - **ничего**. Голова из двух атрибутов даёт попарному варианту
+     ровно один лишний разбор, и он лежит под дрейфом: 1.09-1.15x против
+     1.14-1.16x, три прогона на вариант, интервалы перекрываются. Строки,
+     которых изменение не касалось (`SingleRoot`, `IllegalChars`), сдвинулись
+     на столько же - это и есть шум, а не эффект;
+   - на широкой голове - **много**. Тот же REGULAR с десятью лишними атрибутами
+     на голову: 2.37x у попарного варианта против 1.40x у буфера
+     (2.35/2.42/2.37 против 1.40/1.41/1.39, интервалы не пересекаются).
+     Попарный вариант квадратичен по числу атрибутов, буфер линеен.
+
+   Вывод, ради которого это и мерялось: буфер здесь не оптимизация горячего
+   пути, а страховка от квадрата на входе, ширину голов которого мы не
+   контролируем. Строка `--guard-cost` для широких голов добавлена, чтобы
+   следующий, кому захочется «упростить» это обратно в попарное, увидел цену.
+
+8. **Контрольные строки §12 п. 2 в таблицу не попали.** Ни always-on разбор
+   атрибута, ни скалярная сверка имени не имеют выключателя, значит внутри
+   одного round-robin их не с чем сравнить, а между процессами дрейф абсолютных
+   времён на этой машине (+-5%) больше измеряемого эффекта. Что удалось
+   утверждать: на кросс-процессном A/B default до и после always-on лежит
+   в одном разбросе (1841-1996 нс против 1908-1917 нс), то есть регрессии не
+   видно. Подробности по скалярной сверке - §5.7.
+
+9. **Известное расхождение с BCL, найденное прогоном.** Ссылка на необъявленную
+   сущность внутри **числового** члена (`<Number>&nosuchentity;</Number>`) даёт
+   у нас `FormatException` внутри обёртки, а у BCL - `XmlException`: текст
+   числового члена уходит прямо в разбор числа, минуя декодер, и ошибкой
+   документа стать не успевает. В строковом члене та же ссылка даёт ровно
+   цепочку BCL. Закрывать это значило бы декодировать текст числовых членов
+   ради проверки - то есть платить на горячем пути за случай, который и так
+   заканчивается исключением. Зафиксировано комментарием в
+   `BrokenXmlOnDeserialize_ThrowsLikeSystemXml_Test`.

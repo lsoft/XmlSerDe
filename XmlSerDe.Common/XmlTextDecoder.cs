@@ -168,7 +168,7 @@ namespace XmlSerDe.Common
                 var tail = afterHead.IndexOf(CDataTailSpan);
                 if (tail < 0)
                 {
-                    throw new InvalidOperationException(
+                    throw new XmlDocumentException(
                         $"Closing ']]>' not found for the CDATA section starting at position {index}."
                         );
                 }
@@ -183,7 +183,7 @@ namespace XmlSerDe.Common
 
         private static void ThrowLiteralLt(int index)
         {
-            throw new InvalidOperationException(
+            throw new XmlDocumentException(
                 $"Literal '<' at position {index} of element text is not allowed by XML 1.0 §2.4; use &lt;."
                 );
         }
@@ -326,7 +326,7 @@ namespace XmlSerDe.Common
 
             if (length >= rest.Length || rest[length] != ';')
             {
-                throw new InvalidOperationException(
+                throw new XmlDocumentException(
                     $"Unterminated entity reference at position {start}: '&' must start a reference ending with ';' (XML 1.0 §4.1); a literal ampersand must be written as &amp;amp;."
                     );
             }
@@ -334,7 +334,7 @@ namespace XmlSerDe.Common
             var name = rest.Slice(1, length - 1);
             if (name.IsEmpty)
             {
-                throw new InvalidOperationException(
+                throw new XmlDocumentException(
                     $"Empty entity reference '&;' at position {start} (XML 1.0 §4.1)."
                     );
             }
@@ -384,7 +384,7 @@ namespace XmlSerDe.Common
                     replacement = '"';
                     break;
                 default:
-                    throw new InvalidOperationException(
+                    throw new XmlDocumentException(
                         $"Reference to undeclared entity '&{name.ToString()};' at position {start}. Without a DTD, XML 1.0 §4.6 declares only amp, lt, gt, apos and quot."
                         );
             }
@@ -412,7 +412,7 @@ namespace XmlSerDe.Common
 
             if (digits.IsEmpty)
             {
-                throw new InvalidOperationException(
+                throw new XmlDocumentException(
                     $"Character reference at position {start} has no digits (XML 1.0 §4.1)."
                     );
             }
@@ -423,7 +423,7 @@ namespace XmlSerDe.Common
                 var digit = DigitValue(digits[i], hexadecimal);
                 if (digit < 0)
                 {
-                    throw new InvalidOperationException(
+                    throw new XmlDocumentException(
                         $"Character reference at position {start} contains '{digits[i]}', which is not a {(hexadecimal ? "hexadecimal" : "decimal")} digit (XML 1.0 §4.1)."
                         );
                 }
@@ -510,7 +510,7 @@ namespace XmlSerDe.Common
 
         private static void ThrowIllegalCodePoint(int codePoint, int start)
         {
-            throw new InvalidOperationException(
+            throw new XmlDocumentException(
                 $"Character reference at position {start} resolves to U+{codePoint:X4}, which is not a legal XML 1.0 character (§2.2)."
                 );
         }
