@@ -20,10 +20,10 @@ namespace XmlSerDe.Tests
         [Fact]
         public void AttributeValue_ContainingGreaterThan_ParsesWithoutThrowing_Test()
         {
-            var settings = new XmlDeserializeSettings(false, false);
+            var context = new XmlParseContext(false, false);
             roschar xml = "<Foo attr=\"1>2\">hello</Foo>".AsSpan();
 
-            var node = new XmlNode2(settings, xml, roschar.Empty);
+            var node = new XmlNode2(context, xml);
 
             Assert.True(node.DeclaredNodeType.SequenceEqual("Foo".AsSpan()));
             Assert.True(node.Internals.SequenceEqual("hello".AsSpan()));
@@ -33,10 +33,10 @@ namespace XmlSerDe.Tests
         [Fact]
         public void AttributeValue_ContainingGreaterThan_SelfClosingTag_Test()
         {
-            var settings = new XmlDeserializeSettings(false, false);
+            var context = new XmlParseContext(false, false);
             roschar xml = "<Foo attr=\"a>b\"/>".AsSpan();
 
-            var node = new XmlNode2(settings, xml, roschar.Empty);
+            var node = new XmlNode2(context, xml);
 
             Assert.True(node.DeclaredNodeType.SequenceEqual("Foo".AsSpan()));
             Assert.True(node.IsBodyless);
@@ -135,10 +135,10 @@ namespace XmlSerDe.Tests
         [Fact]
         public void AttributeValue_LiteralTabAndNewline_NormalizedToSingleSpace_Test()
         {
-            var settings = new XmlDeserializeSettings(false, false);
+            var context = new XmlParseContext(false, false);
             roschar xml = "<Foo xmlns:p3=\"http://www.w3.org/2001/XMLSchema-instance\" p3:type=\"A\tB\nC\"></Foo>".AsSpan();
 
-            var node = new XmlNode2(settings, xml, roschar.Empty);
+            var node = new XmlNode2(context, xml);
             var preciseType = node.GetPreciseNodeType();
 
             Assert.True(preciseType.SequenceEqual("A B C".AsSpan()));
@@ -147,10 +147,10 @@ namespace XmlSerDe.Tests
         [Fact]
         public void AttributeValue_CharacterReferenceNewline_IsNotNormalizedToSpace_Test()
         {
-            var settings = new XmlDeserializeSettings(false, false);
+            var context = new XmlParseContext(false, false);
             roschar xml = "<Foo xmlns:p3=\"http://www.w3.org/2001/XMLSchema-instance\" p3:type=\"A&#10;B\"></Foo>".AsSpan();
 
-            var node = new XmlNode2(settings, xml, roschar.Empty);
+            var node = new XmlNode2(context, xml);
             var preciseType = node.GetPreciseNodeType();
 
             Assert.True(preciseType.SequenceEqual("A\nB".AsSpan()));

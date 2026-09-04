@@ -10,7 +10,7 @@ namespace XmlSerDe.Components.Exhauster
     /// Exhauster that writes into StringBuilder.
     /// Class is NOT a thread-safe!
     /// </summary>
-    public class StringBuilderExhauster : IExhauster
+    public sealed class StringBuilderExhauster : ExhausterBase
     {
         private readonly StringBuilder _sb;
         private readonly string _dateTimeFormat;
@@ -84,7 +84,7 @@ namespace XmlSerDe.Components.Exhauster
 #endif
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(DateTime value)
+        public override void Append(DateTime value)
         {
 #if NET8_0_OR_GREATER
             Span<char> buffer = stackalloc char[64];
@@ -102,7 +102,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(DateTime? value)
+        public override void Append(DateTime? value)
         {
             if (!value.HasValue)
             {
@@ -113,7 +113,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(Guid value)
+        public override void Append(Guid value)
         {
 #if NET8_0_OR_GREATER
             Span<char> buffer = stackalloc char[36];
@@ -131,7 +131,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(Guid? value)
+        public override void Append(Guid? value)
         {
             if (!value.HasValue)
             {
@@ -142,13 +142,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(bool value)
+        public override void Append(bool value)
         {
             _sb.Append((value ? "true" : "false"));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(bool? value)
+        public override void Append(bool? value)
         {
             if (!value.HasValue)
             {
@@ -159,13 +159,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(sbyte value)
+        public override void Append(sbyte value)
         {
             AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(sbyte? value)
+        public override void Append(sbyte? value)
         {
             if (!value.HasValue)
             {
@@ -176,13 +176,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(byte value)
+        public override void Append(byte value)
         {
             AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(byte? value)
+        public override void Append(byte? value)
         {
             if (!value.HasValue)
             {
@@ -193,13 +193,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(ushort value)
+        public override void Append(ushort value)
         {
             AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(ushort? value)
+        public override void Append(ushort? value)
         {
             if (!value.HasValue)
             {
@@ -210,13 +210,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(short value)
+        public override void Append(short value)
         {
             AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(short? value)
+        public override void Append(short? value)
         {
             if (!value.HasValue)
             {
@@ -227,13 +227,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(uint value)
+        public override void Append(uint value)
         {
             AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(uint? value)
+        public override void Append(uint? value)
         {
             if (!value.HasValue)
             {
@@ -244,13 +244,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(int value)
+        public override void Append(int value)
         {
             AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(int? value)
+        public override void Append(int? value)
         {
             if (!value.HasValue)
             {
@@ -261,13 +261,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(ulong value)
+        public override void Append(ulong value)
         {
             AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(ulong? value)
+        public override void Append(ulong? value)
         {
             if (!value.HasValue)
             {
@@ -278,13 +278,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(long value)
+        public override void Append(long value)
         {
             AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(long? value)
+        public override void Append(long? value)
         {
             if (!value.HasValue)
             {
@@ -295,13 +295,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(decimal value)
+        public override void Append(decimal value)
         {
             AppendInvariant(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(decimal? value)
+        public override void Append(decimal? value)
         {
             if (!value.HasValue)
             {
@@ -321,7 +321,7 @@ namespace XmlSerDe.Components.Exhauster
         /// "Infinity"/"-Infinity", а в xsd - "INF"/"-INF", и BCL пишет именно "INF".
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(double value)
+        public override void Append(double value)
         {
             var special = XmlNumberLexis.SpecialOrNull(value);
             if (special is not null)
@@ -334,7 +334,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(double? value)
+        public override void Append(double? value)
         {
             if (!value.HasValue)
             {
@@ -345,7 +345,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(float value)
+        public override void Append(float value)
         {
             var special = XmlNumberLexis.SpecialOrNull(value);
             if (special is not null)
@@ -358,7 +358,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(float? value)
+        public override void Append(float? value)
         {
             if (!value.HasValue)
             {
@@ -391,14 +391,14 @@ namespace XmlSerDe.Components.Exhauster
 #endif
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(char value)
+        public override void Append(char value)
         {
             //кодовая точка, а не символ - см. IExhauster
             AppendInvariant((ushort)value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(char? value)
+        public override void Append(char? value)
         {
             if (!value.HasValue)
             {
@@ -409,13 +409,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(TimeSpan value)
+        public override void Append(TimeSpan value)
         {
             XmlNumberLexis.Append(_sb, value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(TimeSpan? value)
+        public override void Append(TimeSpan? value)
         {
             if (!value.HasValue)
             {
@@ -426,13 +426,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(string? value)
+        public override void Append(string? value)
         {
             _sb.Append(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AppendEncoded(string? value)
+        public override void AppendEncoded(string? value)
         {
             if (value is null)
             {
@@ -444,7 +444,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AppendEncodedUnchecked(string? value)
+        public override void AppendEncodedUnchecked(string? value)
         {
             if (value is null)
             {
@@ -455,7 +455,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AppendAttributeEncoded(string? value)
+        public override void AppendAttributeEncoded(string? value)
         {
             if (value is null)
             {
@@ -466,7 +466,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AppendAttributeEncodedUnchecked(string? value)
+        public override void AppendAttributeEncodedUnchecked(string? value)
         {
             if (value is null)
             {
@@ -477,7 +477,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AppendBase64(byte[]? value)
+        public override void AppendBase64(byte[]? value)
         {
             if (value is null)
             {

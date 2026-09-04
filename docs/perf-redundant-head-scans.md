@@ -61,7 +61,7 @@ ParseFirstFoundAttribute=14; DecodeAttributeValue=9
 ### 3.1. `GetFirstLength` рекурсивно обходит **всё поддерево**
 
 ```csharp
-private static int GetFirstLength(ref XmlDeserializeSettings settings, roschar nodes)
+private static int GetFirstLength(ref XmlParseContext settings, roschar nodes)
 {
     ScanHead_Core(nodes, trimmed, out var fullHeadLength, out var nodeType, out var isBodyLess);
     // ...
@@ -85,7 +85,7 @@ private static int GetFirstLength(ref XmlDeserializeSettings settings, roschar n
 ### 3.2. `GetFirst` разбирает голову ноды дважды
 
 ```csharp
-public static void GetFirst(ref XmlDeserializeSettings settings, roschar nodes,
+public static void GetFirst(ref XmlParseContext settings, roschar nodes,
                             roschar xmlnsAttributeName, ref XmlNode2 result)
 {
     var length = GetFirstLength(ref settings, nodes);   // скан #1 головы этой ноды
@@ -163,7 +163,7 @@ S(X) = 1 (из собственного GetFirst) + S(parent) (из обхода
 
 **Как 3a оказалась реализована (важная деталь для 3b).** Наружу отдаётся не `nodeType`,
 а `nodeTypeLength`. Спан, полученный через `out` из метода, у которого есть параметр
-`ref XmlDeserializeSettings settings`, компилятор обязан считать потенциально ссылающимся
+`ref XmlParseContext settings`, компилятор обязан считать потенциально ссылающимся
 на этот `ref`, и сохранить такой спан в поле `ref struct` уже нельзя — CS8352. Начало имени
 вызывающей стороне и так известно (`fullHeadPrefixLength + 1`), поэтому конструктор режет
 спан сам. **Любой вариант из раздела 5, который захочет вернуть спаны через `out` из
@@ -199,7 +199,7 @@ S(X) = 1 (из собственного GetFirst) + S(parent) (из обхода
 
 Кешировать `offset -> length` при первом обходе и переиспользовать при повторных.
 
-- **Где держать состояние:** `XmlDeserializeSettings` — это `ref struct`, который уже
+- **Где держать состояние:** `XmlParseContext` — это `ref struct`, который уже
   передаётся везде как `ref settings`. Значит он **может** нести изменяемое состояние, в том
   числе `Span<int>` на стеке вызывающей стороны. Это ключевой факт: отдельный кеш не ломает
   ref-struct-модель и не требует поля-синглтона.
@@ -379,6 +379,6 @@ Ratio 0.77 против 0.74 на A/B-стенде. Расхождение в п
    Помогли только правки с конкретным механизмом (порог SIMD, векторный скан против
    посимвольного). Любой вариант из раздела 5 проводить через A/B по методике раздела 6.
 5. **Ref safety (CS8352).** См. раздел 4: возвращать спаны через `out` из `GetFirstLength`
-   нельзя, пока у метода есть параметр `ref XmlDeserializeSettings`. Отдавайте индексы
+   нельзя, пока у метода есть параметр `ref XmlParseContext`. Отдавайте индексы
    и длины. Обнаруживается сразу на компиляции, но может увести проект в тупик, если
    архитектуру кеша спроектировать вокруг возврата спанов.

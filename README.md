@@ -26,6 +26,12 @@ Two smaller breaks come with it: a custom `IExhauster` now also implements `Appe
 
 **Breaking change (drop-in):** `XmlSerDe.Compat` now refuses malformed documents the way `System.Xml.Serialization` refuses them — a second root element, a duplicate attribute, a mismatched or missing closing tag, an illegal `Char` in a string. Code that relied on the facade quietly accepting broken input will start seeing `InvalidOperationException` → `XmlException`, which is what the BCL raised there all along. The native path is unaffected unless you ask for it with `[XmlGuards]` — see [Opt-in XML guards](#opt-in-xml-guards).
 
+**Breaking change (custom injector):** `IInjector.Parse` lost its `xmlnsAttributeName` parameter; the value now rides inside the parse context, together with everything else contextual. `XmlNode2`'s public constructor and `XmlNode2.GetFirst` lost the same parameter for the same reason. A caller that passed `roschar.Empty` simply drops the argument; a caller that had a real name passes `context.WithXmlnsAttributeName(name)` instead. `XmlDeserializeSettings` is renamed to `XmlParseContext` to match what it now carries — parse state, not just settings. The point is not the parameter itself but the shape: a context that is one `ref` struct grows by adding a field, and a field breaks nobody, whereas that parameter broke all 33 `Parse` overloads at once.
+
+**Breaking change (custom sinks):** a custom exhauster now derives from `XmlSerDe.Common.ExhausterBase` and a custom injector from `XmlSerDe.Common.InjectorBase`; implementing `IExhauster` / `IInjector` alone is no longer accepted, and the generator says so. The interfaces stay — the base classes implement them — but the contract the generator checks is the class. The reason is the two breaking changes above: on an interface, every added member breaks every implementer at once, by source and by binary alike. On a class a new member arrives `virtual` with a default body and nobody notices. That rule is now written into the bases and is the point of the change: **a new member is only ever added as `virtual` with a working default**, expressed through `Append(string?)` / `ParseBody`. Shipped exhausters change only their base type; `DefaultInjector` still works as the base for a custom injector, except its methods are now `override` rather than `new`. Details in [docs/sink-contract.md](docs/sink-contract.md).
+
+The generator also gained `XMLSERDE010`, a warning when the type named in `[XmlExhauster]` / `[XmlInjector]` is not `sealed`: the generated call is made on the concrete type, so a sealed one devirtualizes to exactly the cost of a non-virtual method and an open one does not. Measured in [docs/dispatch-cost.md](docs/dispatch-cost.md) — the difference is +4% on a real sink and up to 1.5x on a polymorphic call site.
+
 ## Performance
 
 XmlSerDe generates serialize and deserialize methods at compile time, so there is no runtime reflection, no first-call warm-up, and no extra cost as the type graph grows. Against `System.Xml.Serialization` on the same documents, a typical shallow payload deserializes about **4× faster** and allocates **5%** of the baseline — the object graph, and nothing else. A document nested 100 levels deep is about **5× faster** for the same reason: the parser is single-pass, so depth no longer multiplies the work. A ~100 MB document is still **twice as fast** and uses **39%** of the BCL heap. Serialization to a string is about **3×** on the small document; writing UTF-8 into a pre-sized `MemoryStream` on the 100 MB document is twice as fast and allocates **28%** of the BCL stream write. On .NET Framework the win is smaller — span `Parse` / `TryFormat` are missing — and on that HUGE deserialize XmlSerDe is a few percent *slower*, though it still allocates 41% of the baseline.
@@ -331,7 +337,7 @@ public partial class XmlSerializerDeserializer
 
 | Project | Target | Role |
 |---------|--------|------|
-| **XmlSerDe.Common** | netstandard2.0; net8.0; net10.0 | Attributes, `IInjector` / `IExhauster` contracts, `XmlScan`/`XmlTextDecoder`, and `XmlNode2` — a low-allocation XML node parser over `ReadOnlySpan<char>`. |
+| **XmlSerDe.Common** | netstandard2.0; net8.0; net10.0 | Attributes, the `ExhausterBase` / `InjectorBase` contracts (and the `IExhauster` / `IInjector` interfaces they implement), `XmlScan`/`XmlTextDecoder`, and `XmlNode2` — a low-allocation XML node parser over `ReadOnlySpan<char>`. |
 | **XmlSerDe.Components** | netstandard2.0; net8.0; net10.0 | Default runtime implementations: injectors and exhausters. |
 | **XmlSerDe.Generator** | netstandard2.0 (Roslyn analyzer) | Incremental source generator that emits serialization/deserialization code at compile time. |
 | **XmlSerDe.Compat** | netstandard2.0; net8.0; net10.0 | Optional. A facade that *is* a `System.Xml.Serialization.XmlSerializer` — see [Drop-in mode](#drop-in-mode-xmlserdecompat). Referenced only if you want it; nothing else depends on it. |
@@ -711,11 +717,13 @@ The generator registers each included type as a subject on its own, so a derived
 
 ### `[XmlExhauster(typeof(T))]`
 
-Registers an `IExhauster` implementation. The generator emits a `Serialize` overload for each registered exhauster. If omitted, `StringBuilderExhauster` is used automatically.
+Registers an exhauster. The type must derive from `XmlSerDe.Common.ExhausterBase`; implementing `IExhauster` alone is rejected (see [docs/sink-contract.md](docs/sink-contract.md)). The generator emits a `Serialize` overload for each registered exhauster. If omitted, `StringBuilderExhauster` is used automatically.
+
+Seal the type you name here: the generated call is made on the concrete type, so a sealed one devirtualizes. An open one compiles and runs, with warning `XMLSERDE010` and the cost measured in [docs/dispatch-cost.md](docs/dispatch-cost.md).
 
 ### `[XmlInjector(typeof(T))]`
 
-Registers an `IInjector` implementation. The generator emits a `Deserialize` overload for each registered injector. If omitted, `DefaultInjector` is used automatically.
+Registers an injector. The type must derive from `XmlSerDe.Common.InjectorBase` — `DefaultInjector` already does, so deriving from it is enough. The generator emits a `Deserialize` overload for each registered injector. If omitted, `DefaultInjector` is used automatically. The same `XMLSERDE010` sealing advice applies.
 
 ### `[XmlFactory(typeof(T), invocationStatement)]`
 
@@ -967,11 +975,11 @@ Produces XML compatible with `System.Xml.Serialization` polymorphism:
 
 ### Injector
 
-An **injector** (`IInjector`) parses primitive/builtin values from XML nodes. It is the deserialization counterpart to an exhauster.
+An **injector** (`InjectorBase`) parses primitive/builtin values from XML nodes. It is the deserialization counterpart to an exhauster.
 
 For each supported builtin type, `IInjector` defines:
 
-- `Parse(ref XmlDeserializeSettings, fullNode, xmlnsAttributeName, out T)` — expects the XSD wrapper element (`<dateTime>`, `<int>`, etc.) inside the property element.
+- `Parse(ref XmlParseContext, fullNode, out T)` — expects the XSD wrapper element (`<dateTime>`, `<int>`, etc.) inside the property element.
 - `ParseBody(body, out T)` — parses only the inner text.
 
 `DefaultInjector` (singleton: `DefaultInjector.Instance`):
@@ -983,25 +991,29 @@ For each supported builtin type, `IInjector` defines:
 - **Strings (`DefaultInjector` / `XmlNode2`):** the public `XmlNode2` walker still understands CDATA; that is not the generated POCO hot path.
 - **Booleans:** `"true"` / `"false"`.
 
+`XmlParseContext` is the single context parameter: document-wide heuristics (`ContainsXmlComments`, `ContainsCDataBlocks`) plus `XmlnsAttributeName` — the name of the attribute that declared the `xsi` namespace, when an ancestor already found it. `roschar.Empty` means "unknown, go scan the head". Derive a subtree context with `context.WithXmlnsAttributeName(name)`; there is deliberately no public constructor taking every field, because that constructor would break on each new field exactly the way a new parameter would.
+
 ### Custom injector
 
-Implement `IInjector` and register it with `[XmlInjector(typeof(MyInjector))]`. Override `ParseBody` to change format — for example, a fixed `DateTime` format:
+Derive from `DefaultInjector` (which derives from `InjectorBase`) and register with `[XmlInjector(typeof(MyInjector))]`. Override `ParseBody` to change format — for example, a fixed `DateTime` format:
 
 ```csharp
-public class IsoDateInjector : DefaultInjector
+public sealed class IsoDateInjector : DefaultInjector
 {
-    public new void ParseBody(ReadOnlySpan<char> body, out DateTime result)
+    public override void ParseBody(ReadOnlySpan<char> body, out DateTime result)
     {
         result = DateTime.ParseExact(body, "yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 }
 ```
 
+`override`, not `new`: `DefaultInjector`'s members are virtual now. `sealed` on your own type is what keeps the generated call as cheap as a non-virtual one.
+
 The generator emits a `Deserialize(MyInjector inj, ReadOnlySpan<char> xml, out TRoot)` overload that routes all builtin parsing through your injector.
 
 ### XmlNode2
 
-`XmlNode2` in `XmlSerDe.Common` is a `ref struct` that walks XML without allocating DOM nodes. It remains a **full** XML 1.0 subset (comments, CDATA, quoted attributes, flexible `xsi` prefix) for callers that construct it directly. Generated `[XmlSubject]` deserializers do **not** go through `XmlNode2` and do **not** build `XmlDeserializeSettings` from document-wide comment/CDATA heuristics.
+`XmlNode2` in `XmlSerDe.Common` is a `ref struct` that walks XML without allocating DOM nodes. It remains a **full** XML 1.0 subset (comments, CDATA, quoted attributes, flexible `xsi` prefix) for callers that construct it directly. Generated `[XmlSubject]` deserializers do **not** go through `XmlNode2` and do **not** build `XmlParseContext` from document-wide comment/CDATA heuristics.
 
 Its attribute parser follows XML 1.0's actual grammar rather than a narrow subset:
 
@@ -1017,7 +1029,7 @@ Its attribute parser follows XML 1.0's actual grammar rather than a narrow subse
 
 ### Exhauster
 
-An **exhauster** (`IExhauster`) is the output sink for serialized data. For each supported builtin type it provides `Append(T)` and `Append(T?)`, plus:
+An **exhauster** (`ExhausterBase`) is the output sink for serialized data. For each supported builtin type it provides `Append(T)` and `Append(T?)`, plus:
 
 - `Append(string? value)` — raw append.
 - `AppendEncoded(string? value)` — validates then HTML-encodes then appends (used for `string` builtins in element text).
@@ -1071,7 +1083,17 @@ public class StreamExhauster : Utf8BinaryExhauster
 
 ### Custom exhauster
 
-Implement `IExhauster` and register with `[XmlExhauster(typeof(MyExhauster))]`. Override `Append` methods to customize output format.
+Derive from `ExhausterBase` and register with `[XmlExhauster(typeof(MyExhauster))]`. Every member is `abstract`, so a from-scratch sink implements all of them; the point of the base class is that anything added *later* arrives `virtual` with a default and leaves your type alone.
+
+Make it `sealed` — the generated code calls it by its concrete type, and a sealed one devirtualizes:
+
+```csharp
+public sealed class MyExhauster : ExhausterBase
+{
+    public override void Append(string? value) { /* ... */ }
+    // ...
+}
+```
 
 Set `appendXmlHead: true` on `Serialize` to prepend `<?xml version="1.0" encoding="utf-8"?>`.
 

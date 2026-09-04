@@ -11,7 +11,7 @@ namespace XmlSerDe.Components.Exhauster
     /// <see cref="PooledCharExhauster"/> before the write pass.
     /// Not thread-safe.
     /// </summary>
-    public sealed class LengthEstimatorExhauster : IExhauster
+    public sealed class LengthEstimatorExhauster : ExhausterBase
     {
         private int _totalLength;
 
@@ -56,13 +56,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(DateTime value)
+        public override void Append(DateTime value)
         {
             _totalLength += XmlLexicalLength.DateTime(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(DateTime? value)
+        public override void Append(DateTime? value)
         {
             if (!value.HasValue)
             {
@@ -73,13 +73,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(Guid value)
+        public override void Append(Guid value)
         {
             _totalLength += 36;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(Guid? value)
+        public override void Append(Guid? value)
         {
             if (!value.HasValue)
             {
@@ -90,13 +90,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(bool value)
+        public override void Append(bool value)
         {
             _totalLength += (value ? 4 : 5);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(bool? value)
+        public override void Append(bool? value)
         {
             if (!value.HasValue)
             {
@@ -107,13 +107,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(sbyte value)
+        public override void Append(sbyte value)
         {
             _totalLength += CountSigned32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(sbyte? value)
+        public override void Append(sbyte? value)
         {
             if (!value.HasValue)
             {
@@ -124,13 +124,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(byte value)
+        public override void Append(byte value)
         {
             _totalLength += CountUInt32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(byte? value)
+        public override void Append(byte? value)
         {
             if (!value.HasValue)
             {
@@ -141,13 +141,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(ushort value)
+        public override void Append(ushort value)
         {
             _totalLength += CountUInt32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(ushort? value)
+        public override void Append(ushort? value)
         {
             if (!value.HasValue)
             {
@@ -158,13 +158,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(short value)
+        public override void Append(short value)
         {
             _totalLength += CountSigned32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(short? value)
+        public override void Append(short? value)
         {
             if (!value.HasValue)
             {
@@ -175,13 +175,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(uint value)
+        public override void Append(uint value)
         {
             _totalLength += CountUInt32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(uint? value)
+        public override void Append(uint? value)
         {
             if (!value.HasValue)
             {
@@ -192,13 +192,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(int value)
+        public override void Append(int value)
         {
             _totalLength += CountSigned32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(int? value)
+        public override void Append(int? value)
         {
             if (!value.HasValue)
             {
@@ -209,13 +209,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(ulong value)
+        public override void Append(ulong value)
         {
             _totalLength += CountUInt64(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(ulong? value)
+        public override void Append(ulong? value)
         {
             if (!value.HasValue)
             {
@@ -226,13 +226,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(long value)
+        public override void Append(long value)
         {
             _totalLength += CountSigned64(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(long? value)
+        public override void Append(long? value)
         {
             if (!value.HasValue)
             {
@@ -243,13 +243,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(decimal value)
+        public override void Append(decimal value)
         {
             _totalLength += XmlLexicalLength.Decimal(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(decimal? value)
+        public override void Append(decimal? value)
         {
             if (!value.HasValue)
             {
@@ -260,13 +260,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(float value)
+        public override void Append(float value)
         {
             _totalLength += 20;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(float? value)
+        public override void Append(float? value)
         {
             if (!value.HasValue)
             {
@@ -277,13 +277,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(double value)
+        public override void Append(double value)
         {
             _totalLength += 30;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(double? value)
+        public override void Append(double? value)
         {
             if (!value.HasValue)
             {
@@ -294,13 +294,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(char value)
+        public override void Append(char value)
         {
             _totalLength += CountUInt32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(char? value)
+        public override void Append(char? value)
         {
             if (!value.HasValue)
             {
@@ -311,13 +311,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(TimeSpan value)
+        public override void Append(TimeSpan value)
         {
             _totalLength += XmlLexicalLength.TimeSpan(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(TimeSpan? value)
+        public override void Append(TimeSpan? value)
         {
             if (!value.HasValue)
             {
@@ -328,7 +328,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Append(string? value)
+        public override void Append(string? value)
         {
             if (value is null)
             {
@@ -339,7 +339,7 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AppendEncoded(string? value)
+        public override void AppendEncoded(string? value)
         {
             if (value is null)
             {
@@ -352,13 +352,13 @@ namespace XmlSerDe.Components.Exhauster
         //оценщик длины строку не кодирует, поэтому guard'а здесь нет ни в одном
         //режиме и checked/unchecked считают одно и то же
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AppendEncodedUnchecked(string? value)
+        public override void AppendEncodedUnchecked(string? value)
         {
             AppendEncoded(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AppendAttributeEncoded(string? value)
+        public override void AppendAttributeEncoded(string? value)
         {
             if (value is null)
             {
@@ -369,13 +369,13 @@ namespace XmlSerDe.Components.Exhauster
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AppendAttributeEncodedUnchecked(string? value)
+        public override void AppendAttributeEncodedUnchecked(string? value)
         {
             AppendAttributeEncoded(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AppendBase64(byte[]? value)
+        public override void AppendBase64(byte[]? value)
         {
             _totalLength += XmlBase64.EncodedLength(value);
         }

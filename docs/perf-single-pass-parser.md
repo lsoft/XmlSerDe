@@ -159,7 +159,7 @@ internals = internals.Slice(child.FullNode.Length);   // единственны�
 Сегодня:
 
 ```csharp
-static void DeserializeBody(ref XmlDeserializeSettings settings, TInj inj,
+static void DeserializeBody(ref XmlParseContext settings, TInj inj,
                             roschar internals, roschar xmlns, out T result);
 ```
 
@@ -168,7 +168,7 @@ static void DeserializeBody(ref XmlDeserializeSettings settings, TInj inj,
 Предлагается:
 
 ```csharp
-static void DeserializeBody(ref XmlDeserializeSettings settings, TInj inj,
+static void DeserializeBody(ref XmlParseContext settings, TInj inj,
                             roschar body, roschar xmlns, out T result, out int consumed);
 ```
 
@@ -180,7 +180,7 @@ static void DeserializeBody(ref XmlDeserializeSettings settings, TInj inj,
 корень):
 
 ```csharp
-static void DeserializeAt(ref XmlDeserializeSettings settings, TInj inj,
+static void DeserializeAt(ref XmlParseContext settings, TInj inj,
                           roschar atStartTag, roschar xmlns, out T result, out int consumed);
 ```
 
@@ -202,7 +202,7 @@ public readonly ref struct XmlHead
 
 // читает ровно одну голову в позиции курсора: пропускает пробелы, комментарии,
 // определяет StartTag/EndTag/конец. НИКАКОГО обхода поддерева.
-public static void ReadHead(ref XmlDeserializeSettings settings, roschar cursor,
+public static void ReadHead(ref XmlParseContext settings, roschar cursor,
                             roschar xmlns, ref XmlHead result);
 ```
 
@@ -290,7 +290,7 @@ quote-aware — `>` внутри значения атрибута легале�
   закрывающем теге. Битый XML вида `<A><B></A>` сейчас упирается в конец спана, а под D
   уйдёт дальше — поэтому сверка имени в `EndTag` из желательной становится обязательной.
 - **`ref`-safety (CS8352).** Ограничение из §4 предыдущего документа никуда не делось:
-  спан, полученный через `out` из метода с параметром `ref XmlDeserializeSettings`, нельзя
+  спан, полученный через `out` из метода с параметром `ref XmlParseContext`, нельзя
   положить в поле `ref struct`. `ReadHead` поэтому принимает результат через
   `ref XmlHead result` (как сегодняшний `GetFirst`), а не возвращает его.
   Проектировать вокруг `out roschar` нельзя.
@@ -448,7 +448,7 @@ REGULAR дал больше, чем прогноз §3.6 («между эффе�
 попутно: полиморфный член теперь диспетчеризуется по имени члена, а потом по `xsi:type`.
 
 Ограничение CS8352 (§3.7, риск 5) обошли радикально: **ни один метод `XmlScan` не
-принимает `XmlDeserializeSettings`**, эвристики передаются двумя `bool`. Без ref-параметра
+принимает `XmlParseContext`**, эвристики передаются двумя `bool`. Без ref-параметра
 ref-структурного типа компилятор не считает `out roschar` потенциально ссылающимся на
 него, и вся проблема исчезает вместе с необходимостью отдавать индексы вместо спанов.
 

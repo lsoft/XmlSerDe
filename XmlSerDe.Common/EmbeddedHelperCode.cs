@@ -148,9 +148,8 @@ namespace XmlSerDe.Common
         }
 
         public XmlNode2(
-            XmlDeserializeSettings settings,
-            roschar fullNode,
-            roschar xmlnsAttributeName
+            XmlParseContext context,
+            roschar fullNode
             )
         {
             IsEmpty = fullNode.IsEmpty;
@@ -180,15 +179,15 @@ namespace XmlSerDe.Common
             FullHeadPrefixLength = fullNode.Length - trimmed.Length;
             ScanHead_Core(fullNode, trimmed, out var fullHeadLength, out DeclaredNodeType, out IsBodyless);
             FullHead = fullNode.Slice(0, fullHeadLength);
-            Internals = GetInternalsOf(settings.ContainsXmlComments);
+            Internals = GetInternalsOf(context.ContainsXmlComments);
 
-            if (xmlnsAttributeName.IsEmpty)
+            if (context.XmlnsAttributeName.IsEmpty)
             {
                 XmlnsAttributeName = GetXmlnsAttributeName();
             }
             else
             {
-                XmlnsAttributeName = xmlnsAttributeName;
+                XmlnsAttributeName = context.XmlnsAttributeName;
             }
         }
 
@@ -199,9 +198,8 @@ namespace XmlSerDe.Common
         /// а голова целиком помещается внутри этого префикса.
         /// </summary>
         private XmlNode2(
-            XmlDeserializeSettings settings,
+            XmlParseContext context,
             roschar fullNode,
-            roschar xmlnsAttributeName,
             int fullHeadPrefixLength,
             int fullHeadLength,
             int declaredNodeTypeLength,
@@ -214,15 +212,15 @@ namespace XmlSerDe.Common
             FullHead = fullNode.Slice(0, fullHeadLength);
             DeclaredNodeType = fullNode.Slice(fullHeadPrefixLength + 1, declaredNodeTypeLength);
             IsBodyless = isBodyless;
-            Internals = GetInternalsOf(settings.ContainsXmlComments);
+            Internals = GetInternalsOf(context.ContainsXmlComments);
 
-            if (xmlnsAttributeName.IsEmpty)
+            if (context.XmlnsAttributeName.IsEmpty)
             {
                 XmlnsAttributeName = GetXmlnsAttributeName();
             }
             else
             {
-                XmlnsAttributeName = xmlnsAttributeName;
+                XmlnsAttributeName = context.XmlnsAttributeName;
             }
         }
 
@@ -274,14 +272,13 @@ namespace XmlSerDe.Common
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void GetFirst(
-            ref XmlDeserializeSettings settings,
+            ref XmlParseContext context,
             roschar nodes,
-            roschar xmlnsAttributeName,
             ref XmlNode2 result
             )
         {
             var length = GetFirstLength(
-                ref settings,
+                ref context,
                 nodes,
                 out var fullHeadPrefixLength,
                 out var fullHeadLength,
@@ -295,9 +292,8 @@ namespace XmlSerDe.Common
             }
 
             result = new XmlNode2(
-                settings,
+                context,
                 nodes.Slice(0, length),
-                xmlnsAttributeName,
                 fullHeadPrefixLength,
                 fullHeadLength,
                 nodeTypeLength,
@@ -318,7 +314,7 @@ namespace XmlSerDe.Common
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int GetFirstLength(
-            ref XmlDeserializeSettings settings,
+            ref XmlParseContext context,
             roschar nodes,
             out int fullHeadPrefixLength,
             out int fullHeadLength,
@@ -387,10 +383,10 @@ namespace XmlSerDe.Common
 
                     //учтем возможный комментарий
                     var rcspan = nodes.Slice(resultCandidate);
-                    resultCandidate += GetLeadingCommentLengthIfExists(settings.ContainsXmlComments, rcspan);
+                    resultCandidate += GetLeadingCommentLengthIfExists(context.ContainsXmlComments, rcspan);
                     return resultCandidate;
                 }
-                else if(settings.ContainsCDataBlocks && sliced.StartsWith(CDataHead.AsSpan()))
+                else if(context.ContainsCDataBlocks && sliced.StartsWith(CDataHead.AsSpan()))
                 {
                     //мы в блоке CDATA, ищем его хвост
                     var cdeIndex = sliced.IndexOf(CDataTail.AsSpan());
@@ -404,13 +400,13 @@ namespace XmlSerDe.Common
 
                     //учтем этот возможный комментарий
                     var innerNodes = nodes.Slice(index);
-                    var lcl = GetLeadingCommentLengthIfExists(settings.ContainsXmlComments, innerNodes);
+                    var lcl = GetLeadingCommentLengthIfExists(context.ContainsXmlComments, innerNodes);
                     if(lcl > 0)
                     {
                         innerNodes = innerNodes.Slice(lcl);
                     }
 
-                    var childLength = GetFirstLength(ref settings, innerNodes, out _, out _, out _, out _);
+                    var childLength = GetFirstLength(ref context, innerNodes, out _, out _, out _, out _);
                     //получили дочернюю ноду, пропускаем ее
                     index += lcl + childLength;
                 }
@@ -697,9 +693,11 @@ namespace XmlSerDe.Common
     }
 
     /// <summary>
-    /// Settings for deserialization process.
+    /// Контекст разбора: и эвристики документа целиком, и то, что вызывающая
+    /// сторона успела узнать по дороге. Едет одним ref-параметром намеренно -
+    /// см. <see cref="XmlnsAttributeName"/>.
     /// </summary>
-    public readonly ref struct XmlDeserializeSettings
+    public readonly ref struct XmlParseContext
     {
         /// <summary>
         /// Heuristic: true if XML document likely contains a XML comments.
@@ -713,15 +711,58 @@ namespace XmlSerDe.Common
         /// </summary>
         public readonly bool ContainsCDataBlocks;
 
-        public XmlDeserializeSettings(
+        /// <summary>
+        /// Имя атрибута, объявившего пространство xsi, если вызывающая сторона
+        /// нашла его в голове предка. <c>roschar.Empty</c> - "не знаю, ищи сам":
+        /// <see cref="XmlNode2"/> тогда сканирует голову.
+        ///
+        /// Лежит здесь, а не отдельным параметром <see cref="IInjector.Parse"/>,
+        /// и это не косметика: поле в readonly ref struct добавляется, никого не
+        /// ломая, а параметр ломает разом все перегрузки <see cref="IInjector"/>.
+        /// Поэтому всё контекстное едет сюда, и точка расширения ровно одна.
+        /// </summary>
+        public readonly roschar XmlnsAttributeName;
+
+        public XmlParseContext(
             bool containsXmlComments,
             bool containsCDataBlocks
             )
         {
             ContainsXmlComments = containsXmlComments;
             ContainsCDataBlocks = containsCDataBlocks;
+            XmlnsAttributeName = roschar.Empty;
         }
 
+        private XmlParseContext(
+            bool containsXmlComments,
+            bool containsCDataBlocks,
+            roschar xmlnsAttributeName
+            )
+        {
+            ContainsXmlComments = containsXmlComments;
+            ContainsCDataBlocks = containsCDataBlocks;
+            XmlnsAttributeName = xmlnsAttributeName;
+        }
+
+        /// <summary>
+        /// Контекст поддерева с уже известным именем xmlns-атрибута. Копия, а не
+        /// присваивание: контекст readonly, и спустить имя вниз нужно, не трогая
+        /// свой собственный.
+        ///
+        /// Это же и единственный способ обзавестись таким контекстом снаружи:
+        /// публичного конструктора с полным набором полей нет намеренно - он
+        /// ломался бы от каждого нового поля ровно так же, как ломался параметр.
+        /// </summary>
+        public XmlParseContext WithXmlnsAttributeName(
+            roschar xmlnsAttributeName
+            )
+        {
+            return new XmlParseContext(
+                ContainsXmlComments,
+                ContainsCDataBlocks,
+                xmlnsAttributeName
+                );
+        }
     }
 
     public readonly ref struct AttributeProcessResult

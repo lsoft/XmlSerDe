@@ -227,6 +227,8 @@ namespace XmlSerDe.Generator
                         ctgs
                         );
 
+                    ReportUnsealedSinks(adder, compilation, sp.SerializationInfoCollection);
+
                     //generate builtin source
                     var bsg = new BuiltinSourceProducer(
                         compilation
@@ -261,6 +263,65 @@ namespace XmlSerDe.Generator
 
                 }
             }
+        }
+
+        /// <summary>
+        /// Незапечатанный сток - не ошибка, а упущенная девиртуализация: цена
+        /// померена в docs/dispatch-cost.md. Абстрактные базы пропускаются -
+        /// запечатать их нельзя по определению, а регистрируют их только
+        /// осознанно.
+        /// </summary>
+        private static void ReportUnsealedSinks(
+            DocumentAdder adder,
+            Compilation compilation,
+            SerializationInfoCollection collection
+            )
+        {
+            foreach (var type in collection.ExhaustList)
+            {
+                ReportIfUnsealed(adder, compilation, type, "exhauster");
+            }
+
+            foreach (var type in collection.InjectorList)
+            {
+                ReportIfUnsealed(adder, compilation, type, "injector");
+            }
+        }
+
+        private static void ReportIfUnsealed(
+            DocumentAdder adder,
+            Compilation compilation,
+            INamedTypeSymbol type,
+            string role
+            )
+        {
+            if (type.IsSealed || type.IsAbstract)
+            {
+                return;
+            }
+
+            //чужой тип запечатать отсюда всё равно нельзя, а предупреждать о
+            //нём на каждом хосте значило бы приучить глушить диагностику
+            //целиком. Заодно это снимает шум с наших собственных типов:
+            //DefaultInjector открыт затем, чтобы от него наследовались ради
+            //одной перегрузки, Utf8StreamExhauster - чтобы подставить свой сток
+            //байтов, и то и другое - решение, а не упущение
+            if (!SymbolEqualityComparer.Default.Equals(
+                    type.ContainingAssembly,
+                    compilation.Assembly
+                    ))
+            {
+                return;
+            }
+
+            adder.Report(
+                new DiagnosticInfo(
+                    SinkDiagnostics.NotSealed,
+                    location: null,
+                    type.ToFullDisplayString(),
+                    role
+                    )
+                );
         }
 
         private static List<INamedTypeSymbol> GetClassesToGenerate(

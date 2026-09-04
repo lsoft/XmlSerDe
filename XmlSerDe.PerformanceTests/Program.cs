@@ -32,6 +32,12 @@ namespace XmlSerDe.PerformanceTests
                 return;
             }
 
+            if (args.Length > 0 && string.Equals(args[0], "--dispatch-cost", StringComparison.Ordinal))
+            {
+                BenchmarkDotNet.Running.BenchmarkRunner.Run<DispatchMatrixFixture>();
+                return;
+            }
+
 #if DEBUG
             new DeserializeMatrixFixture();
             new SerializeMatrixFixture();

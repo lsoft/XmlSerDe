@@ -144,7 +144,7 @@ public sealed class XmlFeaturesAttribute : Attribute
 
 ### 3.4. Что не является API этой задачи
 
-- Runtime-переключатель на `Deserialize(...)` / `XmlDeserializeSettings`. Фича выбирается **на этапе генерации**. Передавать в сгенерированный `ReadHead` два `bool` «на всякий случай», как сейчас, нельзя: `ReadHead` эти bool и так игнорирует, а `SkipToTag` всегда смотрит на `<!`/`<?`.
+- Runtime-переключатель на `Deserialize(...)` / `XmlParseContext`. Фича выбирается **на этапе генерации**. Передавать в сгенерированный `ReadHead` два `bool` «на всякий случай», как сейчас, нельзя: `ReadHead` эти bool и так игнорирует, а `SkipToTag` всегда смотрит на `<!`/`<?`.
 - Конфигурация MSBuild (`XmlSerDeFeatures=...`) — не требуется. Если позже понадобится, это отдельная задача; сейчас только атрибут.
 - Включение фич «на один вызов».
 
@@ -167,7 +167,7 @@ public sealed class XmlFeaturesAttribute : Attribute
 
 Допустимо, чтобы эти методы **жили** в `XmlSerDe.Common` для opt-in пути и для публичного `XmlNode2`. Default-хост просто на них не ссылается. Тест по сгенерированному тексту это проверяет (см. §10.2).
 
-Корневой `Deserialize` **не** строит `XmlDeserializeSettings` из эвристик. Если `settings` ещё нужен `IInjector.Parse` (старый путь через `XmlNode2`), в default он создаётся как «все эвристики ложь» **без скана документа**, либо `Parse`/`XmlNode2` переводятся на тот же compile-time набор фич. Предпочтительный вариант — сгенерированный hot path по-прежнему идёт в `ParseBody` + `XmlScan.ReadTextBody`, а не в `XmlNode2.GetFirst`.
+Корневой `Deserialize` **не** строит `XmlParseContext` из эвристик. Если `settings` ещё нужен `IInjector.Parse` (старый путь через `XmlNode2`), в default он создаётся как «все эвристики ложь» **без скана документа**, либо `Parse`/`XmlNode2` переводятся на тот же compile-time набор фич. Предпочтительный вариант — сгенерированный hot path по-прежнему идёт в `ParseBody` + `XmlScan.ReadTextBody`, а не в `XmlNode2.GetFirst`.
 
 ### 4.2. Opt-in
 

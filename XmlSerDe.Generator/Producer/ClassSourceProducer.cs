@@ -15,6 +15,17 @@ namespace XmlSerDe.Generator.Producer
     public struct ClassSourceProducer
     {
 
+        /// <summary>
+        /// Сток и инжектор обязаны наследоваться от базового класса, а не просто
+        /// реализовывать интерфейс. Разница не косметическая: у интерфейса новый
+        /// член ломает всех, кто его реализовал, а у класса приезжает virtual'ом
+        /// с телом по умолчанию и никого не задевает. Интерфейсы остались - их
+        /// реализуют сами базы, - но контрактом для генератора служат базы.
+        /// </summary>
+        public const string ExhausterBaseFullName = "XmlSerDe.Common.ExhausterBase";
+
+        public const string InjectorBaseFullName = "XmlSerDe.Common.InjectorBase";
+
         public const string HeadDeserializeMethodName = "Deserialize";
         public const string HeadSerializeMethodName = "Serialize";
         public const string HeadlessDeserializeMethodName = "DeserializeBody";
@@ -2695,9 +2706,9 @@ namespace {_targetNamespace}");
                     }
                     var type = (INamedTypeSymbol)ca0.Value!;
                     var typegn = type.ToGlobalDisplayString();
-                    if (type.AllInterfaces.All(i => i.ToFullDisplayString() != "XmlSerDe.Common.IExhauster"))
+                    if (!IsDerivedFrom(type, ExhausterBaseFullName))
                     {
-                        throw new InvalidOperationException($"Type {typegn} must be derived from XmlSerDe.Common.IExhauster interface");
+                        throw new InvalidOperationException($"Type {typegn} must be derived from {ExhausterBaseFullName}. Implementing XmlSerDe.Common.IExhauster is not enough: only a base class lets a new member arrive with a default implementation instead of breaking every implementer.");
                     }
 
                     exhaustList.Add(type);
@@ -2711,9 +2722,9 @@ namespace {_targetNamespace}");
                     }
                     var type = (INamedTypeSymbol)ca0.Value!;
                     var typegn = type.ToGlobalDisplayString();
-                    if (type.AllInterfaces.All(i => i.ToFullDisplayString() != "XmlSerDe.Common.IInjector"))
+                    if (!IsDerivedFrom(type, InjectorBaseFullName))
                     {
-                        throw new InvalidOperationException($"Type {typegn} must be derived from XmlSerDe.Common.IInjector interface");
+                        throw new InvalidOperationException($"Type {typegn} must be derived from {InjectorBaseFullName} (XmlSerDe.Components.Injector.DefaultInjector already is). Implementing XmlSerDe.Common.IInjector is not enough: only a base class lets a new member arrive with a default implementation instead of breaking every implementer.");
                     }
 
                     injectorList.Add(type);
@@ -2739,6 +2750,25 @@ namespace {_targetNamespace}");
                 injectorList,
                 sinfos.Values.ToList()
                 );
+        }
+
+        /// <summary>
+        /// Есть ли <paramref name="baseFullName"/> в цепочке базовых классов.
+        /// Именно в цепочке, а не среди интерфейсов: наследник наследника тоже
+        /// годится, и именно так пользователь и пишет - <c>MyInjector :
+        /// DefaultInjector</c>.
+        /// </summary>
+        public static bool IsDerivedFrom(INamedTypeSymbol type, string baseFullName)
+        {
+            for (var current = type.BaseType; current is not null; current = current.BaseType)
+            {
+                if (current.ToFullDisplayString() == baseFullName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>

@@ -378,9 +378,9 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             {
                 sb.AppendLine($$"""
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void {{ClassSourceProducer.HeadDeserializeMethodName}}(ref {{typeof(XmlDeserializeSettings).FullName}} settings, {{injectorTypeAliasName}} inj, roschar fullNode, roschar xmlnsAttributeName, out {{builtin.Symbol.ToGlobalDisplayString()}} result)
+        public static void {{ClassSourceProducer.HeadDeserializeMethodName}}(ref {{typeof(XmlParseContext).FullName}} context, {{injectorTypeAliasName}} inj, roschar fullNode, out {{builtin.Symbol.ToGlobalDisplayString()}} result)
         {
-            inj.{{nameof(IInjector.Parse)}}(ref settings, fullNode, xmlnsAttributeName, out result);
+            inj.{{nameof(IInjector.Parse)}}(ref context, fullNode, out result);
         }
 """);
             }
