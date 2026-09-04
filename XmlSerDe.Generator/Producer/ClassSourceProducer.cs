@@ -1206,52 +1206,126 @@ namespace {_targetNamespace}");
             var attributeSearchStart = xmlNode.{{nameof(XmlHead.DeclaredNodeType)}}.Length + 1;
 """);
 
-            foreach (var member in attributes)
+            if (attributes.Count > 1)
             {
-                var memberType = ParseMember(member);
-
-                var valueExpression = $"{member.Name}Attribute.{nameof(ParsedAttribute.Value)}";
-
-                string assignment;
-                if (memberType.IsEnum)
-                {
-                    assignment = $"result.{member.Name} = {GenerateEnumParseStatement(memberType, valueExpression)};";
-                }
-                else if (IsBase64Binary(member, memberType))
-                {
-                    assignment = $"result.{member.Name} = {XmlBase64FullName}.{nameof(XmlBase64.Decode)}({valueExpression});";
-                }
-                else if (memberType.Symbol.SpecialType == SpecialType.System_String)
-                {
-                    //разбирать уже нечего: ParseAttribute отдаёт значение после
-                    //нормализации §3.3.3 и раскрытия ссылок, а ParseBody - это
-                    //декодер текста тела, и второй проход по уже раскрытому
-                    //значению спотыкался бы о литеральный '<', пришедший из &lt;
-                    assignment =
-                        _guards.CheckSpanStatementBefore("                ", valueExpression)
-                        + $"result.{member.Name} = {valueExpression}.ToString();";
-                }
-                else
-                {
-                    assignment =
-                        $"inj.{nameof(IInjector.ParseBody)}({valueExpression}, out {memberType.GlobalName} {member.Name}Parsed);\r\n"
-                        + $"                result.{member.Name} = {member.Name}Parsed;";
-                }
-
-                _sb.AppendLine($$"""
-            //{{memberType.ToGlobalDisplayString()}} {{member.Name}}
-            {{XmlScanFullName}}.{{nameof(XmlScan.ParseAttribute)}}(xmlNode.{{nameof(XmlHead.FullHead)}}, attributeSearchStart, roschar.Empty, "{{member.GetXmlAttributeName()}}".AsSpan(), roschar.Empty, out var {{member.Name}}Attribute);
-            if(!{{member.Name}}Attribute.{{nameof(ParsedAttribute.IsEmpty)}})
-            {
-                {{assignment}}
+                GenerateDeserializeAttributesLoop(attributes);
             }
-""");
+            else
+            {
+                GenerateDeserializeAttributesLookup(attributes[0]);
             }
 
             _sb.AppendLine($$"""
         }
 
 """);
+        }
+
+        /// <summary>
+        /// Один <c>[XmlAttribute]</c>-член: адресный поиск по имени. Слияние
+        /// здесь не окупается - поиск останавливается на найденном атрибуте,
+        /// а обход перечислением дошёл бы до конца головы.
+        /// </summary>
+        private readonly void GenerateDeserializeAttributesLookup(ISymbol member)
+        {
+            var memberType = ParseMember(member);
+            var valueExpression = $"{member.Name}Attribute.{nameof(ParsedAttribute.Value)}";
+
+            _sb.AppendLine($$"""
+            //{{memberType.ToGlobalDisplayString()}} {{member.Name}}
+            {{XmlScanFullName}}.{{nameof(XmlScan.ParseAttribute)}}(xmlNode.{{nameof(XmlHead.FullHead)}}, attributeSearchStart, roschar.Empty, "{{member.GetXmlAttributeName()}}".AsSpan(), roschar.Empty, out var {{member.Name}}Attribute);
+            if(!{{member.Name}}Attribute.{{nameof(ParsedAttribute.IsEmpty)}})
+            {
+                {{GenerateAttributeAssignment(member, memberType, valueExpression, "                ")}}
+            }
+""");
+        }
+
+        /// <summary>
+        /// Два и больше <c>[XmlAttribute]</c>-члена: голова разбирается один
+        /// раз, и каждый разобранный атрибут раздаётся по имени.
+        ///
+        /// Прежняя форма звала <c>ParseAttribute</c> на каждый член, и каждый
+        /// раз с начала головы: чтобы дойти до третьего атрибута, надо разобрать
+        /// первые два - они и разбирались заново. На типе из трёх атрибутных
+        /// членов это стоило порядка сорока процентов времени разбора
+        /// (README, «Cost of the <c>xsi:type</c> lookup»).
+        ///
+        /// Флаг <c>{Member}Found</c> сохраняет прежнее «побеждает первое
+        /// совпадение»: <c>id="1" id="2"</c> - не well-formed XML, его ловит
+        /// <see cref="XmlGuard.UniqueAttributes"/>, но хост без стража обязан
+        /// вести себя как раньше, а не начать брать последнее.
+        /// </summary>
+        private readonly void GenerateDeserializeAttributesLoop(List<ISymbol> attributes)
+        {
+            foreach (var member in attributes)
+            {
+                _sb.AppendLine($$"""
+            var {{member.Name}}Found = false;
+""");
+            }
+
+            _sb.AppendLine($$"""
+            while({{XmlScanFullName}}.{{nameof(XmlScan.NextAttribute)}}(xmlNode.{{nameof(XmlHead.FullHead)}}, ref attributeSearchStart, out var attribute))
+            {
+""");
+
+            foreach (var member in attributes)
+            {
+                var memberType = ParseMember(member);
+                var valueExpression = $"{member.Name}Value";
+
+                _sb.AppendLine($$"""
+                //{{memberType.ToGlobalDisplayString()}} {{member.Name}}
+                if(!{{member.Name}}Found && attribute.{{nameof(ParsedAttribute.Name)}}.SequenceEqual("{{member.GetXmlAttributeName()}}".AsSpan()))
+                {
+                    {{member.Name}}Found = true;
+                    var {{valueExpression}} = {{XmlScanFullName}}.{{nameof(XmlScan.DecodeAttributeValue)}}(attribute.{{nameof(ParsedAttribute.Value)}});
+                    {{GenerateAttributeAssignment(member, memberType, valueExpression, "                    ")}}
+                    continue;
+                }
+""");
+            }
+
+            _sb.AppendLine($$"""
+            }
+""");
+        }
+
+        /// <summary>
+        /// Присвоение члену уже добытого значения атрибута. Общее для обеих
+        /// форм разбора: отличается только откуда взялся
+        /// <paramref name="valueExpression"/>.
+        /// </summary>
+        private readonly string GenerateAttributeAssignment(
+            ISymbol member,
+            TypeSymbol memberType,
+            string valueExpression,
+            string bodyIndent
+            )
+        {
+            if (memberType.IsEnum)
+            {
+                return $"result.{member.Name} = {GenerateEnumParseStatement(memberType, valueExpression)};";
+            }
+
+            if (IsBase64Binary(member, memberType))
+            {
+                return $"result.{member.Name} = {XmlBase64FullName}.{nameof(XmlBase64.Decode)}({valueExpression});";
+            }
+
+            if (memberType.Symbol.SpecialType == SpecialType.System_String)
+            {
+                //разбирать уже нечего: значение приходит после нормализации
+                //§3.3.3 и раскрытия ссылок, а ParseBody - это декодер текста
+                //тела, и второй проход по уже раскрытому значению спотыкался бы
+                //о литеральный '<', пришедший из &lt;
+                return _guards.CheckSpanStatementBefore(bodyIndent, valueExpression)
+                    + $"result.{member.Name} = {valueExpression}.ToString();";
+            }
+
+            return $"inj.{nameof(IInjector.ParseBody)}({valueExpression}, out {memberType.GlobalName} {member.Name}Parsed);\r\n"
+                + bodyIndent + $"result.{member.Name} = {member.Name}Parsed;";
         }
 
         /// <summary>

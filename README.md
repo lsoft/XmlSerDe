@@ -904,7 +904,7 @@ Two honest notes about this table:
 - the full set on REGULAR is **~1.25×**, not the "5–10%" that `docs/opt-in-xml-guards.md` §3 estimated before the work, and two thirds of that is `UniqueAttributes` alone. The estimate assumed heads with short attributes; REGULAR's heads carry a 41-character namespace URI, and enumerating the attributes means stepping over it. It is still nowhere near the 2× that would mean a forbidden full document scan, and a document with no attributes (DEEP) pays nothing;
 - the numbers are ratios measured **inside one round-robin**. Absolute times drift several percent between processes on this machine, so a cross-process A/B of the default host is not evidence of anything — which is exactly why the always-on attribute check and the scalar closing-tag check are not in this table.
 
-### Cost of the `xsi:type` lookup
+### Cost of the attribute path
 
 ```bash
 dotnet run -c Release -f net10.0 --project XmlSerDe.PerformanceTests -- --attr-cost
@@ -912,21 +912,26 @@ dotnet run -c Release -f net10.0 --project XmlSerDe.PerformanceTests -- --attr-c
 
 Neither of the tables above says anything about a POCO whose attributes carry *data*: REGULAR has attributes on three heads out of twenty-six and all of them are plumbing (`xmlns:xsi`, `xsi:type`), with no `[XmlAttribute]` members anywhere. So there is a third document, **ATTRS** — thirty nodes, three `[XmlAttribute]` members each.
 
-That shape is walked repeatedly. Per head the generated code emits `ReadHead` (its own scan to the unescaped `>`), then the `xsi:type` lookup, then one lookup per `[XmlAttribute]` member, each starting over from the front of the head. Measured by making one walk happen twice — which keeps correctness and control flow identical, unlike removing it — a single walk costs **9%** of deserialization on REGULAR and **20%** on ATTRS, and all the lookups together cost **64%** on ATTRS.
+That shape used to be walked five times per head: `ReadHead` (its own scan to the unescaped `>`), the `xsi:type` lookup, and one lookup per `[XmlAttribute]` member — each of the last four starting over from the front of the head, because reaching the third attribute means parsing the first two, and they were parsed again on every lookup. Measured by making one walk happen twice, which keeps correctness and control flow identical unlike removing it: one walk costs **9%** of deserialization on REGULAR and **20%** on ATTRS, and all the lookups together cost **64%** on ATTRS.
 
-The first slice of that is now gone. On a type with **no derived types** an `xsi:type` attribute cannot dispatch anything: it can only repeat the type's own name or be an error, so in real documents it is simply absent — and the lookup walks the whole head to discover that. The generator therefore emits a filtered accessor for such types, which checks `IndexOf("xsi:type")` first. QNames admit no breaks, so "no substring" proves "no such attribute"; a false positive (the substring inside somebody else's value) falls through to the same honest parse, which is why the observable result is unchanged rather than nearly unchanged.
+Two changes, measured separately:
 
-| Document | Before | After |
+| ATTRS (30 nodes × 3 attribute members) | ns | vs previous |
 |---|---:|---:|
-| ATTRS (30 nodes × 3 attribute members) | 9206 ns | **7753 ns — ×0.842** |
-| REGULAR (control) | 2158 ns | 2206 ns — within drift |
-| WIDE (control) | 3238 ns | 3322 ns — within drift |
+| both lookups per member and an unconditional `xsi:type` walk | 9206 | — |
+| `+` filtered `xsi:type` lookup | 7783 | **×0.842** |
+| `+` single-pass attribute loop | **5769** | **×0.741** |
+| | | **×0.627 overall** |
 
-Medians of six runs per build; the ATTRS ranges do not overlap (8996–9506 against 7551–7845), the two control ranges overlap almost completely, which is what the mechanism predicts — no head in those documents reaches the filter.
+Medians of six runs per build, ranges non-overlapping at both steps (8996–9506 → 7551–7845 → 5632–5844). The REGULAR and WIDE control rows moved by under 2% at both steps with ranges overlapping almost completely — which is what the mechanism predicts, since no head in those documents reaches either change.
 
-A type **with** derived types keeps the unfiltered accessor on purpose: there the attribute is usually present, the filter would find it, and the parse would then read the head a second time — about 2% on documents that actually use polymorphism. Making the choice in the generator rather than at runtime is what lets both cases win; the axis is not a feature flag but a fact about the type graph, so it is a parameter of `HostFeatureBinding.PreciseNodeTypeAccessor`, not a new `XmlFeature`.
+**The `xsi:type` filter.** On a type with **no derived types** an `xsi:type` attribute cannot dispatch anything: it can only repeat the type's own name or be an error, so in real documents it is simply absent — and the lookup walked the whole head to discover that. The generator emits a filtered accessor for such types, checking `IndexOf("xsi:type")` first. QNames admit no breaks, so "no substring" proves "no such attribute"; a false positive (the substring inside somebody else's value) falls through to the same honest parse, which is why the observable result is unchanged rather than nearly unchanged. A type **with** derived types keeps the unfiltered accessor on purpose: there the attribute is usually present, the filter would find it, and the parse would read the head a second time — about 2% on documents that actually use polymorphism.
 
-What remains unclaimed is the larger half: the `[XmlAttribute]` member lookups still walk the head once per member.
+**The attribute loop.** A type with two or more `[XmlAttribute]` members now parses its head once and hands each attribute to whichever member claims it, instead of searching per member. A type with exactly one keeps the addressed search: that one stops at the attribute it wants, while the loop always runs to the end of the head, so merging there would be a loss. Duplicate names still resolve to the first occurrence — `id="1" id="2"` is not well-formed and `UniqueAttributes` refuses it, but a host without that guard must keep behaving as before rather than silently start taking the last.
+
+Both choices are made at generation time, and neither axis is a feature flag: one is a fact about the type graph, the other about how many attribute members the type declares. So they are parameters of the emitter, not new `XmlFeature` values, and the generated host still contains no branch on either.
+
+Still unclaimed: `ReadHead` scans the head to find the unescaped `>` before any of this, and `EnsureUniqueAttributes` walks it once more when that guard is on. Both could join the same pass.
 
 ### Example: polymorphic serializer
 
@@ -1193,6 +1198,7 @@ Generated source files are written to `obj/Generated/` when `EmitCompilerGenerat
 | `XmlFeatureFixture` | Per-flag matrix from `docs/opt-in-xml-features.md`: default rejects comments/CDATA/PI/DOCTYPE/`p3:type`/single quotes; each flag accepts its document and rejects a neighbour |
 | `XmlFeatureGeneratorFixture` / `HostFeatureBindingFixture` | Generated text has no document-wide heuristics on default hosts; flags → primitive names without Roslyn; two hosts in one compilation stay distinct; compat injects the full set without a user `[XmlFeatures]` |
 | `XmlGuardFixture` | Per-guard matrix from `docs/opt-in-xml-guards.md`: the same document goes to a host without the attribute (which must **accept** it) and to a host with exactly one flag (which must refuse it, and only on its own violation). Includes the traps a guard must not fall into - `&lt;Foo/&gt;`, an empty body, an empty collection, a skipped foreign subtree, a head with ten distinct attributes |
+| `AttributeLoopFixture` | What the single-pass attribute loop must preserve and a round-trip would not notice: which of two duplicate names wins, that a prefixed attribute still matches by local name, that foreign attributes between the known ones and a reversed order change nothing, that §3.3.3 normalization still happens. Plus the shape choice itself, asserted on generated text — one attribute member keeps the addressed lookup, two switch to the loop |
 | `XsiTypePrefilterFixture` | Both edges of the `IndexOf("xsi:type")` negative filter that a type without derived types is compiled with: a foreign `xsi:type` still throws and one naming the type itself is still accepted (the filter may not swallow a real attribute), while the substring sitting inside somebody else's attribute value stays harmless (a false positive may not become a parse error). Both variants covered — literal `xsi` and the runtime prefix of `FlexibleXsiPrefix` |
 | `XmlGuardGeneratorFixture` / `HostGuardBindingFixture` | A default host mentions no guard primitive and carries no extra parameter; `XmlGuard.None` is textually identical to no attribute; one flag emits only its own primitive; flags → snippets without Roslyn; compat gets the full set with no user `[XmlGuards]` and does not change the native host next to it |
 | `AttributeSyntaxFixture` | `Attribute ::= Name Eq AttValue` on both host families: legal whitespace around `=` is read (it used to be dropped), a missing quote or `=` throws instead of stealing the neighbour&#39;s value |

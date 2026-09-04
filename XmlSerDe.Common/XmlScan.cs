@@ -1477,6 +1477,52 @@ namespace XmlSerDe.Common
         }
 
         /// <summary>
+        /// Перечисление атрибутов головы: разобрать тот, что стоит в
+        /// <paramref name="index"/>, и сдвинуть <paramref name="index"/> на его
+        /// длину. <c>false</c> - атрибуты кончились.
+        ///
+        /// Зачем это отдельно от <see cref="ParseAttribute"/>. Тот ищет
+        /// <b>один</b> атрибут по имени, и типу с тремя
+        /// <c>[XmlAttribute]</c>-членами приходилось звать его трижды, каждый
+        /// раз с начала головы: чтобы дойти до третьего атрибута, надо разобрать
+        /// первые два, и они разбирались заново на каждом поиске. Здесь голова
+        /// разбирается один раз, а кому какой атрибут - решает вызывающий.
+        ///
+        /// Значение отдаётся <b>сырым</b>, без нормализации §3.3.3: она нужна
+        /// только тому атрибуту, который кому-то пригодился, а пригождается
+        /// один из всех. Взял значение - зови
+        /// <see cref="DecodeAttributeValue"/>.
+        /// </summary>
+        public static bool NextAttribute(
+            roschar internalsOfHead,
+            ref int index,
+            out ParsedAttribute result
+            )
+        {
+            if (index < 0 || index >= internalsOfHead.Length)
+            {
+                result = new ParsedAttribute();
+                return false;
+            }
+
+            ParseFirstFoundAttribute(internalsOfHead, index, out var apr);
+            if (apr.Attribute.IsEmpty)
+            {
+                result = apr.Attribute;
+                return false;
+            }
+
+            if (apr.TotalLength <= 0)
+            {
+                throw new XmlDocumentException("Attribute parsing made no progress.");
+            }
+
+            index += apr.TotalLength;
+            result = apr.Attribute;
+            return true;
+        }
+
+        /// <summary>
         /// Ищет в голове тега атрибут, подходящий под префикс/имя/значение.
         /// Значение может стоять в любых кавычках (XML 1.0 §2.3 AttValue): это
         /// не opt-in, см. <see cref="ScanHead"/>.
@@ -1755,7 +1801,7 @@ namespace XmlSerDe.Common
         /// Only allocates when a literal tab/CR/LF or a reference might actually be present.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static roschar DecodeAttributeValue(roschar rawValue)
+        public static roschar DecodeAttributeValue(roschar rawValue)
         {
             //один векторизованный проход отсекает подавляющее большинство значений,
             //которым нормализация не нужна вообще: ни ссылок, ни литеральных
