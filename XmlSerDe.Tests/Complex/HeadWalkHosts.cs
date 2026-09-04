@@ -8,7 +8,7 @@ namespace XmlSerDe.Tests.Complex
 {
     /// <summary>
     /// Форма, ради которой затевался замер обходов головы (probe
-    /// <c>--head-walk</c>): голова, по которой сегодня ходят несколько
+    /// <c>--attr-cost</c>): голова, по которой сегодня ходят несколько
     /// независимых проходов. На одну такую ноду генератор emit-ит
     /// <c>ReadHead</c> (свой скан до неэкранированного '&gt;'), затем
     /// <c>GetXsiType()</c> (обход атрибутов - на этом типе всегда
@@ -42,6 +42,20 @@ namespace XmlSerDe.Tests.Complex
     [XmlSubject(typeof(AttrNode), false)]
     [XmlSubject(typeof(AttrContainer), true)]
     public partial class HeadWalkHost
+    {
+    }
+
+    /// <summary>
+    /// Тот же тип со стражем уникальности: от <see cref="HeadWalkHost"/>
+    /// отличается ровно <c>[XmlGuards]</c>, поэтому разница в замере - это
+    /// цена ещё одного полного обхода той же головы
+    /// (<c>XmlScan.EnsureUniqueAttributes</c>) поверх тех, что уже есть.
+    /// </summary>
+    [XmlExhauster(typeof(StringBuilderExhauster))]
+    [XmlGuards(XmlGuard.UniqueAttributes)]
+    [XmlSubject(typeof(AttrNode), false)]
+    [XmlSubject(typeof(AttrContainer), true)]
+    public partial class HeadWalkUniqueHost
     {
     }
 }

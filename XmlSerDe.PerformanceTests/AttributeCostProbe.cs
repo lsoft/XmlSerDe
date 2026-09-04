@@ -22,6 +22,12 @@ namespace XmlSerDe.PerformanceTests;
 /// ATTRS - такой POCO: тридцать нод, у каждой три <c>[XmlAttribute]</c>-члена.
 /// REGULAR стоит рядом контрольной строкой: правки атрибутного пути не имеют
 /// права его замедлить.
+///
+/// Вторая строка - тот же документ и тот же тип, но хостом со стражем
+/// уникальности имён. Разница между ними и есть цена ещё одного полного
+/// обхода головы: страж читает её целиком, поверх всего, что уже прочитано.
+/// Число стоит в README («Cost of the attribute path») рядом с объяснением,
+/// почему этот обход не слился с остальными.
 /// </summary>
 internal static class AttributeCostProbe
 {
@@ -48,6 +54,10 @@ internal static class AttributeCostProbe
             new Case("ATTRS (30 нод x 3 атрибута-члена)", () =>
             {
                 HeadWalkHost.Deserialize(DefaultInjector.Instance, attrs.AsSpan(), out AttrContainer _);
+            }),
+            new Case("ATTRS + страж уникальности", () =>
+            {
+                HeadWalkUniqueHost.Deserialize(DefaultInjector.Instance, attrs.AsSpan(), out AttrContainer _);
             }),
             new Case("REGULAR (контроль, xsi:type на месте)", () =>
             {

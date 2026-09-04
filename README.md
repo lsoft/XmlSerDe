@@ -931,7 +931,18 @@ Medians of six runs per build, ranges non-overlapping at both steps (8996–9506
 
 Both choices are made at generation time, and neither axis is a feature flag: one is a fact about the type graph, the other about how many attribute members the type declares. So they are parameters of the emitter, not new `XmlFeature` values, and the generated host still contains no branch on either.
 
-Still unclaimed: `ReadHead` scans the head to find the unescaped `>` before any of this, and `EnsureUniqueAttributes` walks it once more when that guard is on. Both could join the same pass.
+**The third walk does not merge — measured.** `ReadHead` still finds the end of the head before any of this, and `EnsureUniqueAttributes` still walks it once more when that guard is on. The obvious next step is to have the scan record what it finds instead of throwing it away, so that the member loop and the guard read boundaries rather than re-parse. That was built and measured, and it loses:
+
+| ATTRS, merging the head scan with the attribute walk | ns | vs shipped |
+|---|---:|---:|
+| shipped | 5625 | — |
+| `+` attribute boundaries recorded by the scan | 9750 | **×1.73** |
+
+The reason is that `ReadHead`'s scan is cheap *because it does not parse*: `FindUnquotedGt` jumps from quote to quote, two vector searches per attribute, and never looks at a name. Doubling that scan in place costs **20%** of ATTRS — that is the whole prize. Turning it into a parser so the downstream walk can disappear costs about three times what the downstream walk cost, and instrumentation confirms the merged build does strictly *less* work: thirty scans, one parse pass, zero re-parses in the member loop. Cheap work done once beat expensive work done once.
+
+Storing the result is not free either, and it alone consumes the prize. A recorded head has to carry the buffer, which the caller must own; C# ref-safety then forbids writing that buffer into a head declared as an ordinary local, so the head has to be returned by value instead of through `ref`. Buffer plus a wider `XmlHead` plus the by-value return measured **+1110 ns**, against a prize of ~1120. So the merge was already under water before the recorder ran at all.
+
+The guard's own walk is a separate and much larger number — on ATTRS, `UniqueAttributes` costs **+43%** (5625 → 8020 ns), because it reads every attribute-bearing head in full a second time. It is not merged for the same reason plus one more: the check is emitted where the head is read, and the member loop lives in the method the head is dispatched *to*, so the two passes are in different frames.
 
 ### Example: polymorphic serializer
 
