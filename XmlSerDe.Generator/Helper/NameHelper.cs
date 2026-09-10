@@ -7,6 +7,24 @@ namespace XmlSerDe.Generator.Helper
 {
     public static class NameHelper
     {
+        /// <summary>
+        /// Имя члена как идентификатор C#: зарезервированное слово получает
+        /// <c>@</c>, иначе <c>obj.class</c> в сгенерированном коде не разбирается.
+        /// Имя элемента XML при этом остаётся голым - у него своих ключевых слов нет.
+        /// </summary>
+        public static string CsName(this ISymbol member)
+        {
+            if (member is null)
+            {
+                throw new ArgumentNullException(nameof(member));
+            }
+
+            var kind = Microsoft.CodeAnalysis.CSharp.SyntaxFacts.GetKeywordKind(member.Name);
+            return Microsoft.CodeAnalysis.CSharp.SyntaxFacts.IsReservedKeyword(kind)
+                ? "@" + member.Name
+                : member.Name;
+        }
+
         private static readonly SymbolDisplayFormat _symbolDisplayFormat = new SymbolDisplayFormat(typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces);
 
         private static readonly Type _symbolDisplayCompilerInternalOptionsType = typeof(SymbolDisplayFormat).Assembly.GetType("Microsoft.CodeAnalysis.SymbolDisplayCompilerInternalOptions")!;

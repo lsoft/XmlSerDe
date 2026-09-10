@@ -59,6 +59,16 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void WriteChars(ReadOnlySpan<char> chars)
         {
+            //буфер рассчитан на GetMaxByteCount(CharCountBufferSize), поэтому короткий
+            //срез кодируется одним проходом; GetByteCount перед GetBytes - это второй
+            //проход по тем же символам, и он нужен только когда срез длиннее буфера
+            if (chars.Length <= CharCountBufferSize)
+            {
+                var direct = Encoding.UTF8.GetBytes(chars, _internalBuffer);
+                Write(_internalBuffer, direct);
+                return;
+            }
+
             var byteCount = Encoding.UTF8.GetByteCount(chars);
             if (byteCount <= _internalBuffer.Length)
             {
@@ -115,13 +125,16 @@ namespace XmlSerDe.Components.Exhauster
         /// current thread's culture, then writes it as UTF-8 bytes.
         /// </summary>
 #if NET8_0_OR_GREATER
+        /// <remarks>
+        /// Сразу в байты: числа, даты и Guid умеют IUtf8SpanFormattable, и
+        /// промежуточные UTF-16 символы с их перекодированием здесь лишние.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void WriteInvariant<T>(T value) where T : ISpanFormattable
+        private void WriteInvariant<T>(T value) where T : IUtf8SpanFormattable, IFormattable
         {
-            Span<char> charBuffer = stackalloc char[40];
-            if (value.TryFormat(charBuffer, out var charsWritten, default, CultureInfo.InvariantCulture))
+            if (value.TryFormat(_internalBuffer, out var bytesWritten, default, CultureInfo.InvariantCulture))
             {
-                WriteChars(charBuffer.Slice(0, charsWritten));
+                Write(_internalBuffer, bytesWritten);
             }
             else
             {
@@ -144,10 +157,9 @@ namespace XmlSerDe.Components.Exhauster
         public override void Append(DateTime value)
         {
 #if NET8_0_OR_GREATER
-            Span<char> charBuffer = stackalloc char[64];
-            if (value.TryFormat(charBuffer, out var charsWritten, _dateTimeFormat.AsSpan(), CultureInfo.InvariantCulture))
+            if (value.TryFormat(_internalBuffer, out var bytesWritten, _dateTimeFormat, CultureInfo.InvariantCulture))
             {
-                WriteChars(charBuffer.Slice(0, charsWritten));
+                Write(_internalBuffer, bytesWritten);
             }
             else
             {
@@ -173,10 +185,9 @@ namespace XmlSerDe.Components.Exhauster
         public override void Append(Guid value)
         {
 #if NET8_0_OR_GREATER
-            Span<char> buffer = stackalloc char[36];
-            if (value.TryFormat(buffer, out var written))
+            if (value.TryFormat(_internalBuffer, out var bytesWritten))
             {
-                WriteChars(buffer.Slice(0, written));
+                Write(_internalBuffer, bytesWritten);
             }
             else
             {
@@ -380,12 +391,11 @@ namespace XmlSerDe.Components.Exhauster
         /// </summary>
 #if NET8_0_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void WriteRoundtrip<T>(T value) where T : ISpanFormattable
+        private void WriteRoundtrip<T>(T value) where T : IUtf8SpanFormattable, IFormattable
         {
-            Span<char> charBuffer = stackalloc char[40];
-            if (value.TryFormat(charBuffer, out var charsWritten, "R".AsSpan(), CultureInfo.InvariantCulture))
+            if (value.TryFormat(_internalBuffer, out var bytesWritten, "R", CultureInfo.InvariantCulture))
             {
-                WriteChars(charBuffer.Slice(0, charsWritten));
+                Write(_internalBuffer, bytesWritten);
             }
             else
             {
@@ -469,9 +479,15 @@ namespace XmlSerDe.Components.Exhauster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void Append(TimeSpan value)
         {
-            Span<char> buffer = stackalloc char[32];
+            Span<char> buffer = stackalloc char[XmlNumberLexis.MaxDurationLength];
             XmlNumberLexis.TryFormat(buffer, value, out var written);
+#if NET8_0_OR_GREATER
+            //xsd:duration - чистый ASCII, сужение вместо перекодирования
+            System.Text.Ascii.FromUtf16(buffer.Slice(0, written), _internalBuffer, out var bytesWritten);
+            Write(_internalBuffer, bytesWritten);
+#else
             WriteChars(buffer.Slice(0, written));
+#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

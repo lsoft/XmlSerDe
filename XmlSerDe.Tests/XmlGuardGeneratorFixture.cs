@@ -338,7 +338,7 @@ namespace Sample
         private static string File(GeneratorDriverRunResult result, string hintName)
         {
             var source = result.Results.Single().GeneratedSources
-                .SingleOrDefault(s => s.HintName.Equals(hintName, StringComparison.Ordinal));
+                .SingleOrDefault(s => GeneratorHarness.IsHint(s.HintName, hintName));
 
             Assert.True(source.HintName != null, "missing generated file " + hintName);
             return source.SourceText.ToString();

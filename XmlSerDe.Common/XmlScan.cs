@@ -569,12 +569,20 @@ namespace XmlSerDe.Common
                 throw new XmlDocumentException("Closing '>' not found for end tag.");
             }
 
+            //XML 1.0 §3.1: ETag ::= '</' Name S? '>' - пробел перед '>' в имя не входит,
+            //иначе страж совпадения тегов отверг бы корректный документ
+            var nameEnd = gt;
+            while (nameEnd > 2 && IsS(span[nameEnd - 1]))
+            {
+                nameEnd--;
+            }
+
             result = new XmlHead(
                 XmlHeadKind.EndTag,
                 true,
                 false,
                 index + gt + 1,
-                span.Slice(2, gt - 2),
+                span.Slice(2, nameEnd - 2),
                 span.Slice(0, gt + 1),
                 xmlnsAttributeName
                 );
@@ -668,8 +676,13 @@ namespace XmlSerDe.Common
         {
             isBodyless = span[endOfHead - 1] == '/';
 
-            return endOfName != endOfHead
-                && !(isBodyless && endOfHead == endOfName + 1);
+            //между именем и '>' (или '/>') должно стоять что-то кроме пробелов:
+            //<Foo /> с пробелом - именно так пишет XmlWriter - атрибутов не имеет,
+            //а считался головой с атрибутами, и каждый пустой или nil-элемент
+            //BCL-документа шёл через разбор атрибута впустую
+            var limit = isBodyless ? endOfHead - 1 : endOfHead;
+            var gap = limit - endOfName;
+            return gap > 0 && SkipS(span.Slice(endOfName, gap)) < gap;
         }
 
         /// <summary>
@@ -722,8 +735,12 @@ namespace XmlSerDe.Common
                 return;
             }
 
-            var index = XmlNode2.GetLeadingCommentLengthIfExists(true, body);
-            var textStart = index;
+            //комментарий - не конец текста, а разметка посреди него: System.Xml
+            //отдаёт текст по обе стороны склеенным. Здесь он только перешагивается,
+            //как и CDATA; вырезает его из текста уже декодер. Раньше «ведущий»
+            //комментарий искался по первому '<' где угодно в теле, и всё, что
+            //стояло до него, терялось
+            var index = 0;
 
             while (true)
             {
@@ -736,9 +753,22 @@ namespace XmlSerDe.Common
 
                 index += iof;
 
-                if (cdata && body.Slice(index).StartsWith(CDataHeadSpan))
+                var atLt = body.Slice(index);
+                if (atLt.StartsWith(CommentHeadSpan))
                 {
-                    var cdataEnd = body.Slice(index).IndexOf(CDataTailSpan);
+                    var commentEnd = atLt.IndexOf(CommentTailSpan);
+                    if (commentEnd < 0)
+                    {
+                        throw new XmlDocumentException("Closing '-->' not found for comment.");
+                    }
+
+                    index += commentEnd + CommentTailSpan.Length;
+                    continue;
+                }
+
+                if (cdata && atLt.StartsWith(CDataHeadSpan))
+                {
+                    var cdataEnd = atLt.IndexOf(CDataTailSpan);
                     if (cdataEnd < 0)
                     {
                         throw new XmlDocumentException("Closing ']]>' not found for CDATA block.");
@@ -751,7 +781,7 @@ namespace XmlSerDe.Common
                 break;
             }
 
-            text = body.Slice(textStart, index - textStart);
+            text = body.Slice(0, index);
             consumed = index + EndTagLength(body, index, declaredNodeType);
         }
 
@@ -1376,12 +1406,16 @@ namespace XmlSerDe.Common
                 throw new XmlDocumentException("Mismatched closing tag found for " + declaredNodeType.ToString());
             }
 
-            if (body[index + 2 + declaredNodeType.Length] != '>')
+            //XML 1.0 §3.1: между именем и '>' допустим S. На well-formed документе
+            //от сериализатора пробела нет, и SkipS возвращает 0 на первом же символе
+            var afterName = index + 2 + declaredNodeType.Length;
+            var gap = SkipS(body.Slice(afterName));
+            if (afterName + gap >= body.Length || body[afterName + gap] != '>')
             {
                 throw new XmlDocumentException("Broken closing tag found for " + declaredNodeType.ToString());
             }
 
-            return required;
+            return required + gap;
         }
 
         #endregion
@@ -1717,18 +1751,18 @@ namespace XmlSerDe.Common
         private static int SkipS(roschar span)
         {
             var index = 0;
-            while (index < span.Length)
+            while (index < span.Length && IsS(span[index]))
             {
-                var c = span[index];
-                if (c != ' ' && c != '\t' && c != '\r' && c != '\n')
-                {
-                    break;
-                }
-
                 index++;
             }
 
             return index;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsS(char c)
+        {
+            return c == ' ' || c == '\t' || c == '\r' || c == '\n';
         }
 
         /// <summary>
@@ -1816,6 +1850,26 @@ namespace XmlSerDe.Common
             }
 
             return XmlTextDecoder.DecodeAttributeValue(rawValue).AsSpan();
+        }
+
+        /// <summary>
+        /// То же, но сразу строкой: строковому члену она и нужна, а вариант со
+        /// спаном на значении со ссылкой строил её дважды - раз в декодере и раз
+        /// в <c>ToString()</c> у сгенерированного присваивания.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static string DecodeAttributeValueToString(roschar rawValue)
+        {
+#if NET8_0_OR_GREATER
+            if (rawValue.IndexOfAny(AttributeValueSpecials) < 0)
+#else
+            if (rawValue.IndexOfAny("&\t\r\n".AsSpan()) < 0)
+#endif
+            {
+                return rawValue.ToString();
+            }
+
+            return XmlTextDecoder.DecodeAttributeValue(rawValue);
         }
 
         #endregion

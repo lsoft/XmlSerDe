@@ -346,7 +346,10 @@ namespace XmlSerDe.Components.Exhauster
                 return;
             }
 
-            _totalLength += value.Length + CalculateOverheadFromXmlSpecialSymbol(value);
+            //точная надбавка кодировщика, а не «+4 за спецсимвол»: та оценка не
+            //знала ни &quot; (+5), ни &#NNN; для 160..255, ни суррогатных пар, и
+            //на неанглийской строке второй проход рос с копированием буфера
+            _totalLength += value.Length + XmlTextEncoder.EncodedOverhead(value.AsSpan());
         }
 
         //оценщик длины строку не кодирует, поэтому guard'а здесь нет ни в одном
@@ -380,29 +383,5 @@ namespace XmlSerDe.Components.Exhauster
             _totalLength += XmlBase64.EncodedLength(value);
         }
 
-        private static int CalculateOverheadFromXmlSpecialSymbol(string value)
-        {
-            // HtmlEncode пишет апостроф как &#39; (+4); без него оценка
-            // проседает ровно на эти 4 символа на REGULAR (RawString).
-            const string XmlSpecialCharacters = "<>&`'\"";
-
-            var span = value.AsSpan();
-            var sspan = XmlSpecialCharacters.AsSpan();
-
-            var specialSymbolOverhead = 0;
-            while (!span.IsEmpty)
-            {
-                var index = MemoryExtensions.IndexOfAny(span, sspan);
-                if (index < 0)
-                {
-                    break;
-                }
-
-                specialSymbolOverhead += (5 - 1);
-                span = span.Slice(index + 1);
-            }
-
-            return specialSymbolOverhead;
-        }
     }
 }

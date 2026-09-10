@@ -239,7 +239,7 @@ namespace XmlSerDe.Generator
                             exhaustType
                             );
                         adder.AddDocumentToCompilation(
-                            $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{exhaustType.Name}.g.cs",
+                            $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{exhaustType.ToMetadataName()}.g.cs",
                             bsgBody
                             );
                     }
@@ -249,15 +249,18 @@ namespace XmlSerDe.Generator
                             injectorType
                             );
                         adder.AddDocumentToCompilation(
-                            $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{injectorType.Name}.g.cs",
+                            $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{injectorType.ToMetadataName()}.g.cs",
                             bsgBody
                             );
                     }
 
                     var source = sp.GenerateClass();
 
+                    //имя файла - полное имя типа: два одноимённых хоста из разных
+                    //пространств имён по простому имени сливались в один файл, и второй
+                    //молча оставался без сгенерированной половины
                     adder.AddDocumentToCompilation(
-                        $"{ctgs.Name}.g.cs",
+                        $"{ctgs.ToMetadataName()}.g.cs",
                         source
                         );
 

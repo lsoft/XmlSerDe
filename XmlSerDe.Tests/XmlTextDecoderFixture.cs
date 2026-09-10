@@ -289,6 +289,59 @@ namespace XmlSerDe.Tests
 
         #endregion
 
+        #region element text: XML 1.0 §2.11 end-of-line handling
+
+        /// <summary>
+        /// Before parsing, every CRLF and every lone CR in literal text becomes
+        /// a single LF; a CR that arrives through a character reference is
+        /// data and stays. System.Xml reads <c>a\r\nb</c> as <c>a\nb</c>, and the
+        /// same document must give the same value here.
+        /// </summary>
+        [Theory]
+        [InlineData("a\r\nb", "a\nb")]
+        [InlineData("a\rb", "a\nb")]
+        [InlineData("a\r\r\nb", "a\n\nb")]
+        [InlineData("\r\n", "\n")]
+        [InlineData("a\r", "a\n")]
+        [InlineData("a\nb", "a\nb")]
+        [InlineData("a&#13;b", "a\rb")]
+        [InlineData("a&#13;&#10;b", "a\r\nb")]
+        [InlineData("x\r\n&amp;\r\ny", "x\n&\ny")]
+        public void ElementText_LineEndings_AreNormalized(string source, string expected)
+        {
+            Assert.Equal(expected, XmlTextDecoder.DecodeElementText(source.AsSpan()));
+            Assert.Equal(expected, XmlTextDecoder.DecodeElementTextWithCData(source.AsSpan()));
+
+            var buffer = new char[source.Length];
+            var written = XmlTextDecoder.DecodeElementTextInto(source.AsSpan(), buffer);
+            Assert.Equal(expected, new string(buffer, 0, written));
+        }
+
+        [Fact]
+        public void ElementText_LineEndingsInsideCData_AreNormalizedToo()
+        {
+            Assert.Equal(
+                "a\nb\nc",
+                XmlTextDecoder.DecodeElementTextWithCData("a<![CDATA[\r\nb\r]]>c".AsSpan())
+                );
+        }
+
+        [Fact]
+        public void ElementText_LineEndings_LongInput_UsesPooledPathCorrectly()
+        {
+            var source = new StringBuilder();
+            var expected = new StringBuilder();
+            for (var i = 0; i < 200; i++)
+            {
+                source.Append("line").Append(i).Append("\r\n");
+                expected.Append("line").Append(i).Append('\n');
+            }
+
+            Assert.Equal(expected.ToString(), XmlTextDecoder.DecodeElementText(source.ToString().AsSpan()));
+        }
+
+        #endregion
+
         #region the pooled path (input longer than the stack threshold)
 
         [Fact]

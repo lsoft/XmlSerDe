@@ -376,5 +376,28 @@ namespace XmlSerDe.Tests
                 );
             Assert.Equal(c.StringProperty, d.StringProperty);
         }
+
+        /// <summary>
+        /// Комментарий - это разметка между текстом, а не признак его конца:
+        /// System.Xml.Serialization отдаёт текст по обе стороны комментария
+        /// склеенным. Раньше «ведущий» комментарий искался по первому
+        /// <c>&lt;</c> где угодно в теле, и всё, что стояло до него, терялось.
+        /// </summary>
+        [Theory]
+        [InlineData("<XmlObject2><StringProperty>hello<!-- c --></StringProperty><IntProperty>1</IntProperty></XmlObject2>", "hello")]
+        [InlineData("<XmlObject2><StringProperty>hello<!-- c -->world</StringProperty><IntProperty>1</IntProperty></XmlObject2>", "helloworld")]
+        [InlineData("<XmlObject2><StringProperty><!-- a -->hello<!-- b -->world<!-- c --></StringProperty><IntProperty>1</IntProperty></XmlObject2>", "helloworld")]
+        [InlineData("<XmlObject2><StringProperty>a &amp; b<!-- c -->c</StringProperty><IntProperty>1</IntProperty></XmlObject2>", "a & bc")]
+        public void Markup_CommentInsideText_KeepsTextOnBothSides(string xml, string expected)
+        {
+            XmlSerializerDeserializerMarkup.Deserialize(
+                DefaultInjector.Instance,
+                xml.AsSpan(),
+                out XmlObject2 xo
+                );
+
+            Assert.Equal(expected, xo.StringProperty);
+            Assert.Equal(1, xo.IntProperty);
+        }
     }
 }

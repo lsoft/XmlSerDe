@@ -483,7 +483,7 @@ namespace {_targetNamespace}");
             if (!memberType.IsValueType)
             {
                 _sb.AppendLine($$"""
-            if(obj.{{member.Name}} is not null)
+            if(obj.{{member.CsName()}} is not null)
             {
                 {{valueStatement}}
             }
@@ -544,7 +544,7 @@ namespace {_targetNamespace}");
                 {
                     //null-строку BCL не пишет вовсе: атрибута с "отсутствующим"
                     //значением в XML не бывает, а пустая строка - это уже не null
-                    guards.Add($"obj.{member.Name} is not null");
+                    guards.Add($"obj.{member.CsName()} is not null");
                 }
 
                 var open = guards.Count > 0
@@ -623,27 +623,27 @@ namespace {_targetNamespace}");
             if (IsBase64Binary(member, memberType))
             {
                 //одна и та же лексема годится обоим местам: экранировать в base64 нечего
-                return $"exh.{nameof(IExhauster.AppendBase64)}(obj.{member.Name});";
+                return $"exh.{nameof(IExhauster.AppendBase64)}(obj.{member.CsName()});";
             }
 
             if (placement == XmlPlacement.Attribute && memberType.Symbol.SpecialType == SpecialType.System_String)
             {
-                return _binding.AppendAttributeEncodedStatement("exh", $"obj.{member.Name}");
+                return _binding.AppendAttributeEncodedStatement("exh", $"obj.{member.CsName()}");
             }
 
             if (memberType.Symbol.SpecialType == SpecialType.System_String)
             {
-                return _binding.AppendEncodedStatement("exh", $"obj.{member.Name}");
+                return _binding.AppendEncodedStatement("exh", $"obj.{member.CsName()}");
             }
 
             if (!memberType.IsEnum)
             {
-                return $"{BuiltinSerializeHeadlessFullMethodName}(exh, obj.{member.Name});";
+                return $"{BuiltinSerializeHeadlessFullMethodName}(exh, obj.{member.CsName()});";
             }
 
             var expression = GenerateEnumToStringExpression(
                 (INamedTypeSymbol)memberType.Symbol,
-                $"obj.{member.Name}",
+                $"obj.{member.CsName()}",
                 indent
                 );
 
@@ -731,7 +731,7 @@ namespace {_targetNamespace}");
             if (canBeNull)
             {
                 _sb.AppendLine($$"""
-            if(obj.{{member.Name}} is not null)
+            if(obj.{{member.CsName()}} is not null)
             {
 """);
             }
@@ -749,7 +749,7 @@ namespace {_targetNamespace}");
                 {
                     _sb.AppendLine($$"""
                 exh.{{nameof(IExhauster.Append)}}("<{{elementName}}>");
-                {{_binding.AppendEncodedStatement("exh", $"obj.{member.Name}")}}
+                {{_binding.AppendEncodedStatement("exh", $"obj.{member.CsName()}")}}
                 exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
 
 """);
@@ -758,7 +758,7 @@ namespace {_targetNamespace}");
                 {
                     _sb.AppendLine($$"""
                 exh.{{nameof(IExhauster.Append)}}("<{{elementName}}>");
-                {{BuiltinSerializeHeadlessFullMethodName}}(exh, obj.{{member.Name}});
+                {{BuiltinSerializeHeadlessFullMethodName}}(exh, obj.{{member.CsName()}});
                 exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
 
 """);
@@ -767,7 +767,7 @@ namespace {_targetNamespace}");
             }
             else if (memberType.IsEnum)
             {
-                var gses = GenerateSerializeEnum((INamedTypeSymbol)memberType.Symbol, elementName, member.Name);
+                var gses = GenerateSerializeEnum((INamedTypeSymbol)memberType.Symbol, elementName, member.CsName());
                 _sb.AppendLine(gses);
             }
             else if (IsBase64Binary(member, memberType))
@@ -776,7 +776,7 @@ namespace {_targetNamespace}");
                 //только без экранирования: в алфавите base64 разметки нет
                 _sb.AppendLine($$"""
                 exh.{{nameof(IExhauster.Append)}}("<{{elementName}}>");
-                exh.{{nameof(IExhauster.AppendBase64)}}(obj.{{member.Name}});
+                exh.{{nameof(IExhauster.AppendBase64)}}(obj.{{member.CsName()}});
                 exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
 """);
             }
@@ -789,7 +789,7 @@ namespace {_targetNamespace}");
 
                 _sb.AppendLine($$"""
                 exh.{{nameof(IExhauster.Append)}}("<{{elementName}}>");
-                for(var index = 0; index < obj.{{member.Name}}.{{countOrLength}}; index++)
+                for(var index = 0; index < obj.{{member.CsName()}}.{{countOrLength}}; index++)
                 {
 {{scms}}
                 }
@@ -813,7 +813,7 @@ namespace {_targetNamespace}");
                         var elseif = derivedIndex == 0 ? "" : "else ";
 
                         _sb.AppendLine($$"""
-                {{elseif}}if(obj.{{member.Name}} is {{derived.ToGlobalDisplayString()}} dobj{{derivedIndex}})
+                {{elseif}}if(obj.{{member.CsName()}} is {{derived.ToGlobalDisplayString()}} dobj{{derivedIndex}})
                 {
 """);
                         GenerateElementHead(
@@ -844,10 +844,10 @@ namespace {_targetNamespace}");
                             elementName,
                             "",
                             memberType.Symbol,
-                            $"obj.{member.Name}"
+                            $"obj.{member.CsName()}"
                             );
                         _sb.AppendLine($$"""
-                    {{HeadlessSerializeMethodName}}(exh, obj.{{member.Name}});
+                    {{HeadlessSerializeMethodName}}(exh, obj.{{member.CsName()}});
                     exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
                 }
 """);
@@ -860,10 +860,10 @@ namespace {_targetNamespace}");
                         elementName,
                         "",
                         memberType.Symbol,
-                        $"obj.{member.Name}"
+                        $"obj.{member.CsName()}"
                         );
                     _sb.AppendLine($$"""
-                {{HeadlessSerializeMethodName}}(exh, obj.{{member.Name}});
+                {{HeadlessSerializeMethodName}}(exh, obj.{{member.CsName()}});
                 exh.{{nameof(IExhauster.Append)}}("</{{elementName}}>");
 """);
                 }
@@ -898,12 +898,12 @@ namespace {_targetNamespace}");
             var specified = member.GetSpecifiedCompanion();
             if (specified is not null)
             {
-                guards.Add($"obj.{specified.Name}");
+                guards.Add($"obj.{specified.CsName()}");
             }
 
             if (member.TryGetDefaultValue(out var defaultValue))
             {
-                guards.Add($"obj.{member.Name} != {defaultValue.ToLiteral()}");
+                guards.Add($"obj.{member.CsName()} != {defaultValue.ToLiteral()}");
             }
 
             if (guards.Count == 0)
@@ -959,7 +959,7 @@ namespace {_targetNamespace}");
                 return GenerateSerializeEnum(
                     listItemType,
                     itemName ?? listItemType.GetXmlTypeName(),
-                    $"{member.Name}[index]"
+                    $"{member.CsName()}[index]"
                     );
             }
 
@@ -976,14 +976,14 @@ namespace {_targetNamespace}");
 
                         return
                             "                    exh." + nameof(IExhauster.Append) + "(\"<" + itemElementName + ">\");\r\n"
-                            + "                    " + _binding.AppendEncodedStatement("exh", $"obj.{member.Name}[index]") + "\r\n"
+                            + "                    " + _binding.AppendEncodedStatement("exh", $"obj.{member.CsName()}[index]") + "\r\n"
                             + "                    exh." + nameof(IExhauster.Append) + "(\"</" + itemElementName + ">\");";
                     }
 
-                    return $"                    {BuiltinSerializeHeadFullMethodName}(exh, obj.{member.Name}[index]);";
+                    return $"                    {BuiltinSerializeHeadFullMethodName}(exh, obj.{member.CsName()}[index]);";
                 }
 
-                return $"                {HeadSerializeMethodName}(exh, obj.{member.Name}[index]);";
+                return $"                {HeadSerializeMethodName}(exh, obj.{member.CsName()}[index]);";
             }
 
             //имя задано вручную, поэтому голову пишем здесь, а телом занимается
@@ -1006,15 +1006,15 @@ namespace {_targetNamespace}");
             string headlessInvocation;
             if (isBuiltin && listItemType.SpecialType == SpecialType.System_String)
             {
-                headlessInvocation = _binding.AppendEncodedStatement("exh", $"obj.{member.Name}[index]");
+                headlessInvocation = _binding.AppendEncodedStatement("exh", $"obj.{member.CsName()}[index]");
             }
             else if (isBuiltin)
             {
-                headlessInvocation = $"{BuiltinSerializeHeadlessFullMethodName}(exh, obj.{member.Name}[index]);";
+                headlessInvocation = $"{BuiltinSerializeHeadlessFullMethodName}(exh, obj.{member.CsName()}[index]);";
             }
             else
             {
-                headlessInvocation = $"{HeadlessSerializeMethodName}(exh, obj.{member.Name}[index]);";
+                headlessInvocation = $"{HeadlessSerializeMethodName}(exh, obj.{member.CsName()}[index]);";
             }
 
             var head = GenerateElementHeadLines(
@@ -1022,7 +1022,7 @@ namespace {_targetNamespace}");
                 itemName,
                 "",
                 isBuiltin ? null : listItemType,
-                $"obj.{member.Name}[index]"
+                $"obj.{member.CsName()}[index]"
                 );
 
             return $$"""
@@ -1286,13 +1286,22 @@ namespace {_targetNamespace}");
                 var memberType = ParseMember(member);
                 var valueExpression = $"{member.Name}Value";
 
+                //строковому члену значение нужно строкой, и декодер отдаёт её сразу:
+                //через спан строка на значении со ссылкой строилась бы дважды
+                var isString = memberType.Symbol.SpecialType == SpecialType.System_String
+                    && !memberType.IsEnum
+                    && !IsBase64Binary(member, memberType);
+                var decode = isString
+                    ? nameof(XmlScan.DecodeAttributeValueToString)
+                    : nameof(XmlScan.DecodeAttributeValue);
+
                 _sb.AppendLine($$"""
                 //{{memberType.ToGlobalDisplayString()}} {{member.Name}}
                 if(!{{member.Name}}Found && attribute.{{nameof(ParsedAttribute.Name)}}.SequenceEqual("{{member.GetXmlAttributeName()}}".AsSpan()))
                 {
                     {{member.Name}}Found = true;
-                    var {{valueExpression}} = {{XmlScanFullName}}.{{nameof(XmlScan.DecodeAttributeValue)}}(attribute.{{nameof(ParsedAttribute.Value)}});
-                    {{GenerateAttributeAssignment(member, memberType, valueExpression, "                    ")}}
+                    var {{valueExpression}} = {{XmlScanFullName}}.{{decode}}(attribute.{{nameof(ParsedAttribute.Value)}});
+                    {{GenerateAttributeAssignment(member, memberType, valueExpression, "                    ", isString)}}
                     continue;
                 }
 """);
@@ -1312,17 +1321,26 @@ namespace {_targetNamespace}");
             ISymbol member,
             TypeSymbol memberType,
             string valueExpression,
-            string bodyIndent
+            string bodyIndent,
+            bool valueIsString = false
             )
         {
+            if (valueIsString)
+            {
+                //значение уже строка (DecodeAttributeValueToString): страж смотрит
+                //на её спан, присваивание - без второго ToString()
+                return _guards.CheckSpanStatementBefore(bodyIndent, valueExpression + ".AsSpan()")
+                    + $"result.{member.CsName()} = {valueExpression};";
+            }
+
             if (memberType.IsEnum)
             {
-                return $"result.{member.Name} = {GenerateEnumParseStatement(memberType, valueExpression)};";
+                return $"result.{member.CsName()} = {GenerateEnumParseStatement(memberType, valueExpression)};";
             }
 
             if (IsBase64Binary(member, memberType))
             {
-                return $"result.{member.Name} = {XmlBase64FullName}.{nameof(XmlBase64.Decode)}({valueExpression});";
+                return $"result.{member.CsName()} = {XmlBase64FullName}.{nameof(XmlBase64.Decode)}({valueExpression});";
             }
 
             if (memberType.Symbol.SpecialType == SpecialType.System_String)
@@ -1332,11 +1350,11 @@ namespace {_targetNamespace}");
                 //тела, и второй проход по уже раскрытому значению спотыкался бы
                 //о литеральный '<', пришедший из &lt;
                 return _guards.CheckSpanStatementBefore(bodyIndent, valueExpression)
-                    + $"result.{member.Name} = {valueExpression}.ToString();";
+                    + $"result.{member.CsName()} = {valueExpression}.ToString();";
             }
 
             return $"inj.{nameof(IInjector.ParseBody)}({valueExpression}, out {memberType.GlobalName} {member.Name}Parsed);\r\n"
-                + bodyIndent + $"result.{member.Name} = {member.Name}Parsed;";
+                + bodyIndent + $"result.{member.CsName()} = {member.Name}Parsed;";
         }
 
         /// <summary>
@@ -1349,7 +1367,10 @@ namespace {_targetNamespace}");
             string resultExpression
             )
         {
-            if (!HasXmlAttributeMembers(type))
+            //у абстрактного типа метода нет (см. GenerateDeserializeAttributesMethod):
+            //его атрибутные члены присваивает перегрузка наследника, в которую
+            //диспетчеризация уже завела
+            if (type.IsAbstract || !HasXmlAttributeMembers(type))
             {
                 return "";
             }
@@ -1615,11 +1636,11 @@ namespace {_targetNamespace}");
             string assignment;
             if (memberType.IsEnum)
             {
-                assignment = $"result.{member.Name} = {GenerateEnumParseStatement(memberType, "bodyText")};";
+                assignment = $"result.{member.CsName()} = {GenerateEnumParseStatement(memberType, "bodyText")};";
             }
             else if (IsBase64Binary(member, memberType))
             {
-                assignment = $"result.{member.Name} = {XmlBase64FullName}.{nameof(XmlBase64.Decode)}(bodyText);";
+                assignment = $"result.{member.CsName()} = {XmlBase64FullName}.{nameof(XmlBase64.Decode)}(bodyText);";
             }
             else
             {
@@ -1633,7 +1654,7 @@ namespace {_targetNamespace}");
                         "bodyParsed"
                         )
                     + _guards.CheckStringStatement("                ", isString, "bodyParsed")
-                    + $"\r\n                result.{member.Name} = bodyParsed;";
+                    + $"\r\n                result.{member.CsName()} = bodyParsed;";
             }
 
             _sb.AppendLine($$"""
@@ -1661,7 +1682,7 @@ namespace {_targetNamespace}");
             var specified = member.GetSpecifiedCompanion();
             var specifiedAssignment = specified is null
                 ? ""
-                : $"result.{specified.Name} = true;";
+                : $"result.{specified.CsName()} = true;";
 
             //пустое тело осмысленно не для всякого типа. У строки пустое лексическое
             //представление есть, и <Foo/> - это "", а не отсутствие значения. У числа,
@@ -1692,7 +1713,7 @@ namespace {_targetNamespace}");
                             //так что <Foo/> здесь превращается в пустую строку
                             {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
                             {{_binding.ParseBodyStatement("childText", true, memberType.GlobalName, "injr")}}{{_guards.CheckStringStatement("                            ", true, "injr")}}
-                            result.{{member.Name}} = injr;
+                            result.{{member.CsName()}} = injr;
                         }
                     }
 """);
@@ -1712,7 +1733,7 @@ namespace {_targetNamespace}");
                         {
                             {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
                             inj.{{nameof(IInjector.ParseBody)}}(childText, out {{memberType.GlobalName}} injr);
-                            result.{{member.Name}} = injr;
+                            result.{{member.CsName()}} = injr;
                         }
                     }
 """);
@@ -1737,7 +1758,7 @@ namespace {_targetNamespace}");
                         else
                         {
                             {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
-                            result.{{member.Name}} = {{fullParserInvocation}};
+                            result.{{member.CsName()}} = {{fullParserInvocation}};
                         }
                     }
 """);
@@ -1760,7 +1781,7 @@ namespace {_targetNamespace}");
                             //пустое тело - это byte[0], а не null: и <Foo/>, и <Foo></Foo>
                             //BCL читает именно в пустой массив (проверено)
                             {{GenerateReadTextBodyStatement("childBody", "child", "childText", "childConsumed")}}
-                            result.{{member.Name}} = {{XmlBase64FullName}}.{{nameof(XmlBase64.Decode)}}(childText);
+                            result.{{member.CsName()}} = {{XmlBase64FullName}}.{{nameof(XmlBase64.Decode)}}(childText);
                         }
                     }
 """);
@@ -1779,7 +1800,8 @@ namespace {_targetNamespace}");
                 var listItemParseStatement = GenerateListItemParseStatement(
                     child2VarName,
                     listItemType,
-                    listItemParseResultVarName
+                    listItemParseResultVarName,
+                    member.GetXmlArrayItemName()
                     );
 
                 var poolVarName = "pool";
@@ -1827,9 +1849,18 @@ namespace {_targetNamespace}");
                                 break;
                             }
                             var child2Step = {{child2VarName}}.{{nameof(XmlHead.TotalLength)}};
-                            if(!{{child2VarName}}.{{nameof(XmlHead.IsBodyless)}})
+                            if({{child2VarName}}.{{nameof(XmlHead.IsBodyless)}} && {{child2VarName}}.{{_binding.IsNil}}())
                             {
-                                var child2Body = itemCursor.Slice({{child2VarName}}.{{nameof(XmlHead.TotalLength)}});
+                                //<string xsi:nil="true"/> - элемент есть, а значения нет
+                                {{poolVarName}}.Add(default!);
+                            }
+                            else
+                            {
+                                //<string/> и <Point/> - это элементы с пустым телом, а не их
+                                //отсутствие: System.Xml.Serialization так пишет пустую строку
+                                //и объект без записанных членов. Раньше закрытая нода
+                                //пропускалась, и коллекция читалась короче, чем была
+                                var child2Body = {{child2VarName}}.{{nameof(XmlHead.IsBodyless)}} ? roschar.Empty : itemCursor.Slice({{child2VarName}}.{{nameof(XmlHead.TotalLength)}});
                                 int child2Consumed;
                                 {{listItemParseStatement}}
                                 {{poolVarName}}.Add({{listItemParseResultVarName}});
@@ -1871,13 +1902,13 @@ namespace {_targetNamespace}");
                         var childPreciseType = child.{{_binding.GetPreciseNodeType}}();
 """);
 
-                    GenerateDeserializeDispatch2(subject.Deriveds, member.Name);
+                    GenerateDeserializeDispatch2(subject.Deriveds, member.CsName());
 
                     _sb.AppendLine($$"""
                         else
                         {
                             {{classAndMethodName}}(inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}{{_guards.ExpectedEndNameArgumentRaw("child", "childDeclaredNodeType")}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                            ", memberType.Symbol, "child", "iresult")}}
-                            result.{{member.Name}} = iresult;
+                            result.{{member.CsName()}} = iresult;
                         }
                     }
 """);
@@ -1892,7 +1923,7 @@ namespace {_targetNamespace}");
                     {
                         {{specifiedAssignment}}
                         {{classAndMethodName}}(inj, childBody, child.{{nameof(XmlHead.XmlnsAttributeName)}}{{_guards.ExpectedEndNameArgumentRaw("child", "childDeclaredNodeType")}}, out {{memberType.ToGlobalDisplayString()}} iresult, out childConsumed);{{GenerateDeserializeAttributesInvocation("                        ", memberType.Symbol, "child", "iresult")}}
-                        result.{{member.Name}} = iresult;
+                        result.{{member.CsName()}} = iresult;
                     }
 """);
 
@@ -1964,7 +1995,7 @@ namespace {_targetNamespace}");
                     //наполнять нечего, и член остаётся null: BCL в этом случае
                     //поступает так же, а не создаёт список за пользователя
                     return
-                        $"var {poolVarName} = result.{member.Name}"
+                        $"var {poolVarName} = result.{member.CsName()}"
                         + $" ?? new global::System.Collections.Generic.List<{listItemType.ToGlobalDisplayString()}>();";
                 }
 
@@ -1992,11 +2023,11 @@ namespace {_targetNamespace}");
                     return "";
                 }
 
-                return $"result.{member.Name} = {poolVarName}.{nameof(PooledArrayBuilder<int>.ToListAndRelease)}();";
+                return $"result.{member.CsName()} = {poolVarName}.{nameof(PooledArrayBuilder<int>.ToListAndRelease)}();";
             }
             else if (memberType.IsArray(out _))
             {
-                return $"result.{member.Name} = {poolVarName}.{nameof(PooledArrayBuilder<int>.ToArrayAndRelease)}();";
+                return $"result.{member.CsName()} = {poolVarName}.{nameof(PooledArrayBuilder<int>.ToArrayAndRelease)}();";
             }
 
             throw new InvalidOperationException($"Unknown type {memberType.ToGlobalDisplayString()}");
@@ -2004,13 +2035,19 @@ namespace {_targetNamespace}");
 
         private static bool HasNoSetter(ISymbol member)
         {
-            return member is IPropertySymbol property && property.SetMethod is null;
+            return member switch
+            {
+                IPropertySymbol property => property.SetMethod is null || property.SetMethod.IsInitOnly,
+                IFieldSymbol field => field.IsReadOnly,
+                _ => false,
+            };
         }
 
         private readonly string GenerateListItemParseStatement(
             string child2VarName,
             TypeSymbol listItemType,
-            string listItemParseResultVarName
+            string listItemParseResultVarName,
+            string? itemName
             )
         {
             if (listItemType.IsEnum)
@@ -2038,6 +2075,23 @@ namespace {_targetNamespace}");
                         listItemParseResultVarName
                         )
                     + _guards.CheckStringStatement("                            ", isString, listItemParseResultVarName);
+            }
+            else if (itemName is not null)
+            {
+                //элемент назван вручную через XmlArrayItem: головной метод сверяет имя
+                //с именем типа и такой элемент отверг бы. Наследников у типа быть не
+                //может - запись с ними и ручным именем отвергается, - поэтому
+                //диспетчеризации по xsi:type здесь нет, только сверка имени
+                var headless = DetermineClassName(listItemType.Symbol) + "." + HeadlessDeserializeMethodName;
+                var itemGlobalName = listItemType.ToGlobalDisplayString();
+
+                return $$"""
+if(!{{child2VarName}}.{{nameof(XmlHead.DeclaredNodeType)}}.SequenceEqual("{{itemName}}".AsSpan()))
+                                {
+                                    throw new InvalidOperationException("(3) Unknown type " + {{child2VarName}}.{{nameof(XmlHead.DeclaredNodeType)}}.ToString());
+                                }
+                                {{headless}}(inj, child2Body, {{child2VarName}}.{{nameof(XmlHead.XmlnsAttributeName)}}{{_guards.ExpectedEndNameArgument(child2VarName)}}, out {{itemGlobalName}} {{listItemParseResultVarName}}, out child2Consumed);{{GenerateDeserializeAttributesInvocation("                                ", listItemType.Symbol, child2VarName, listItemParseResultVarName)}}
+""";
             }
             else
             {
@@ -2263,14 +2317,21 @@ namespace {_targetNamespace}");
                 }
                 if (member is IPropertySymbol property)
                 {
-                    if (property.SetMethod == null && !IsFillableWithoutSetter(compilation, member))
+                    //init-сеттер из сгенерированного кода недоступен так же, как его
+                    //отсутствие: присвоить можно только в инициализаторе объекта
+                    if ((property.SetMethod == null || property.SetMethod.IsInitOnly) && !IsFillableWithoutSetter(compilation, member))
                     {
                         continue;
                     }
                 }
                 else if (member is IFieldSymbol fieldSymbol)
                 {
-                    //nothing to do
+                    //readonly-поле System.Xml.Serialization пропускает, кроме коллекции,
+                    //которую наполняет через Add уже существующего экземпляра
+                    if (fieldSymbol.IsReadOnly && !IsFillableWithoutSetter(compilation, member))
+                    {
+                        continue;
+                    }
                 }
                 else
                 {
@@ -2439,7 +2500,10 @@ namespace {_targetNamespace}");
 
                         if (nts.TypeArguments.Length > 1)
                         {
-                            throw new NotSupportedException($"{nts.ToGlobalDisplayString()} does not support");
+                            //Dictionary<K,V> и прочие - не коллекция элементов одного типа.
+                            //Раньше здесь бросалось исключение, и свойство без сеттера
+                            //такого типа роняло генератор целиком
+                            return null;
                         }
 
                         return nts.TypeArguments[0];
@@ -2786,11 +2850,22 @@ namespace {_targetNamespace}");
             Dictionary<string, SerializationInfo> sinfos
             )
         {
+            //прямые объявления: тип -> кого он включает. Собираются отдельно от
+            //наследников, потому что наследники базы - это замыкание, а не первый слой
+            var direct = new Dictionary<string, List<INamedTypeSymbol>>(StringComparer.Ordinal);
             var queue = new Queue<SerializationInfo>(sinfos.Values);
 
             while (queue.Count > 0)
             {
                 var ssi = queue.Dequeue();
+                var ssign = ssi.Subject.ToGlobalDisplayString();
+                if (direct.ContainsKey(ssign))
+                {
+                    continue;
+                }
+
+                var includes = new List<INamedTypeSymbol>();
+                direct[ssign] = includes;
 
                 foreach (var included in ssi.Subject.GetXmlIncludes())
                 {
@@ -2803,18 +2878,107 @@ namespace {_targetNamespace}");
                         queue.Enqueue(includedInfo);
                     }
 
-                    if (included.IsAbstract)
-                    {
-                        //абстрактный тип экземпляром быть не может, диспетчеризовать в него нечего
-                        continue;
-                    }
-                    if (ssi.Deriveds.Any(d => SymbolEqualityComparer.Default.Equals(d, included)))
+                    if (includes.Any(d => SymbolEqualityComparer.Default.Equals(d, included)))
                     {
                         //тот же XmlInclude объявлен на типе дважды
                         continue;
                     }
 
-                    ssi.AddDerived(included);
+                    includes.Add(included);
+                }
+            }
+
+            //наследники базы - транзитивно: наследник вправе объявлять уже своих
+            //наследников, и лист должен быть виден базе, иначе он писался бы под
+            //xsi:type промежуточного типа, а читался как база. Порядок - от самого
+            //дальнего потомка к ближнему: проверка obj is Mid на экземпляре Leaf
+            //сработала бы первой и потеряла его
+            foreach (var ssi in sinfos.Values)
+            {
+                var closure = new List<INamedTypeSymbol>();
+                var seen = new HashSet<string>(StringComparer.Ordinal) { ssi.Subject.ToGlobalDisplayString(), };
+                var stack = new Stack<INamedTypeSymbol>();
+                stack.Push(ssi.Subject);
+
+                while (stack.Count > 0)
+                {
+                    var current = stack.Pop();
+                    if (!direct.TryGetValue(current.ToGlobalDisplayString(), out var includes))
+                    {
+                        continue;
+                    }
+
+                    foreach (var included in includes)
+                    {
+                        if (seen.Add(included.ToGlobalDisplayString()))
+                        {
+                            closure.Add(included);
+                            stack.Push(included);
+                        }
+                    }
+                }
+
+                var subject = ssi.Subject;
+                var ordered = closure
+                    //абстрактный тип экземпляром быть не может, диспетчеризовать в него нечего
+                    .Where(d => !d.IsAbstract)
+                    //OrderByDescending устойчива: на одной глубине порядок объявления сохраняется
+                    .OrderByDescending(d => InheritanceDepth(d, subject))
+                    .ToList();
+
+                ssi.Deriveds.Clear();
+                ssi.Deriveds.AddRange(ordered);
+            }
+
+            CheckXsiTypeNames(sinfos);
+        }
+
+        /// <summary>
+        /// Сколько шагов по базовым типам от <paramref name="type"/> до
+        /// <paramref name="root"/>; 0, если <paramref name="root"/> среди предков нет.
+        /// </summary>
+        private static int InheritanceDepth(INamedTypeSymbol type, INamedTypeSymbol root)
+        {
+            var depth = 0;
+            for (var current = type.BaseType; current is not null; current = current.BaseType)
+            {
+                depth++;
+                if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, root.OriginalDefinition))
+                {
+                    return depth;
+                }
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// xsi:type - это простое имя типа, и два наследника с одним именем из
+        /// разных пространств имён писались бы одинаково, а читались как первый.
+        /// System.Xml.Serialization отказывает при построении сериализатора;
+        /// здесь отказ - ошибка генератора.
+        /// </summary>
+        private static void CheckXsiTypeNames(Dictionary<string, SerializationInfo> sinfos)
+        {
+            foreach (var ssi in sinfos.Values)
+            {
+                var names = new Dictionary<string, INamedTypeSymbol>(StringComparer.Ordinal)
+                {
+                    [ssi.Subject.GetXmlTypeName()] = ssi.Subject,
+                };
+
+                foreach (var derived in ssi.Deriveds)
+                {
+                    var name = derived.GetXmlTypeName();
+                    if (names.TryGetValue(name, out var other))
+                    {
+                        throw new InvalidOperationException(
+                            $"xsi:type \"{name}\" is ambiguous: {other.ToGlobalDisplayString()} and {derived.ToGlobalDisplayString()}"
+                            + $" would both be written under it. Give one of them its own name via [{typeof(XmlTypeAttribute).Name}(TypeName = ...)]"
+                            );
+                    }
+
+                    names[name] = derived;
                 }
             }
         }
@@ -2850,10 +3014,24 @@ namespace {_targetNamespace}");
 
             layers.Reverse();
 
+            //член, скрытый через new, берётся из наследника и остаётся на месте
+            //базового: так его пишет System.Xml.Serialization. Без этого оба попадали
+            //в список, и локальная переменная объявлялась дважды (CS0128)
             var result = new List<ISymbol>();
+            var slots = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var layer in layers)
             {
-                result.AddRange(layer);
+                foreach (var member in layer)
+                {
+                    if (slots.TryGetValue(member.Name, out var slot))
+                    {
+                        result[slot] = member;
+                        continue;
+                    }
+
+                    slots[member.Name] = result.Count;
+                    result.Add(member);
+                }
             }
 
             return result;

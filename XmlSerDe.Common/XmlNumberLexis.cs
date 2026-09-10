@@ -157,8 +157,22 @@ namespace XmlSerDe.Common
             AppendSpan(sb, buffer.Slice(0, written));
         }
 
+        /// <summary>
+        /// Самое длинное xsd:duration - <c>TimeSpan.MinValue</c>, 27 символов
+        /// (<c>-P10675199DT2H48M5.4775808S</c>). Буфер такого размера вмещает любое
+        /// значение, и <see cref="TryFormat"/> тогда не считает длину заранее.
+        /// </summary>
+        public const int MaxDurationLength = 27;
+
         public static bool TryFormat(Span<char> destination, TimeSpan value, out int charsWritten)
         {
+            if (destination.Length >= MaxDurationLength)
+            {
+                //хватит на любое значение: подсчёт длины делал бы те же деления дважды
+                charsWritten = WriteDuration(destination, value);
+                return true;
+            }
+
             var needed = DurationCharCount(value);
             if (destination.Length < needed)
             {

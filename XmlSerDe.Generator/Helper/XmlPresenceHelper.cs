@@ -132,7 +132,9 @@ namespace XmlSerDe.Generator.Helper
 
             if (constant.Kind == TypedConstantKind.Enum && constant.Type is not null)
             {
-                return $"(({constant.Type.ToGlobalDisplayString()}){constant.Value})";
+                //значение в своих скобках: (E)-1 C# читает как вычитание (CS0075),
+                //а отрицательная константа у перечисления - обычное дело
+                return $"(({constant.Type.ToGlobalDisplayString()})({constant.Value}))";
             }
 
             return Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatPrimitive(

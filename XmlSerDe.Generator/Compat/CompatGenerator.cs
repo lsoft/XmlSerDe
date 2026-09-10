@@ -218,14 +218,14 @@ namespace XmlSerDe.Generator.Compat
             foreach (var exhaustType in sources.Collection.ExhaustList)
             {
                 adder.AddDocumentToCompilation(
-                    $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{exhaustType.Name}.g.cs",
+                    $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{exhaustType.ToMetadataName()}.g.cs",
                     bsg.GenerateSerializationBody(exhaustType)
                     );
             }
             foreach (var injectorType in sources.Collection.InjectorList)
             {
                 adder.AddDocumentToCompilation(
-                    $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{injectorType.Name}.g.cs",
+                    $"XmlSerDe.{BuiltinSourceProducer.BuiltinCodeHelperClassName}.{injectorType.ToMetadataName()}.g.cs",
                     bsg.GenerateDeserializationBody(injectorType)
                     );
             }

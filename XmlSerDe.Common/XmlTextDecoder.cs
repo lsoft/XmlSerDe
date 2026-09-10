@@ -43,6 +43,18 @@ namespace XmlSerDe.Common
             get => "]]>".AsSpan();
         }
 
+        private static roschar CommentHeadSpan
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => "<!--".AsSpan();
+        }
+
+        private static roschar CommentTailSpan
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => "-->".AsSpan();
+        }
+
         #region содержимое элемента
 
         /// <summary>
@@ -71,16 +83,17 @@ namespace XmlSerDe.Common
             }
 
             //один векторизованный проход отсекает текст, которому раскрытие не
-            //нужно вообще. Искать '&' и '<' раздельно нельзя: два IndexOf по
-            //одному и тому же спану стоят вдвое дороже одного IndexOfAny, а это
-            //горячий путь каждого строкового члена
-            var first = text.IndexOfAny('&', '<');
+            //нужно вообще. Искать '&', '<' и CR раздельно нельзя: три IndexOf по
+            //одному и тому же спану стоят втрое дороже одного IndexOfAny, а это
+            //горячий путь каждого строкового члена. CR здесь ради §2.11: перевод
+            //строки в тексте документа нормализуется до LF ещё до разбора
+            var first = text.IndexOfAny('&', '<', '\r');
             if (first < 0)
             {
                 return text.ToString();
             }
 
-            if (!cdata && text[first] == '<')
+            if (text[first] == '<' && !IsMarkupAllowedHere(text.Slice(first), cdata))
             {
                 ThrowLiteralLt(first);
             }
@@ -138,7 +151,7 @@ namespace XmlSerDe.Common
                 //и здесь тоже один проход: отдельный IndexOf('<') на каждой
                 //итерации сканировал бы остаток текста до конца, превращая
                 //раскрытие строки с k сущностями в O(k*n)
-                var next = rest.IndexOfAny('&', '<');
+                var next = rest.IndexOfAny('&', '<', '\r');
                 if (next < 0)
                 {
                     rest.CopyTo(destination.Slice(written));
@@ -159,6 +172,34 @@ namespace XmlSerDe.Common
                     continue;
                 }
 
+                if (rest[0] == '\r')
+                {
+                    //XML 1.0 §2.11: CRLF и одиночный CR в literal-тексте - это один LF.
+                    //CR из ссылки (&#13;) сюда не попадает: DecodeReference пишет его
+                    //в destination напрямую, минуя этот поиск
+                    destination[written++] = '\n';
+                    index += rest.Length > 1 && rest[1] == '\n' ? 2 : 1;
+                    continue;
+                }
+
+                //комментарий - разметка между текстом, а не его конец; на default-хосте
+                //текст на нём обрывается раньше, чем он сюда дойдёт, поэтому ветка
+                //стоит ровно ноль тем, кто разметку не включал
+                if (rest.StartsWith(CommentHeadSpan))
+                {
+                    var afterCommentHead = rest.Slice(CommentHeadSpan.Length);
+                    var commentTail = afterCommentHead.IndexOf(CommentTailSpan);
+                    if (commentTail < 0)
+                    {
+                        throw new XmlDocumentException(
+                            $"Closing '-->' not found for the comment starting at position {index}."
+                            );
+                    }
+
+                    index += CommentHeadSpan.Length + commentTail + CommentTailSpan.Length;
+                    continue;
+                }
+
                 if (!cdata || !rest.StartsWith(CDataHeadSpan))
                 {
                     ThrowLiteralLt(index);
@@ -173,12 +214,50 @@ namespace XmlSerDe.Common
                         );
                 }
 
-                afterHead.Slice(0, tail).CopyTo(destination.Slice(written));
-                written += tail;
+                //§2.11 действует и внутри CDATA: секция защищает от разбора разметки,
+                //а не от нормализации переводов строки
+                CopyNormalizingLineEndings(afterHead.Slice(0, tail), destination, ref written);
                 index += CDataHeadSpan.Length + tail + CDataTailSpan.Length;
             }
 
             return written;
+        }
+
+        /// <summary>
+        /// Может ли текст элемента начинаться в этой позиции с <c>&lt;</c>:
+        /// да - для комментария всегда и для секции CDATA по флагу.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsMarkupAllowedHere(roschar atLt, bool cdata)
+        {
+            return atLt.StartsWith(CommentHeadSpan)
+                || (cdata && atLt.StartsWith(CDataHeadSpan));
+        }
+
+        private static void CopyNormalizingLineEndings(roschar source, Span<char> destination, ref int written)
+        {
+            while (!source.IsEmpty)
+            {
+                var cr = source.IndexOf('\r');
+                if (cr < 0)
+                {
+                    source.CopyTo(destination.Slice(written));
+                    written += source.Length;
+                    return;
+                }
+
+                source.Slice(0, cr).CopyTo(destination.Slice(written));
+                written += cr;
+                destination[written++] = '\n';
+
+                var skip = cr + 1;
+                if (skip < source.Length && source[skip] == '\n')
+                {
+                    skip++;
+                }
+
+                source = source.Slice(skip);
+            }
         }
 
         private static void ThrowLiteralLt(int index)

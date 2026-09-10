@@ -213,7 +213,7 @@ namespace Sample
             var result = driver.RunGenerators(compilation).GetRunResult();
 
             var source = result.Results.Single().GeneratedSources
-                .SingleOrDefault(s => s.HintName.Equals(hostName + ".g.cs", StringComparison.Ordinal));
+                .SingleOrDefault(s => GeneratorHarness.IsHint(s.HintName, hostName + ".g.cs"));
 
             Assert.True(source.HintName != null, "missing generated file " + hostName);
             return source.SourceText.ToString();

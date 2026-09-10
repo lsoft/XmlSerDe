@@ -1031,18 +1031,33 @@ namespace XmlSerDe.Common
                 return;
             }
 
-            dest.WriteSlice(value, 0, first);
-            for (var i = first; i < value.Length; i++)
+            //пакетами от замены до замены, а не по символу: посимвольный WriteSlice
+            //стоил виртуального вызова на каждый символ, а на UTF-8 стоке ещё и
+            //рвал суррогатную пару на два одиночных суррогата - U+FFFD вместо эмодзи
+            var start = 0;
+            var i = first;
+            while (true)
             {
-                var replacement = ReplacementOrNull(value[i]);
-                if (replacement is null)
+                if (i > start)
                 {
-                    dest.WriteSlice(value, i, 1);
+                    dest.WriteSlice(value, start, i - start);
                 }
-                else
+
+                dest.WriteLiteral(ReplacementOrNull(value[i])!);
+                start = i + 1;
+                if (start >= value.Length)
                 {
-                    dest.WriteLiteral(replacement);
+                    return;
                 }
+
+                var next = IndexOfEscapable(value.AsSpan(start));
+                if (next < 0)
+                {
+                    dest.WriteSlice(value, start, value.Length - start);
+                    return;
+                }
+
+                i = start + next;
             }
         }
 
@@ -1060,25 +1075,36 @@ namespace XmlSerDe.Common
 
         private static void AppendEscaping(System.Text.StringBuilder sb, string value, int first)
         {
-            sb.Append(value, 0, first);
-            for (var i = first; i < value.Length; i++)
+            var start = 0;
+            var i = first;
+            while (true)
             {
-                var replacement = ReplacementOrNull(value[i]);
-                if (replacement is null)
+                if (i > start)
                 {
-                    sb.Append(value[i]);
+                    sb.Append(value, start, i - start);
                 }
-                else
+
+                sb.Append(ReplacementOrNull(value[i])!);
+                start = i + 1;
+                if (start >= value.Length)
                 {
-                    sb.Append(replacement);
+                    return;
                 }
+
+                var next = IndexOfEscapable(value.AsSpan(start));
+                if (next < 0)
+                {
+                    sb.Append(value, start, value.Length - start);
+                    return;
+                }
+
+                i = start + next;
             }
         }
 
         /// <summary>
-        /// Сколько символов сверх исходной длины может занять экранирование.
-        /// Оценка сверху: самая длинная замена - <c>&amp;quot;</c>, шесть символов
-        /// на месте одного.
+        /// На сколько символов экранированное значение длиннее исходного. Точно:
+        /// у каждой замены своя длина, от <c>&amp;lt;</c> до <c>&amp;quot;</c>.
         /// </summary>
         public static int EstimateOverhead(string value)
         {
@@ -1088,15 +1114,18 @@ namespace XmlSerDe.Common
             }
 
             var overhead = 0;
-            for (var i = 0; i < value.Length; i++)
+            var rest = value.AsSpan();
+            while (true)
             {
-                if (ReplacementOrNull(value[i]) is not null)
+                var i = IndexOfEscapable(rest);
+                if (i < 0)
                 {
-                    overhead += EscapedLength;
+                    return overhead;
                 }
-            }
 
-            return overhead;
+                overhead += ReplacementOrNull(rest[i])!.Length - 1;
+                rest = rest.Slice(i + 1);
+            }
         }
 
         /// <summary>
@@ -1105,17 +1134,22 @@ namespace XmlSerDe.Common
         /// </summary>
         private const int EscapedLength = 5;
 
-        private static int IndexOfEscapable(string value)
-        {
-            for (var i = 0; i < value.Length; i++)
-            {
-                if (ReplacementOrNull(value[i]) is not null)
-                {
-                    return i;
-                }
-            }
+#if NET8_0_OR_GREATER
+        private static readonly System.Buffers.SearchValues<char> Escapables =
+            System.Buffers.SearchValues.Create("<>&\"\r\n\t");
+#endif
 
-            return -1;
+        /// <summary>
+        /// Семь экранируемых символов ищутся векторно, а не переключателем на
+        /// каждый символ: на значении без единой замены это весь разбор целиком.
+        /// </summary>
+        private static int IndexOfEscapable(roschar value)
+        {
+#if NET8_0_OR_GREATER
+            return value.IndexOfAny(Escapables);
+#else
+            return MemoryExtensions.IndexOfAny(value, "<>&\"\r\n\t".AsSpan());
+#endif
         }
 
         private static string? ReplacementOrNull(char c)

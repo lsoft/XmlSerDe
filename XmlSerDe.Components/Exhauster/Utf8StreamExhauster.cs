@@ -14,7 +14,7 @@ namespace XmlSerDe.Components.Exhauster
     /// Сюда порции копируются, пока не наберётся <see cref="BufferSize"/>;
     /// кусок не короче буфера уходит в поток напрямую, без второго копирования.
     /// </summary>
-    public class Utf8StreamExhauster : Utf8BinaryExhauster, IDisposable
+    public sealed class Utf8StreamExhauster : Utf8BinaryExhauster, IDisposable
     {
         public const int BufferSize = 16 * 1024;
 

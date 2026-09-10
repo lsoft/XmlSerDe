@@ -480,9 +480,14 @@ namespace XmlSerDe.Compat
                     );
             }
 
-            using var utf8 = new Utf8StreamExhauster(stream);
-            utf8.Append(Utf8XmlDeclaration);
-            _entry.Serialize(utf8, o, false);
+            using (var utf8 = new Utf8StreamExhauster(stream))
+            {
+                utf8.Append(Utf8XmlDeclaration);
+                _entry.Serialize(utf8, o, false);
+            }
+
+            //сток выталкивает своё в поток, а сам поток не сбрасывает; BCL сбрасывает
+            stream.Flush();
         }
 
         /// <summary>
@@ -526,8 +531,20 @@ namespace XmlSerDe.Compat
                 return XmlDeclarationHead + "?>";
             }
 
+            //две ходовые кодировки - без конкатенации на каждый вызов
+            if (encoding is UTF8Encoding)
+            {
+                return Utf8XmlDeclaration;
+            }
+            if (encoding is UnicodeEncoding && encoding.WebName == "utf-16")
+            {
+                return Utf16XmlDeclaration;
+            }
+
             return XmlDeclarationHead + " encoding=\"" + encoding.WebName + "\"?>";
         }
+
+        private const string Utf16XmlDeclaration = XmlDeclarationHead + " encoding=\"utf-16\"?>";
 
         /// <summary>
         /// <see cref="System.Xml.Serialization.XmlSerializer"/> отключить объявление
@@ -623,7 +640,9 @@ namespace XmlSerDe.Compat
                 root, ReadOnlySpan<char>.Empty, ref head
                 );
 
-            if (head.IsBodyless && head.IsNil())
+            //xsi:nil="true" - это null и у <T></T>, и у <T>  </T>, а не только у <T/>:
+            //BCL пропускает содержимое такого элемента и возвращает null
+            if (head.IsNil())
             {
                 return null;
             }
@@ -652,8 +671,15 @@ namespace XmlSerDe.Compat
                 //Encoding читается внутри try намеренно: у BCL обращение к свойству
                 //стока тоже происходит внутри его собственного try, и своё исключение
                 //самодельный TextWriter отдаст завёрнутым, а не голым
-                using var exhauster = CreatePooledChar(o, BuildXmlDeclaration(textWriter.Encoding));
-                exhauster.WriteTo(textWriter);
+                using (var exhauster = CreatePooledChar(o, BuildXmlDeclaration(textWriter.Encoding)))
+                {
+                    exhauster.WriteTo(textWriter);
+                }
+
+                //BCL завершает запись XmlWriter.Flush(), а тот сбрасывает TextWriter
+                //и поток под StreamWriter. Без этого Serialize(new StreamWriter(stream), o)
+                //оставлял поток пустым
+                textWriter.Flush();
             }
             catch (Exception e)
             {
@@ -721,15 +747,10 @@ namespace XmlSerDe.Compat
 
             try
             {
-                //поток чужой, закрывать его нельзя: leaveOpen оставляет его открытым
-                using var reader = new StreamReader(
-                    stream,
-                    Encoding.UTF8,
-                    detectEncodingFromByteOrderMarks: true,
-                    bufferSize: 1024,
-                    leaveOpen: true
-                    );
-                using var text = PooledCharText.ReadAll(reader);
+                //кодировку выбирает сам документ - BOM, порядок первых байтов или
+                //объявление <?xml encoding=?>, - как у XmlTextReader; поток чужой,
+                //и закрывать его нельзя
+                using var text = PooledCharText.ReadAll(stream);
                 return DeserializeFast(text.Span);
             }
             catch (Exception e)
@@ -870,7 +891,7 @@ namespace XmlSerDe.Compat
 
             var declaredNamespaces = RebuildNamespaces(typed.DeclaredNamespaces);
 
-            if (!_accelerated || declaredNamespaces is not null || o is null)
+            if (!_accelerated || declaredNamespaces is not null || o is null || !CanWriteRaw(xmlWriter))
             {
                 //пространства имён приходится собирать заново: до виртуального метода
                 //доходит уже разобранный базовым классом список, а не тот объект,
@@ -879,19 +900,61 @@ namespace XmlSerDe.Compat
                 return;
             }
 
-            //объявление <?xml?> здесь уже написал сам XmlWriter, второе было бы
-            //нарушением формата
+            //как XmlSerializationWriter.WriteStartDocument у BCL: объявление <?xml?>
+            //пишет сам XmlWriter, но только если его об этом попросить, пока он в
+            //состоянии Start. ConformanceLevel.Auto сам его не напишет, а второе
+            //объявление поверх уже написанного было бы нарушением формата
+            if (xmlWriter.WriteState == WriteState.Start)
+            {
+                xmlWriter.WriteStartDocument();
+            }
+
             using var exhauster = CreatePooledChar(o, xmlDeclaration: null);
             exhauster.WriteRawTo(xmlWriter);
         }
 
         /// <summary>
+        /// Сырой текст в писатель проходит только тогда, когда его кодировка
+        /// вмещает любой символ. В ASCII-писатель BCL пишет <c>&amp;#xE9;</c>, а
+        /// <c>WriteRaw("é")</c> туда не пройдёт вовсе - такой вызов уходит штатному
+        /// сериализатору. У <see cref="XmlTextWriter"/> настроек нет, и его
+        /// кодировка на слово принимается за полную.
+        /// </summary>
+        private static bool CanWriteRaw(XmlWriter xmlWriter)
+        {
+            var encoding = xmlWriter.Settings?.Encoding;
+            return encoding is null
+                || encoding is UTF8Encoding
+                || encoding is UnicodeEncoding
+                || encoding is UTF32Encoding;
+        }
+
+        /// <summary>
         /// Возвращает null, если вызывающий пространств имён не передавал, - именно
         /// это и означает "быстрый путь допустим".
+        ///
+        /// Пустого списка здесь не бывает: когда вызывающий не передал ничего,
+        /// базовый класс подставляет свои <c>xsi</c> и <c>xsd</c>. Ровно этот набор
+        /// и означает "ничего"; всё остальное - чужие объявления.
         /// </summary>
         private static XmlSerializerNamespaces? RebuildNamespaces(System.Collections.ArrayList? declared)
         {
             if (declared is null || declared.Count == 0)
+            {
+                return null;
+            }
+
+            var onlyDefaults = true;
+            foreach (var item in declared)
+            {
+                if (item is XmlQualifiedName qualified && !IsDefaultNamespace(qualified))
+                {
+                    onlyDefaults = false;
+                    break;
+                }
+            }
+
+            if (onlyDefaults)
             {
                 return null;
             }
@@ -906,6 +969,12 @@ namespace XmlSerDe.Compat
             }
 
             return result;
+        }
+
+        private static bool IsDefaultNamespace(XmlQualifiedName qualified)
+        {
+            return (qualified.Name == "xsi" && qualified.Namespace == "http://www.w3.org/2001/XMLSchema-instance")
+                || (qualified.Name == "xsd" && qualified.Namespace == "http://www.w3.org/2001/XMLSchema");
         }
 
         protected override XmlSerializationReader CreateReader()

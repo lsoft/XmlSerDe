@@ -32,6 +32,17 @@ namespace XmlSerDe.Tests
                 .ToList();
         }
 
+        /// <summary>
+        /// Имя сгенерированного файла - полное имя хоста (<c>Sample.Host.g.cs</c>):
+        /// иначе два одноимённых хоста из разных пространств имён сливались в один
+        /// файл. Тесты по-прежнему называют хост коротко.
+        /// </summary>
+        public static bool IsHint(string hintName, string shortName)
+        {
+            return hintName.Equals(shortName, StringComparison.Ordinal)
+                || hintName.EndsWith("." + shortName, StringComparison.Ordinal);
+        }
+
         public sealed class StrictOptionsProvider : AnalyzerConfigOptionsProvider
         {
             private readonly AnalyzerConfigOptions _options;

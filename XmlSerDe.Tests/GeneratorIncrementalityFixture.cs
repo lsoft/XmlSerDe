@@ -370,7 +370,7 @@ namespace Sample
         private static string HostFile(GeneratorDriverRunResult result)
         {
             var source = result.Results.Single().GeneratedSources
-                .Single(s => s.HintName.Equals("Host.g.cs", StringComparison.Ordinal));
+                .Single(s => GeneratorHarness.IsHint(s.HintName, "Host.g.cs"));
 
             return source.SourceText.ToString();
         }
