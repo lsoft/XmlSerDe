@@ -22,13 +22,13 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # SourceLink кладёт в символы ссылку на коммит; без полной истории
           # она получается неверной
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
@@ -60,7 +60,7 @@ jobs:
       # Артефакт прогона на публичном репозитории может скачать кто угодно -
       # это не публикация в фид, но пакет всё же оказывается доступен наружу.
       # Полезно для проверки сборки до выпуска; убирается удалением этого шага.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: packages
           path: artifacts/packages/*
