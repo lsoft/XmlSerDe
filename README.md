@@ -158,37 +158,32 @@ Three document shapes:
 
 **Deserialization allocates the object graph, and only the object graph.** 792 B on REGULAR under .NET 10 is the resulting objects — the same property DEEP has, where all 3272 B are the 100 nodes plus their payload string. `Gen0` and `Gen1` tell the part `Allocated` cannot: XmlSerDe triggers no gen1 collection in any of the six REGULAR/DEEP pairs; `System.Xml` triggers one in all six, because its intermediate reader state outlives the gen0 collection that its own allocation rate provokes. Nothing XmlSerDe allocates survives long enough to be promoted — what is left is the object graph, and the caller is still holding that.
 
-Two sources of waste were removed to get there, both found by decomposing an allocation figure rather than by reading code (`GC.GetAllocatedBytesForCurrentThread` deltas around a single warmed-up call, which agree with BenchmarkDotNet to the byte):
+That holds because neither of the two places where a serializer usually leaks bytes allocates here. Both are measured by decomposing an allocation figure rather than by reading code — `GC.GetAllocatedBytesForCurrentThread` deltas around a single warmed-up call, which agree with BenchmarkDotNet to the byte.
 
-| | Before | After |
-|---|---:|---:|
-| A member with entity references | 232 B | **104 B** |
-| A member with two CDATA sections | 384 B | **176 B** |
-| REGULAR document, whole deserialize | 1144 B | **808 B** |
+**Text with entity references or CDATA is decoded without an intermediate string.** `XmlTextDecoder` expands references and CDATA straight out of the span into a buffer — stack below 256 chars, `ArrayPool` above — and materializes exactly once, into the string the POCO keeps. The obvious alternative, handing the body to `WebUtility.HtmlDecode`, costs a `string` per text body that exists only to be passed in and thrown away; on REGULAR that is 336 bytes on top of the 792 the graph itself costs, none of which reach the result.
 
-`WebUtility.HtmlDecode` takes a `string`, so every text body containing a reference had to be materialized just to be handed over and thrown away — 336 of 1144 bytes on REGULAR, 29%, that never reached the result. `XmlTextDecoder` expands references and CDATA straight out of the span into a buffer (stack below 256 chars, `ArrayPool` above) and materializes exactly once. The current REGULAR row is 792 B; the 808 B figure is the graph-only floor that investigation landed on.
+| | Allocated |
+|---|---:|
+| A member with entity references | 104 B |
+| A member with two CDATA sections | 176 B |
+| REGULAR document, whole deserialize | 792 B |
 
-Array members were accumulated in a `List<T>` and copied out with `ToArray()`, costing the list object, its backing array, another array per doubling, and finally the result. `PooledArrayBuilder<T>` takes the intermediate buffers from `ArrayPool<T>`:
+**An array member allocates the array and nothing else.** `PooledArrayBuilder<T>` takes its intermediate buffers from `ArrayPool<T>`, so nothing but the result survives the call. Accumulating into a `List<T>` and copying out with `ToArray()` would cost the list object, its backing array, another array per doubling, and then the result:
 
-| Member | Before | After | The result itself |
+| Member | Allocated | The result itself | Via `List<T>` + `ToArray()` |
 |---|---:|---:|---:|
-| `int[1]` | 128 B | **56 B** | 32 B + 24 B for the POCO |
-| `int[10]` | 304 B | **88 B** | 64 B + 24 B |
-| `int[100]` | 1632 B | **448 B** | 424 B + 24 B |
-| `int[1000]` | 12472 B | **4048 B** | 4024 B + 24 B |
+| `int[1]` | **56 B** | 32 B + 24 B for the POCO | 128 B |
+| `int[10]` | **88 B** | 64 B + 24 B | 304 B |
+| `int[100]` | **448 B** | 424 B + 24 B | 1632 B |
+| `int[1000]` | **4048 B** | 4024 B + 24 B | 12472 B |
 
-The "after" column is exactly the array plus the object holding it: the overhead is not reduced but gone. Neither REGULAR nor DEEP has an array member, so this does not appear in those tables — it was measured directly. HUGE does, and the 100 MB deserialize still allocates ~100 MB because that *is* the graph.
+The allocated column is exactly the array plus the object holding it: the overhead is not reduced, it is gone. Neither REGULAR nor DEEP has an array member, so this does not appear in those tables — it was measured directly. HUGE does, and the 100 MB deserialize still allocates ~100 MB because that *is* the graph.
 
-**DEEP is in the suite to keep the parser single-pass.** Depth must not multiply work, and that property is easy to lose without noticing. An earlier design measured each node by parsing its entire subtree and discarding the result, so the subtree of a node at depth *d* was re-walked once per ancestor: 26% faster than `System.Xml` at depth 6 and **9.4× slower** at depth 100, with 110 head scans per deserialize of a 26-element document — 78 of them only to skip over subtrees — and total character traffic 3.4× the document length. The benchmark exists so that a regression of that shape shows up as a number here rather than as a bug report from someone with deeply nested data.
+**DEEP is in the suite to keep the parser single-pass.** Depth must not multiply work, and that property is easy to lose without noticing: any design that learns where a node ends by parsing its subtree re-walks that subtree once per ancestor, which is quadratic in depth and looks perfectly reasonable in code review. It shows up as a ratio that grows with nesting — DEEP at **0.18** against REGULAR at **0.23** is the shape to expect when nothing multiplies — so a regression of that kind surfaces as a number here rather than as a bug report from someone with deeply nested data.
 
-| Category | Ratio, that design | Ratio now |
-|----------|-------------:|----------:|
-| DEEP     | 9.39         | **0.18**  |
-| REGULAR  | 0.74         | **0.23**  |
+What makes it single-pass: generated `DeserializeBody` methods report how much input they consumed, `XmlScan.ReadHead` reads one tag head and never descends, and an unbound element is skipped by a cheap quote-aware tag-balance count instead of being fully parsed. `XmlNode2` is the public node-oriented API and is deliberately off that path. The design, the counters behind it and the measurements are in [docs/perf-single-pass-parser.md](docs/perf-single-pass-parser.md) and [docs/perf-redundant-head-scans.md](docs/perf-redundant-head-scans.md). Both also document the benchmarking methodology — including why an A/B switch must be a `static readonly` field read from an environment variable (a plain mutable `static bool` breaks inlining and distorted an entire run by ~1 µs).
 
-What makes it single-pass: generated `DeserializeBody` methods report how much input they consumed, `XmlScan.ReadHead` reads one tag head and never descends, and an unbound element is skipped by a cheap quote-aware tag-balance count instead of being fully parsed. `XmlNode2` remains as the public node-oriented API but is off the hot path. The analysis, the counters and the design are in [docs/perf-single-pass-parser.md](docs/perf-single-pass-parser.md); the earlier investigation that first identified the multiplier is in [docs/perf-redundant-head-scans.md](docs/perf-redundant-head-scans.md). Both also document the benchmarking methodology — including why an A/B switch must be a `static readonly` field read from an environment variable (a plain mutable `static bool` breaks inlining and distorted an entire run by ~1 µs).
-
-Two parsing behaviours follow from that design, and both were bugs in the previous one: a self-closing child does not end the sibling loop (`GetFirstLength` returned length 0 for a bodyless node, which the generated loop read as "no more children", silently dropping everything after `<Foo/>`), and a polymorphic member is now dispatched by member name first and `xsi:type` second.
+Two parsing behaviours follow from that design: a self-closing child does not end the sibling loop — a bodyless node has no body length, and a loop that reads that as "no more children" silently drops everything after `<Foo/>` — and a polymorphic member is dispatched by member name first, `xsi:type` second.
 
 **HUGE deserialize is the graph at scale.** Under .NET 10 the ratio is 0.38, not 0.23, because the work is dominated by constructing ~100 MB of objects rather than by scanning tags. Allocation 0.39 is the same story: `System.Xml` still pays for the reader and the intermediate tree; XmlSerDe pays for the POCOs. Under .NET Framework the ratio is **0.93** — that row used to be the one place where XmlSerDe lost on time (1.04 in the previous snapshot) and is now a narrow win, while Alloc Ratio stays 0.41. It is still the weakest deserialize row on the page, and for the same reason it always was: the `#else` branches must `ToString()` every number and date before `Parse`, and on a document that size those strings add up in time even when they do not double the heap.
 
@@ -945,7 +940,7 @@ Already-seen names are kept as `(offset, length)` pairs in a `stackalloc Span<in
 
 Two honest notes about this table:
 
-- the full set on REGULAR is **~1.25×**, not the "5–10%" that `docs/opt-in-xml-guards.md` §3 estimated before the work, and two thirds of that is `UniqueAttributes` alone. The estimate assumed heads with short attributes; REGULAR's heads carry a 41-character namespace URI, and enumerating the attributes means stepping over it. It is still nowhere near the 2× that would mean a forbidden full document scan, and a document with no attributes (DEEP) pays nothing;
+- the full set on REGULAR is **~1.25×**, not the "5–10%" that `docs/opt-in-xml-guards.md` §3 estimates, and two thirds of that is `UniqueAttributes` alone. The estimate assumed heads with short attributes; REGULAR's heads carry a 41-character namespace URI, and enumerating the attributes means stepping over it. It is still nowhere near the 2× that would mean a forbidden full document scan, and a document with no attributes (DEEP) pays nothing;
 - the numbers are ratios measured **inside one round-robin**. Absolute times drift several percent between processes on this machine, so a cross-process A/B of the default host is not evidence of anything — which is exactly why the always-on attribute check and the scalar closing-tag check are not in this table.
 
 ### Cost of the attribute path
@@ -971,7 +966,7 @@ Medians of six runs per build, ranges non-overlapping at both steps (8996–9506
 
 **The `xsi:type` filter.** On a type with **no derived types** an `xsi:type` attribute cannot dispatch anything: it can only repeat the type's own name or be an error, so in real documents it is simply absent — and the lookup walked the whole head to discover that. The generator emits a filtered accessor for such types, checking `IndexOf("xsi:type")` first. QNames admit no breaks, so "no substring" proves "no such attribute"; a false positive (the substring inside somebody else's value) falls through to the same honest parse, which is why the observable result is unchanged rather than nearly unchanged. A type **with** derived types keeps the unfiltered accessor on purpose: there the attribute is usually present, the filter would find it, and the parse would read the head a second time — about 2% on documents that actually use polymorphism.
 
-**The attribute loop.** A type with two or more `[XmlAttribute]` members now parses its head once and hands each attribute to whichever member claims it, instead of searching per member. A type with exactly one keeps the addressed search: that one stops at the attribute it wants, while the loop always runs to the end of the head, so merging there would be a loss. Duplicate names still resolve to the first occurrence — `id="1" id="2"` is not well-formed and `UniqueAttributes` refuses it, but a host without that guard must keep behaving as before rather than silently start taking the last.
+**The attribute loop.** A type with two or more `[XmlAttribute]` members parses its head once and hands each attribute to whichever member claims it, instead of searching per member. A type with exactly one keeps the addressed search: that one stops at the attribute it wants, while the loop always runs to the end of the head, so merging there would be a loss. Duplicate names still resolve to the first occurrence — `id="1" id="2"` is not well-formed and `UniqueAttributes` refuses it, but a host without that guard must keep behaving as before rather than silently start taking the last.
 
 Both choices are made at generation time, and neither axis is a feature flag: one is a fact about the type graph, the other about how many attribute members the type declares. So they are parameters of the emitter, not new `XmlFeature` values, and the generated host still contains no branch on either.
 
