@@ -34,7 +34,7 @@
 using System;
 using roschar = System.ReadOnlySpan<char>;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe
 {
     public abstract class InjectorBase : IInjector
     {

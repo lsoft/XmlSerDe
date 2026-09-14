@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe.Internal
 {
     /// <summary>
     /// Лексические формы, в которых <c>System.Xml.Serialization</c> пишет
@@ -19,6 +19,7 @@ namespace XmlSerDe.Common
     /// у нуля - <c>PT0S</c>, у отрицательной - ведущий минус.</item>
     /// </list>
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class XmlNumberLexis
     {
         public const string NaN = "NaN";

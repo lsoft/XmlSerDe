@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
 using Xunit;
 
 namespace XmlSerDe.Tests

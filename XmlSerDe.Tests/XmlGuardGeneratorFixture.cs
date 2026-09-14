@@ -50,8 +50,8 @@ namespace Sample
         public void DefaultHost_OmitsEveryGuardPrimitive()
         {
             var host = RunHost(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -78,8 +78,8 @@ namespace Sample
         public void GuardNone_IsTextuallyIdenticalToNoAttribute()
         {
             var without = RunHost(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -92,8 +92,8 @@ namespace Sample
 ", "Host.g.cs");
 
             var none = RunHost(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -113,8 +113,8 @@ namespace Sample
         public void SingleRootHost_CallsTailCheckAndWraps()
         {
             var host = RunHost(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -143,8 +143,8 @@ namespace Sample
         public void MatchingEndTagsHost_PassesExpectedNameAndChecksBothEnds()
         {
             var host = RunHost(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -178,8 +178,8 @@ namespace Sample
         public void SingleRootHost_WithMarkup_CallsMiscAwareTailCheck()
         {
             var host = RunHost(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -201,11 +201,64 @@ namespace Sample
         /// отличие такого хоста от default - форма исключения.
         /// </summary>
         [Fact]
+        public void ForeignRootNamespaceHost_ChecksRootHeadOnlyOnce()
+        {
+            var host = RunHost(@"
+using XmlSerDe;
+using XmlSerDe.Internal;
+
+namespace Sample
+{
+    [XmlExhauster(typeof(StringBuilderExhauster))]
+    [XmlGuards(XmlGuard.ForeignRootNamespace)]
+    [XmlSubject(typeof(Node), true)]
+    public partial class NsHost
+    {
+    }
+}
+", "NsHost.g.cs");
+
+            //ровно один вызов: проверка живёт на корне. На каждом элементе она
+            //стоила бы столько же, сколько сам разбор головы, а ловила бы то,
+            //чего страж и не обещает
+            var count = 0;
+            var index = 0;
+            while ((index = host.IndexOf("EnsureNoForeignRootNamespace", index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += "EnsureNoForeignRootNamespace".Length;
+            }
+
+            Assert.Equal(1, count);
+        }
+
+        [Fact]
+        public void OtherGuardHost_DoesNotCheckRootNamespace()
+        {
+            var host = RunHost(@"
+using XmlSerDe;
+using XmlSerDe.Internal;
+
+namespace Sample
+{
+    [XmlExhauster(typeof(StringBuilderExhauster))]
+    [XmlGuards(XmlGuard.UniqueAttributes)]
+    [XmlSubject(typeof(Node), true)]
+    public partial class OtherHost
+    {
+    }
+}
+", "OtherHost.g.cs");
+
+            Assert.DoesNotContain("EnsureNoForeignRootNamespace", host, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void OtherGuardHost_DoesNotCheckTail()
         {
             var host = RunHost(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -225,7 +278,7 @@ namespace Sample
             //свой примитив на месте, и он под проверкой HasAttributes: голова
             //без атрибутов за этот флаг не платит
             Assert.Contains(
-                "if(xmlNode.HasAttributes) global::XmlSerDe.Common.XmlScan.EnsureUniqueAttributes(",
+                "if(xmlNode.HasAttributes) global::XmlSerDe.Internal.XmlScan.EnsureUniqueAttributes(",
                 host,
                 StringComparison.Ordinal
                 );
@@ -240,8 +293,8 @@ namespace Sample
         public void IllegalCharsHost_ChecksStringsAfterParse()
         {
             var host = RunHost(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -267,8 +320,8 @@ namespace Sample
         public void GeneratedText_MentionsNeitherEnumNorHasFlag()
         {
             var host = RunHost(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -293,8 +346,8 @@ namespace Sample
         public void Compat_GetsFullSet_NativeHostStaysUntouched()
         {
             const string HostSource = @"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {

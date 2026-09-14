@@ -103,6 +103,158 @@ namespace XmlSerDe.Tests.Compat
             Assert.Equal(3, back.After);
         }
 
+        #region состав членов: наш отбор против отбора System.Xml.Serialization
+
+        /// <summary>
+        /// Дыра, ради которой заведён <c>CompatMemberProbe</c>, и проверяется она
+        /// так же, как всё остальное здесь, - эталоном служит настоящий
+        /// <see cref="BclXmlSerializer"/> на том же входе.
+        ///
+        /// <c>init</c>-свойство он пишет и читает; генератор его пропускает.
+        /// Пока пропуск члена и отказ от типа были независимы, тип отчитывался
+        /// ускоренным, а <c>Y</c> терялся в обе стороны молча. Теперь отказ,
+        /// и документ фасада обязан совпасть с документом BCL.
+        /// </summary>
+        [Fact]
+        public void InitOnlyMember_FallsBackAndKeepsTheValue_Test()
+        {
+            var serializer = new XmlSerializer(typeof(CompatInitSubject));
+
+            Assert.False(serializer.IsAccelerated, "init-свойство генератор присвоить не может");
+
+            var subject = new CompatInitSubject { Z = 1, Y = 42, };
+
+            var writer = new StringWriter();
+            serializer.Serialize(writer, subject);
+            var xml = writer.ToString();
+
+            var bclWriter = new StringWriter();
+            new BclXmlSerializer(typeof(CompatInitSubject)).Serialize(bclWriter, subject);
+
+            Assert.Equal(bclWriter.ToString(), xml);
+            Assert.Contains("<Y>42</Y>", xml, StringComparison.Ordinal);
+
+            var back = (CompatInitSubject)serializer.Deserialize(new StringReader(xml));
+
+            Assert.Equal(1, back.Z);
+            Assert.Equal(42, back.Y);
+        }
+
+        /// <summary>
+        /// То же самое, но без нового синтаксиса: свойство без сеттера типа
+        /// <c>Collection&lt;T&gt;</c> BCL наполняет через <c>Add</c>, а генератор
+        /// так умеет только <c>List&lt;T&gt;</c>.
+        /// </summary>
+        [Fact]
+        public void FilledCollectionMember_FallsBackAndKeepsTheValues_Test()
+        {
+            var serializer = new XmlSerializer(typeof(CompatFilledCollectionSubject));
+
+            Assert.False(serializer.IsAccelerated, "Collection<T> генератор наполнять не умеет");
+
+            var subject = new CompatFilledCollectionSubject { Z = 1, };
+            subject.Items.Add(7);
+            subject.Items.Add(8);
+
+            var writer = new StringWriter();
+            serializer.Serialize(writer, subject);
+            var xml = writer.ToString();
+
+            Assert.Contains("<int>7</int>", xml, StringComparison.Ordinal);
+
+            var back = (CompatFilledCollectionSubject)serializer.Deserialize(new StringReader(xml));
+
+            Assert.Equal(1, back.Z);
+            Assert.Equal(new List<int> { 7, 8, }, back.Items);
+        }
+
+        /// <summary>
+        /// <c>internal</c>-член пропускают обе стороны, поэтому расхождения нет и
+        /// отказываться не от чего: тип остаётся ускоренным.
+        ///
+        /// Когда-то было иначе. Отбор членов выбрасывал только <c>private</c> и
+        /// <c>protected</c>, и <c>internal</c> уезжал в документ, которого у BCL на
+        /// том же типе нет; сверка составов это видела и отказывалась от типа
+        /// целиком. То есть особенность нативного пути стоила ускорения всякому
+        /// типу с одним internal-свойством. Чинить надо было отбор, а не сверку.
+        /// </summary>
+        [Fact]
+        public void InternalMember_IsSkippedByBothSides_StaysAccelerated_Test()
+        {
+            var serializer = new XmlSerializer(typeof(CompatInternalMemberSubject));
+
+            Assert.True(serializer.IsAccelerated, "internal-член пропускают обе стороны, отказываться не от чего");
+
+            var subject = new CompatInternalMemberSubject { Z = 1, Hidden = 9, };
+
+            var writer = new StringWriter();
+            serializer.Serialize(writer, subject);
+            var xml = writer.ToString();
+
+            var bcl = new BclXmlSerializer(typeof(CompatInternalMemberSubject));
+            var bclWriter = new StringWriter();
+            bcl.Serialize(bclWriter, subject);
+            var bclXml = bclWriter.ToString();
+
+            //отсутствие члена снимается с обеих сторон: у BCL - чтобы было видно,
+            //что мы повторяем его решение, а не своё
+            Assert.DoesNotContain("Hidden", bclXml, StringComparison.Ordinal);
+            Assert.DoesNotContain("Hidden", xml, StringComparison.Ordinal);
+
+            //тексты у быстрого пути и у BCL не совпадают никогда (отступы и
+            //xmlns-объявления корня), поэтому сверяется читаемость в обе стороны
+            var ours = (CompatInternalMemberSubject)bcl.Deserialize(new StringReader(xml));
+            var theirs = (CompatInternalMemberSubject)serializer.Deserialize(new StringReader(bclXml));
+
+            Assert.Equal(1, ours.Z);
+            Assert.Equal(1, theirs.Z);
+            Assert.Equal(0, ours.Hidden);
+            Assert.Equal(0, theirs.Hidden);
+        }
+
+        /// <summary>
+        /// Главный предохранитель: сверка составов обязана молчать там, где наш
+        /// пропуск совпадает с пропуском BCL. Иначе правка «отказываться от
+        /// пропущенных членов» унесла бы с собой почти всякий настоящий POCO -
+        /// свойство без сеттера и <c>readonly</c>-поле есть чуть ли не в каждом.
+        /// </summary>
+        [Fact]
+        public void SkipsThatMatchBcl_StayAccelerated_Test()
+        {
+            var serializer = new XmlSerializer(typeof(CompatMatchingSkipSubject));
+
+            Assert.True(serializer.IsAccelerated, "эти пропуски совпадают с пропусками BCL, отказывать не за что");
+
+            var subject = new CompatMatchingSkipSubject { Z = 1, };
+            subject.Filled.Add(4);
+
+            var writer = new StringWriter();
+            serializer.Serialize(writer, subject);
+            var xml = writer.ToString();
+
+            //эталон - состав документа у самого BCL: он эти члены тоже не пишет.
+            //Побайтово сравнивать нечего - быстрый путь пишет без отступов и без
+            //объявлений пространств имён, и это отдельное, давно проверенное решение
+            var bclWriter = new StringWriter();
+            new BclXmlSerializer(typeof(CompatMatchingSkipSubject)).Serialize(bclWriter, subject);
+            var bclXml = bclWriter.ToString();
+
+            Assert.DoesNotContain("ReadOnlyString", bclXml, StringComparison.Ordinal);
+            Assert.DoesNotContain("ReadOnlyNumber", bclXml, StringComparison.Ordinal);
+            Assert.Contains("<int>4</int>", bclXml, StringComparison.Ordinal);
+
+            Assert.DoesNotContain("ReadOnlyString", xml, StringComparison.Ordinal);
+            Assert.DoesNotContain("ReadOnlyNumber", xml, StringComparison.Ordinal);
+            Assert.Contains("<int>4</int>", xml, StringComparison.Ordinal);
+
+            var back = (CompatMatchingSkipSubject)serializer.Deserialize(new StringReader(xml));
+
+            Assert.Equal(1, back.Z);
+            Assert.Equal(new List<int> { 4, }, back.Filled);
+        }
+
+        #endregion
+
         /// <summary>
         /// Граф глубже одного типа: в точке вызова назван только
         /// <see cref="CompatHolder"/>, а сгенерировать пришлось и ребёнка,
@@ -1200,9 +1352,9 @@ namespace XmlSerDe.Tests.Compat
             Assert.Equal(7, p3.Child.Number);
             Assert.Equal("t", p3.Child.Title);
 
-            Assert.Throws<XmlSerDe.Common.XmlDocumentException>(
+            Assert.Throws<XmlSerDe.XmlDocumentException>(
                 () => XmlSerDe.Tests.XmlSerializerDeserializer2.Deserialize(
-                    XmlSerDe.Components.Injector.DefaultInjector.Instance,
+                    XmlSerDe.DefaultInjector.Instance,
                     "<XmlObject2><IntProperty>1</IntProperty><StringProperty><![CDATA[x]]></StringProperty></XmlObject2>".AsSpan(),
                     out XmlSerDe.Tests.XmlObject2 _
                     )

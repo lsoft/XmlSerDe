@@ -54,7 +54,7 @@ namespace XmlSerDe.Generator.Helper
                 throw new ArgumentNullException(nameof(compilation));
             }
 
-            var result = compilation.GetTypeByMetadataName("XmlSerDe.Components.Injector.DefaultInjector");
+            var result = compilation.GetTypeByMetadataName("XmlSerDe.DefaultInjector");
 
             if (result is null)
             {
@@ -73,7 +73,7 @@ namespace XmlSerDe.Generator.Helper
                 throw new ArgumentNullException(nameof(compilation));
             }
 
-            var result = compilation.GetTypeByMetadataName("XmlSerDe.Components.Exhauster.StringBuilderExhauster");
+            var result = compilation.GetTypeByMetadataName("XmlSerDe.StringBuilderExhauster");
 
             if (result is null)
             {
@@ -92,7 +92,7 @@ namespace XmlSerDe.Generator.Helper
                 throw new ArgumentNullException(nameof(compilation));
             }
 
-            var result = compilation.GetTypeByMetadataName("XmlSerDe.Components.Exhauster.PooledCharExhauster");
+            var result = compilation.GetTypeByMetadataName("XmlSerDe.PooledCharExhauster");
 
             if (result is null)
             {
@@ -111,7 +111,7 @@ namespace XmlSerDe.Generator.Helper
                 throw new ArgumentNullException(nameof(compilation));
             }
 
-            var result = compilation.GetTypeByMetadataName("XmlSerDe.Components.Exhauster.LengthEstimatorExhauster");
+            var result = compilation.GetTypeByMetadataName("XmlSerDe.LengthEstimatorExhauster");
 
             if (result is null)
             {
@@ -130,7 +130,7 @@ namespace XmlSerDe.Generator.Helper
                 throw new ArgumentNullException(nameof(compilation));
             }
 
-            var result = compilation.GetTypeByMetadataName("XmlSerDe.Components.Exhauster.Utf8StreamExhauster");
+            var result = compilation.GetTypeByMetadataName("XmlSerDe.Utf8StreamExhauster");
 
             if (result is null)
             {

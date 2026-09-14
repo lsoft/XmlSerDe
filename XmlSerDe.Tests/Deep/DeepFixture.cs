@@ -3,8 +3,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Xml.Serialization;
-using XmlSerDe.Components.Exhauster;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
 using XmlSerDe.Tests.Deep.Subject;
 using Xunit;
 
@@ -158,7 +157,7 @@ namespace XmlSerDe.Tests.Deep
                 );
             AssertChain(
                 Deserialize_XmlSerDe(
-                    global::XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                    global::XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(
                         bySystemXml.AsSpan()
                         )
                     )

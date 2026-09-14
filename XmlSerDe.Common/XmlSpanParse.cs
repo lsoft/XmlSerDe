@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe.Internal
 {
     /// <summary>
     /// Разбор лексических форм из спана там, где на netstandard2.0 нет
@@ -9,6 +9,7 @@ namespace XmlSerDe.Common
     /// <c>Parse(..., NumberStyles.Integer, InvariantCulture)</c> и
     /// <see cref="bool.Parse(string)"/>: те же исключения по типу, не по тексту.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class XmlSpanParse
     {
         public static bool ParseBoolean(ReadOnlySpan<char> body)

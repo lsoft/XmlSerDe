@@ -1,8 +1,9 @@
 using System;
 using System.Runtime.CompilerServices;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
-namespace XmlSerDe.Components.Exhauster
+namespace XmlSerDe.Internal
 {
     /// <summary>
     /// Длина лексической формы без построения строки. DateTime - формат писателя
@@ -11,6 +12,7 @@ namespace XmlSerDe.Components.Exhauster
     /// Потолок этой формы - 33 (Local + семь знаков дроби), не 28: 28 - это UTC
     /// с полной дробью, без смещения зоны.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class XmlLexicalLength
     {
         public const string DateTimeFormat = "yyyy-MM-ddTHH:mm:ss.FFFFFFFK";

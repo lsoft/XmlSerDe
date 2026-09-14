@@ -1,4 +1,5 @@
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerDe.Generator.Producer;
 using Xunit;
 
@@ -101,8 +102,8 @@ namespace XmlSerDe.Tests
             var body = b.RootBodyStatement("    ", "CALL;");
 
             Assert.Contains("try", body);
-            Assert.Contains("catch (global::XmlSerDe.Common.XmlDocumentException exception)", body);
-            Assert.Contains("global::XmlSerDe.Common.XmlDocumentErrors.Wrap(exception);", body);
+            Assert.Contains("catch (global::XmlSerDe.XmlDocumentException exception)", body);
+            Assert.Contains("global::XmlSerDe.XmlDocumentErrors.Wrap(exception);", body);
             Assert.Contains("CALL;", body);
         }
 
@@ -112,13 +113,21 @@ namespace XmlSerDe.Tests
             var b = HostGuardBinding.From(XmlGuard.SystemXmlCompatible, XmlFeature.SystemXmlCompatible);
 
             Assert.Equal(
-                XmlGuard.MatchingEndTags | XmlGuard.SingleRoot | XmlGuard.UniqueAttributes | XmlGuard.IllegalChars,
+                XmlGuard.MatchingEndTags
+                    | XmlGuard.SingleRoot
+                    | XmlGuard.UniqueAttributes
+                    | XmlGuard.IllegalChars
+                    | XmlGuard.ForeignRootNamespace,
                 b.Guards
                 );
             Assert.Equal("out var bodyConsumed", b.RootBodyConsumedArgument);
             Assert.Contains(
                 nameof(XmlScan.EnsureNoTrailingContentMarkup),
                 b.RootTailStatement("    ", "fullNode", "xmlNode")
+                );
+            Assert.Contains(
+                nameof(XmlScan.EnsureNoForeignRootNamespace),
+                b.RootHeadStatement("    ", "xmlNode")
                 );
         }
     }

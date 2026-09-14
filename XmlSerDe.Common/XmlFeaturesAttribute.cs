@@ -1,6 +1,6 @@
 using System;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe
 {
     /// <summary>
     /// Opt-in XML constructions for a serializer host. Several attributes on

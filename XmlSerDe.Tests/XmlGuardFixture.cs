@@ -1,7 +1,7 @@
 using System;
 using System.Xml;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using Xunit;
 
 namespace XmlSerDe.Tests
@@ -705,6 +705,82 @@ namespace XmlSerDe.Tests
 
         #endregion
 
+        #region ForeignRootNamespace
+
+        /// <summary>
+        /// Единственное место, где мы <b>принимали</b> документ, который штатный
+        /// сериализатор отвергает: имена совпали текстуально, а <c>xmlns</c> для
+        /// нас просто неизвестный атрибут в голове. Тихий неверный успех - худший
+        /// исход из возможных, потому здесь страж.
+        /// </summary>
+        [Fact]
+        public void Default_ForeignRootNamespace_IsAccepted_Test()
+        {
+            //поведение по умолчанию не изменилось: страж чужой документ ловит,
+            //а хост без атрибута платить за это не должен
+            var result = ParseDefault(WithDefaultNamespace);
+
+            Assert.Equal("t", result.Title);
+        }
+
+        [Fact]
+        public void ForeignRootNamespace_DefaultNamespaceOnRoot_Throws_Test()
+        {
+            var inner = AssertForeignRootNamespaceFailure(WithDefaultNamespace);
+
+            Assert.Contains("urn:acme:orders", inner.Message, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// <c>xmlns=""</c> - законное «здесь пространства нет», и документ в нём
+        /// ровно тот же, что без объявления вовсе.
+        /// </summary>
+        [Fact]
+        public void ForeignRootNamespace_EmptyDeclaration_IsAccepted_Test()
+        {
+            ParseForeignRootNamespace(
+                WellFormed.Replace("<GuardSubject ", "<GuardSubject xmlns=\"\" ")
+                );
+        }
+
+        /// <summary>
+        /// Главный предохранитель: <c>xmlns:xsi</c> и <c>xmlns:xsd</c> штатный
+        /// сериализатор пишет на каждом документе. Страж, отказывающий по любому
+        /// объявлению, отверг бы всё, что BCL производит, - то есть ровно те
+        /// документы, ради которых совместимость и делается.
+        /// </summary>
+        [Fact]
+        public void ForeignRootNamespace_PrefixDeclarationsOfTheBcl_AreAccepted_Test()
+        {
+            ParseForeignRootNamespace(
+                WellFormed.Replace(
+                    "<GuardSubject ",
+                    "<GuardSubject xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
+                        + " xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" "
+                    )
+                );
+        }
+
+        /// <summary>
+        /// Предел стража, названный явно: объявление на вложенном элементе он не
+        /// видит. Честное сравнение имён требует стека областей видимости,
+        /// которого у однопроходного парсера нет, - это долг, а не недосмотр.
+        /// </summary>
+        [Fact]
+        public void ForeignRootNamespace_DeclarationBelowRoot_IsNotSeen_Test()
+        {
+            ParseForeignRootNamespace(
+                WellFormed.Replace("<Child>", "<Child xmlns=\"urn:acme:orders\">")
+                );
+        }
+
+        #endregion
+
+        private const string WithDefaultNamespace =
+            "<GuardSubject xmlns=\"urn:acme:orders\" id=\"1\"><Title>t</Title>"
+            + "<Child><Name>c</Name></Child>"
+            + "<Items><GuardChild><Name>i</Name></GuardChild></Items></GuardSubject>";
+
         private static GuardSubject ParseDefault(string xml)
         {
             GuardDefaultHost.Deserialize(
@@ -746,6 +822,26 @@ namespace XmlSerDe.Tests
                     xml.AsSpan(),
                     out GuardSubject _
                     )
+                );
+        }
+
+        private static XmlException AssertForeignRootNamespaceFailure(string xml)
+        {
+            return AssertGuardFailure(
+                () => GuardForeignRootNamespaceHost.Deserialize(
+                    DefaultInjector.Instance,
+                    xml.AsSpan(),
+                    out GuardSubject _
+                    )
+                );
+        }
+
+        private static void ParseForeignRootNamespace(string xml)
+        {
+            GuardForeignRootNamespaceHost.Deserialize(
+                DefaultInjector.Instance,
+                xml.AsSpan(),
+                out GuardSubject _
                 );
         }
 

@@ -1,0 +1,182 @@
+# Публикация пакетов на nuget.org.
+#
+# Два входа, оба требуют человека:
+#
+#   1) push в main, где изменилась версия в Directory.Build.props. Версия
+#      меняется правкой файла в коммите - то есть намерение выражено явно, а не
+#      выведено из тега, который легко поставить не на то.
+#   2) запуск вручную (workflow_dispatch) - для повторной попытки, если
+#      публикация упала на полпути.
+#
+# Оба ведут в job publish с environment: nuget-publish. Пока в настройках
+# репозитория у этого environment стоит required reviewer, каждый выпуск ждёт
+# нажатия «Approve» - то есть автоматика доводит до кнопки, а кнопку жмёт
+# человек. Это осознанный компромисс: версию на nuget.org нельзя переиздать и
+# нельзя по-настоящему удалить.
+#
+# Ключ не хранится в репозитории: политика trusted publishing на nuget.org
+# (owner lsoft, workflow publish.yml, environment nuget-publish) позволяет
+# обменять OIDC-токен прогона на временный ключ, живущий минуты. Секрет
+# NUGET_API_KEY остаётся запасным путём и не обязателен; если нет ни того, ни
+# другого, workflow падает на шаге push и ничего не отправляет.
+name: Publish
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Directory.Build.props'
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # Отдельный job без доступа к секретам: решает, менялась ли версия, и только.
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      changed: ${{ steps.read.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - id: read
+        shell: bash
+        run: |
+          version=$(sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' Directory.Build.props | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Версия в дереве: $version"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Ручной запуск: публикуем, если версии ещё нет на nuget.org"
+            exit 0
+          fi
+
+          previous=$(git show HEAD~1:Directory.Build.props 2>/dev/null | sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' | head -1 || true)
+          echo "Версия в предыдущем коммите: ${previous:-<нет>}"
+
+          if [ -z "$previous" ]; then
+            # Файла в предыдущем коммите не было вовсе - это первое его
+            # появление, а не смена версии: сравнивать не с чем, и считать это
+            # выпуском нельзя. Иначе коммит, который заводит саму упаковку,
+            # молча опубликовал бы первую версию.
+            #
+            # Первый настоящий выпуск делается руками через workflow_dispatch -
+            # ровно один раз, дальше работает сравнение версий.
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Предыдущей версии нет: файл появился в этом коммите, это не выпуск"
+          elif [ "$version" = "$previous" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Версия не менялась - публиковать нечего"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Версия изменилась: $previous -> $version"
+          fi
+
+  publish:
+    needs: decide
+    if: needs.decide.outputs.changed == 'true'
+    runs-on: windows-latest
+    # Ворота: настройте у этого environment required reviewer, и каждый выпуск
+    # будет ждать подтверждения. Без настройки job пойдёт сразу.
+    #
+    # Это же имя указывается в политике trusted publishing на nuget.org (поле
+    # Environment): тогда токен, выпущенный в прогоне без этого environment,
+    # не примут - вторые ворота поверх ревьюера.
+    environment: nuget-publish
+
+    permissions:
+      # обязательно для trusted publishing: без этого GitHub не выдаст OIDC-токен,
+      # и обмен на временный ключ nuget.org не состоится
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Build
+        run: dotnet build XmlSerDe.sln -c Release
+
+      - name: Test
+        run: dotnet test XmlSerDe.Tests/XmlSerDe.Tests.csproj -c Release --no-build
+
+      - name: Pack
+        run: |
+          dotnet pack XmlSerDe.Components/XmlSerDe.Components.csproj -c Release -o artifacts/packages -p:ContinuousIntegrationBuild=true
+          dotnet pack XmlSerDe.Compat/XmlSerDe.Compat.csproj -c Release -o artifacts/packages -p:ContinuousIntegrationBuild=true
+
+      # Пакет, не прошедший дымовой тест, публиковать нельзя: на nuget.org это
+      # уже не исправить, только выпустить следующую версию
+      - name: Smoke test the packages
+        shell: pwsh
+        run: ./eng/smoke-package.ps1
+
+      # Trusted publishing: OIDC-токен прогона меняется на временный ключ
+      # nuget.org, который живёт минуты и не хранится в репозитории вовсе.
+      # Долгоживущий секрет остаётся запасным путём - шаг помечен
+      # continue-on-error, поэтому пока политика не настроена, публикация просто
+      # уходит на NUGET_API_KEY.
+      #
+      # ВНИМАНИЕ: имя действия и его входы сверьте с документацией nuget.org -
+      # они могли измениться с момента, когда это писалось.
+      #
+      # user - владелец пакетов на nuget.org, от которого создана политика
+      # (lsoft, scope "Push new packages and package versions", glob XmlSerDe*).
+      # Переменная репозитория NUGET_USER, если она задана, перекрывает это
+      # значение - на случай, если учётную запись переименуют.
+      - name: NuGet login (trusted publishing)
+        id: nuget_login
+        continue-on-error: true
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER || 'lsoft' }}
+
+      # Сначала XmlSerDe, потом Compat, и это не косметика: Compat объявляет
+      # зависимость на точную версию XmlSerDe, и если он проиндексируется
+      # первым, у кого-то восстановление упадёт на несуществующей зависимости.
+      #
+      # --skip-duplicate делает шаг идемпотентным: если версия на nuget.org уже
+      # есть, push не падает, а тихо ничего не делает. Ровно это позволяет
+      # запускать workflow повторно после сбоя.
+      - name: Push
+        shell: pwsh
+        env:
+          NUGET_TEMP_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
+          NUGET_SECRET_KEY: ${{ secrets.NUGET_API_KEY }}
+          VERSION: ${{ needs.decide.outputs.version }}
+        run: |
+          if ($env:NUGET_TEMP_KEY) {
+            Write-Host 'Ключ получен обменом OIDC-токена (trusted publishing)'
+            $env:NUGET_API_KEY = $env:NUGET_TEMP_KEY
+          }
+          elseif ($env:NUGET_SECRET_KEY) {
+            Write-Host 'Trusted publishing не сработал, идём на секрет NUGET_API_KEY'
+            $env:NUGET_API_KEY = $env:NUGET_SECRET_KEY
+          }
+          else {
+            throw 'Ключа нет ни от trusted publishing, ни в секретах - публиковать нечем'
+          }
+
+          $source = 'https://api.nuget.org/v3/index.json'
+
+          dotnet nuget push "artifacts/packages/XmlSerDe.$env:VERSION.nupkg" --api-key $env:NUGET_API_KEY --source $source --skip-duplicate
+          if ($LASTEXITCODE -ne 0) { throw 'push XmlSerDe не удался' }
+
+          Write-Host 'Ждём индексации XmlSerDe, прежде чем отправлять зависящий от него Compat'
+          Start-Sleep -Seconds 60
+
+          dotnet nuget push "artifacts/packages/XmlSerDe.Compat.$env:VERSION.nupkg" --api-key $env:NUGET_API_KEY --source $source --skip-duplicate
+          if ($LASTEXITCODE -ne 0) { throw 'push XmlSerDe.Compat не удался' }

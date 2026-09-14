@@ -4,8 +4,8 @@
 //нужны System.MemoryExtensions и System.InvalidOperationException. Без этой строки
 //сборка падает на сгенерированном файле, а не на пользовательском.
 using System;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerDe.Tests.Interop.Subject;
 
 namespace XmlSerDe.Tests.Interop

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
 using XmlSerDe.Tests.Complex;
 using XmlSerDe.Tests.Complex.Subject;
 using XmlSerDe.Tests.Deep;
@@ -23,7 +23,7 @@ namespace XmlSerDe.PerformanceTests;
 ///    с прошлым прогоном.
 /// 2. сверка имени закрывающего тега у <b>скалярного</b> члена включена всем
 ///    и всегда (§5.7). Это открытый вопрос: если её цена выше шума, она
-///    переезжает под <see cref="XmlSerDe.Common.XmlGuard.MatchingEndTags"/>,
+///    переезжает под <see cref="XmlSerDe.XmlGuard.MatchingEndTags"/>,
 ///    и default станет быстрее сегодняшнего.
 /// </summary>
 internal static class GuardCostProbe
@@ -52,7 +52,7 @@ internal static class GuardCostProbe
     /// <summary>
     /// Тот же REGULAR, но каждая голова несёт ещё десяток атрибутов, которых
     /// хост не знает. Разбору они безразличны - он ищет свои по имени, -
-    /// а <see cref="XmlSerDe.Common.XmlGuard.UniqueAttributes"/> обязан
+    /// а <see cref="XmlSerDe.XmlGuard.UniqueAttributes"/> обязан
     /// пройти по всем.
     ///
     /// Строка нужна потому, что на POCO-голове с двумя атрибутами обе

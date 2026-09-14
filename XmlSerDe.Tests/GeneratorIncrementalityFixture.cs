@@ -32,8 +32,8 @@ namespace XmlSerDe.Tests
 
         private const string Host = @"
 using System;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerializer = XmlSerDe.Compat.XmlSerializer;
 
 namespace Sample
@@ -69,8 +69,8 @@ namespace Sample
 
         private const string HostWithCData = @"
 using System;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerializer = XmlSerDe.Compat.XmlSerializer;
 
 namespace Sample
@@ -96,8 +96,8 @@ namespace Sample
 
         private const string HostWithGuards = @"
 using System;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerializer = XmlSerDe.Compat.XmlSerializer;
 
 namespace Sample

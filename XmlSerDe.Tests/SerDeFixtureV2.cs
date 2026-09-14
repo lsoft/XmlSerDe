@@ -1,9 +1,8 @@
 using System;
 using System.IO;
 using System.Text;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerDe.Tests.Complex.Subject;
 using Xunit;
 
@@ -299,7 +298,7 @@ namespace XmlSerDe.Tests
             Assert.StartsWith("<?xml version=\"1.0\"", xml);
             Assert.Contains("<XmlObject1>", xml);
 
-            var body = Generator.Producer.BuiltinCodeHelper.CutXmlHead(xml.AsSpan());
+            var body = XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(xml.AsSpan());
             XmlSerializerDeserializer1.Deserialize(
                 DefaultInjector.Instance,
                 body,

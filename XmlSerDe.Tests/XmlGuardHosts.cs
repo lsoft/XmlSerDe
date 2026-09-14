@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Xml.Serialization;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace XmlSerDe.Tests
 {
@@ -76,6 +76,14 @@ namespace XmlSerDe.Tests
     [XmlSubject(typeof(GuardChild), false)]
     [XmlSubject(typeof(GuardSubject), true)]
     public partial class GuardIllegalCharsHost
+    {
+    }
+
+    [XmlGuards(XmlGuard.ForeignRootNamespace)]
+    [XmlExhauster(typeof(StringBuilderExhauster))]
+    [XmlSubject(typeof(GuardChild), false)]
+    [XmlSubject(typeof(GuardSubject), true)]
+    public partial class GuardForeignRootNamespaceHost
     {
     }
 

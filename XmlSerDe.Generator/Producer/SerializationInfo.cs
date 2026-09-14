@@ -2,7 +2,8 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.CodeAnalysis;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerDe.Generator.Helper;
 
 namespace XmlSerDe.Generator.Producer

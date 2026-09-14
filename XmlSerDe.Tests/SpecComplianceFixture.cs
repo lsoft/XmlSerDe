@@ -1,6 +1,6 @@
 using System;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using Xunit;
 using roschar = System.ReadOnlySpan<char>;
 
@@ -69,7 +69,7 @@ namespace XmlSerDe.Tests
         {
             XmlSerializerDeserializerMarkup.Deserialize(
                 DefaultInjector.Instance,
-                XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(
                     true,
                     (@"<?xml version=""1.0"" encoding=""utf-8""?><?xml-stylesheet type=""text/xsl"" href=""s.xsl""?><XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
                     ),
@@ -85,7 +85,7 @@ namespace XmlSerDe.Tests
         {
             XmlSerializerDeserializerMarkup.Deserialize(
                 DefaultInjector.Instance,
-                XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(
                     true,
                     (@"<?xml version=""1.0"" encoding=""utf-8""?><!DOCTYPE XmlObject2 [<!ELEMENT XmlObject2 (#PCDATA)>]><XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
                     ),
@@ -101,7 +101,7 @@ namespace XmlSerDe.Tests
         {
             XmlSerializerDeserializerMarkup.Deserialize(
                 DefaultInjector.Instance,
-                XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(
                     true,
                     (@"<?xml version=""1.0"" encoding=""utf-8""?><!DOCTYPE XmlObject2 SYSTEM ""XmlObject2.dtd""><XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
                     ),
@@ -117,7 +117,7 @@ namespace XmlSerDe.Tests
         {
             XmlSerializerDeserializerFull.Deserialize(
                 DefaultInjector.Instance,
-                XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(
                     true,
                     (@"<?xml version=""1.0"" encoding=""utf-8""?><!-- comment --><?xml-stylesheet type=""text/xsl"" href=""s.xsl""?><!DOCTYPE XmlObject2 [<!ELEMENT XmlObject2 (#PCDATA)>]><!-- another comment --><XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
                     ),

@@ -1,6 +1,6 @@
 using System;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe
 {
     /// <summary>
     /// Какие нарушения well-formedness хост обязан ловить. Несколько атрибутов

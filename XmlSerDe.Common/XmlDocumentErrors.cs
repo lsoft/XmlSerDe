@@ -1,7 +1,7 @@
 using System;
 using System.Xml;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe
 {
     /// <summary>
     /// Форма ошибки документа у хоста со стражами: та же пара, что даёт

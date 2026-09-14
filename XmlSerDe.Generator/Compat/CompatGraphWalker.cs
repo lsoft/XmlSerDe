@@ -73,6 +73,14 @@ namespace XmlSerDe.Generator.Compat
                     return false;
                 }
 
+                //сверка состава членов - раньше разбора любого из них: член, который
+                //наш отбор выбросил, до цикла ниже не доедет вовсе, и отказ по нему
+                //взяться будет неоткуда
+                if (CompatMemberProbe.TryFindRefusal(compilation, subject, out refusal))
+                {
+                    return false;
+                }
+
                 foreach (var member in ClassSourceProducer.SelectSerializableMembers(compilation, subject))
                 {
                     //атрибуты члена - раньше его типа: непонятый атрибут это отказ
@@ -235,6 +243,19 @@ namespace XmlSerDe.Generator.Compat
             if (!type.IsAbstract && !HasAccessibleParameterlessConstructor(type))
             {
                 refusal = $"{type.ToGlobalDisplayString()} has no accessible parameterless constructor";
+                return false;
+            }
+            if (!type.IsAbstract
+                && ClassSourceProducer.TryFindUnassignableRequiredMember(type, out var requiredMember))
+            {
+                //отказ здесь - не про документ, а про сборку: штатный сериализатор
+                //такой тип обслуживает как ни в чём не бывало (проверено прогоном),
+                //а сгенерированный new T() не компилируется вовсе (CS9035). Добавление
+                //одного global using не имеет права ломать сборку потребителя, поэтому
+                //отказ нужен даже там, где сам член прекрасно сериализуется
+                refusal =
+                    $"{type.ToGlobalDisplayString()}.{requiredMember.Name} is a required member:"
+                    + $" the generated code creates the type with new {type.Name}() and cannot satisfy it";
                 return false;
             }
             if (CompatAttributeProbe.TryFindRefusal(type, out refusal))

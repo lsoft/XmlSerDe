@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerDe.Tests.Complex;
 using Xunit;
 

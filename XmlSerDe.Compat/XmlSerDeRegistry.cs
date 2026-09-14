@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace XmlSerDe.Compat
 {

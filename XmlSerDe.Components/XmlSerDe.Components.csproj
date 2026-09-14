@@ -8,6 +8,29 @@
   </PropertyGroup>
 
   <!--
+    Этот проект - корень пакета XmlSerDe. Пакет один на три сборки: рантайм
+    (Common + Components) и генератор как анализатор. Раздавать их по отдельным
+    пакетам незачем - собрать из них нерабочую комбинацию можно, а полезной
+    свободы это не даёт: Components без генератора не породит ни строчки кода.
+  -->
+  <PropertyGroup>
+    <PackageId>XmlSerDe</PackageId>
+    <Title>XmlSerDe</Title>
+    <!--
+      Числа в описании - из таблиц README, снятых на одной машине, и потому
+      названы вместе с рантаймом и с оговоркой про .NET Framework: "быстрее"
+      без условий замера - обещание, за которое потом отвечать нечем.
+    -->
+    <Description>Allocation-free XML serializer/deserializer built on C# incremental source generators. Serialization code is emitted at compile time, so there is no runtime reflection and no first-call warm-up. Measured against System.Xml.Serialization on the same documents (.NET 10): a typical payload deserializes 4.3x faster while allocating 5% of what the BCL allocates, and serializes 3.6x faster; a 100 MB document is 2.7x faster on 39% of the heap; a document nested 100 levels deep is 5.5x faster, because the parser is single-pass and depth does not multiply the work. The margin is smaller on .NET Framework, where span-based Parse and TryFormat are missing. Format-compatible with System.Xml.Serialization for the primitives, collections and xsi:type polymorphism it supports.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);PackCommonAlongside</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!--
     Span/ArrayPool на netstandard2.0 живут в отдельных пакетах; на net8.0+ они
     в самом рантайме. PooledCharExhauster и Utf8BinaryExhauster используют их
     напрямую, не только транзитивно через Common.
@@ -18,7 +41,51 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" />
+    <!--
+      PrivateAssets=all: Common не пакуется сам по себе, его сборка едет внутри
+      этого же пакета (см. PackCommonAlongside). Без этого NuGet записал бы
+      зависимость на несуществующий пакет XmlSerDe.Common.
+    -->
+    <ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" PrivateAssets="all" />
+
+    <!--
+      Ссылка ради порядка сборки: генератор должен быть собран раньше, чем мы
+      положим его dll в пакет. Ассеты от него не нужны - он анализатор.
+    -->
+    <ProjectReference Include="..\XmlSerDe.Generator\XmlSerDe.Generator.csproj"
+                      SetTargetFramework="TargetFramework=netstandard2.0"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
   </ItemGroup>
+
+  <!--
+    Анализатор кладётся без условия на TargetFramework, и это не небрежность:
+    pack у multi-target проекта идёт во внешней сборке, где TargetFramework
+    пуст, - под условием на конкретный таргет эти файлы в пакет не попадают
+    вовсе (проверено: пакет собирался без папки analyzers). Содержимое
+    analyzers/ от платформы потребителя и не зависит.
+
+    Рядом с генератором обязана лежать netstandard2.0-сборка Common: генератор
+    использует XmlFeature и XmlGuard, и грузит его Roslyn в своём контексте, где
+    ссылки из lib/ не видны. Без этого файла анализатор не загружается вовсе.
+  -->
+  <ItemGroup>
+    <None Include="..\XmlSerDe.Generator\bin\$(Configuration)\netstandard2.0\XmlSerDe.Generator.dll"
+          Pack="true" PackagePath="analyzers\dotnet\cs" Visible="false" />
+    <None Include="..\XmlSerDe.Common\bin\$(Configuration)\netstandard2.0\XmlSerDe.Common.dll"
+          Pack="true" PackagePath="analyzers\dotnet\cs" Visible="false" />
+  </ItemGroup>
+
+  <!--
+    Сборка Common едет в lib/ рядом с Components. Берётся из копируемых выходов
+    именно проектных ссылок: пакетные (System.Memory и прочие) остаются
+    зависимостями пакета, а не его содержимым.
+  -->
+  <Target Name="PackCommonAlongside">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths->WithMetadataValue('ReferenceSourceTarget', 'ProjectReference'))"
+                            Condition="'%(Extension)' == '.dll' Or '%(Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
 
 </Project>

@@ -20,7 +20,8 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Text;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace XmlSerDe.Tests.Dispatch
 {

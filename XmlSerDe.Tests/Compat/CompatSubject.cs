@@ -102,4 +102,60 @@ namespace XmlSerDe.Tests.Compat
         public HashSet<int> Set { get; set; }
         public int After { get; set; }
     }
+
+    /// <summary>
+    /// Отказ третьей породы: дело не в типе члена, а в том, что член вообще
+    /// не попал в наш отбор. <c>init</c>-свойство
+    /// <see cref="System.Xml.Serialization.XmlSerializer"/> и пишет, и читает
+    /// (проверено прогоном), а генератор его пропускает - присвоить <c>init</c>
+    /// вне инициализатора объекта нельзя.
+    ///
+    /// Пока пропуск члена и отказ от типа были независимы, этот тип отчитывался
+    /// ускоренным и терял <c>Y</c> в обе стороны молча.
+    /// </summary>
+    public class CompatInitSubject
+    {
+        public int Z { get; set; }
+        public int Y { get; init; }
+    }
+
+    /// <summary>
+    /// То же расхождение, но без всякого нового синтаксиса: свойство без сеттера
+    /// типа <see cref="System.Collections.ObjectModel.Collection{T}"/> штатный
+    /// сериализатор наполняет через <c>Add</c> (проверено прогоном), а генератор
+    /// умеет так только <see cref="List{T}"/>.
+    /// </summary>
+    public class CompatFilledCollectionSubject
+    {
+        public int Z { get; set; }
+        public System.Collections.ObjectModel.Collection<int> Items { get; } =
+            new System.Collections.ObjectModel.Collection<int>();
+    }
+
+    /// <summary>
+    /// Обратная сторона сверки составов: <c>internal</c>-член штатный сериализатор
+    /// не видит (он берёт члены через <c>BindingFlags.Public</c> - проверено
+    /// прогоном и на поле, и на свойстве), а мы выбрасывали только private
+    /// и protected - и писали в документ лишний элемент.
+    /// </summary>
+    public class CompatInternalMemberSubject
+    {
+        public int Z { get; set; }
+        internal int Hidden { get; set; }
+    }
+
+    /// <summary>
+    /// Предохранитель: пропуски, которые <b>совпадают</b> с пропусками штатного
+    /// сериализатора, отказом быть не должны, иначе ускорение потерял бы почти
+    /// всякий настоящий POCO. Свойство без сеттера типа строки и
+    /// <c>readonly</c>-поле не-коллекции пропускают оба, а <c>readonly</c>-поле
+    /// типа <see cref="List{T}"/> оба наполняют через <c>Add</c>.
+    /// </summary>
+    public class CompatMatchingSkipSubject
+    {
+        public int Z { get; set; }
+        public string ReadOnlyString { get; } = "skipped by both";
+        public readonly int ReadOnlyNumber = 5;
+        public readonly List<int> Filled = new List<int>();
+    }
 }

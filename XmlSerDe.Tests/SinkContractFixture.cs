@@ -36,7 +36,8 @@ namespace Sample
         /// до проверки полноты дело не доходит, генератор отказывает раньше.
         /// </summary>
         private const string BareInterfaceExhauster = @"
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -50,7 +51,8 @@ namespace Sample
         public void Exhauster_ImplementingInterfaceOnly_IsRejected()
         {
             var diagnostics = Run(BareInterfaceExhauster + @"
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -74,7 +76,8 @@ namespace Sample
         public void Injector_ImplementingInterfaceOnly_IsRejected()
         {
             var diagnostics = Run(@"
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -104,8 +107,8 @@ namespace Sample
         public void SealedShippedExhauster_GeneratesWithoutDiagnostics()
         {
             var diagnostics = Run(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -128,8 +131,8 @@ namespace Sample
         public void UnsealedExhauster_Warns()
         {
             var diagnostics = Run(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -162,8 +165,8 @@ namespace Sample
         public void UnsealedTypeFromAnotherAssembly_DoesNotWarn()
         {
             var diagnostics = Run(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {

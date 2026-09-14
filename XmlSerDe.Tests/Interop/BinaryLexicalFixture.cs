@@ -1,7 +1,7 @@
 #nullable disable
 
 using System;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
 using XmlSerDe.Tests.Interop.Subject;
 using Xunit;
 

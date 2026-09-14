@@ -1,0 +1,67 @@
+# Сборка, тесты и дымовой тест пакетов.
+#
+# Windows, а не ubuntu, по одной причине: тесты идут в том числе под net472,
+# и это не про .NET Framework как таковой - net472 единственный способ реально
+# исполнить netstandard2.0-ассеты Common и Components, то есть #else-ветки
+# горячего кода. На Linux эта треть тестов просто не запустилась бы.
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # SourceLink кладёт в символы ссылку на коммит; без полной истории
+          # она получается неверной
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore XmlSerDe.sln
+
+      - name: Build
+        run: dotnet build XmlSerDe.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test XmlSerDe.Tests/XmlSerDe.Tests.csproj -c Release --no-build
+
+      # ContinuousIntegrationBuild нормализует пути в символах: без него
+      # в pdb уезжает путь сборочного агента
+      - name: Pack
+        run: |
+          dotnet pack XmlSerDe.Components/XmlSerDe.Components.csproj -c Release -o artifacts/packages -p:ContinuousIntegrationBuild=true
+          dotnet pack XmlSerDe.Compat/XmlSerDe.Compat.csproj -c Release -o artifacts/packages -p:ContinuousIntegrationBuild=true
+
+      # Главный шаг: всё, что выше, идёт через ProjectReference, и пакет ни разу
+      # не проверен. Путь analyzers/dotnet/cs, выбор ассетов по TFM и
+      # транзитивная доставка анализатора живут только здесь.
+      - name: Smoke test the packages
+        shell: pwsh
+        run: ./eng/smoke-package.ps1
+
+      # Артефакт прогона на публичном репозитории может скачать кто угодно -
+      # это не публикация в фид, но пакет всё же оказывается доступен наружу.
+      # Полезно для проверки сборки до выпуска; убирается удалением этого шага.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts/packages/*
+          if-no-files-found: error

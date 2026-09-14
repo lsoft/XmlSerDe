@@ -2,8 +2,8 @@ using System;
 using System.Globalization;
 using System.Text;
 using System.Xml;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using Xunit;
 
 namespace XmlSerDe.Tests.Exhauster

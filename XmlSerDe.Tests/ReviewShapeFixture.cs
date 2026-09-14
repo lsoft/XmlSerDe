@@ -1,8 +1,7 @@
 using System;
 using System.IO;
 using System.Xml.Serialization;
-using XmlSerDe.Components.Exhauster;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
 using Xunit;
 
 namespace XmlSerDe.Tests

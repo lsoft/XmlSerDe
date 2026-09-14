@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.IO;
 
-namespace XmlSerDe.Components.Exhauster
+namespace XmlSerDe
 {
     /// <summary>
     /// Пишет UTF-8 в чужой <see cref="Stream"/>. Поток не закрывает и не

@@ -1,6 +1,6 @@
 using System;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe
 {
     /// <summary>
     /// Сток для экранирования без промежуточной строки: литеральный кусок

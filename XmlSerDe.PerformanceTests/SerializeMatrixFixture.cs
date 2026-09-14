@@ -4,7 +4,7 @@ using BenchmarkDotNet.Jobs;
 using System.IO;
 using System.Text;
 using System.Xml.Serialization;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
 using XmlSerDe.Tests.Complex;
 using XmlSerDe.Tests.Complex.Subject;
 using XmlSerDe.Tests.Deep;

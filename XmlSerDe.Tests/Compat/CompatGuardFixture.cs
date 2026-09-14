@@ -123,7 +123,7 @@ namespace XmlSerDe.Tests.Compat
                 );
 
             XmlSerializerDeserializer2.Deserialize(
-                XmlSerDe.Components.Injector.DefaultInjector.Instance,
+                XmlSerDe.DefaultInjector.Instance,
                 "<XmlObject2><IntProperty>42</IntProperty></Wrong>".AsSpan(),
                 out XmlObject2 result
                 );

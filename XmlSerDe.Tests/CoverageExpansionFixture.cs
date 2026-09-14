@@ -1,7 +1,6 @@
 using System;
 using System.Text;
-using XmlSerDe.Components.Exhauster;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
 using Xunit;
 
 namespace XmlSerDe.Tests

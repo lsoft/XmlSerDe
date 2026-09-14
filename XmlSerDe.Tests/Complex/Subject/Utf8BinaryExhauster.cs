@@ -1,4 +1,4 @@
-﻿using XmlSerDe.Components.Exhauster;
+﻿using XmlSerDe;
 
 namespace XmlSerDe.Tests.Complex.Subject
 {

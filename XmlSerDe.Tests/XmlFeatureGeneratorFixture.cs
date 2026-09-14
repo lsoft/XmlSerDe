@@ -42,8 +42,8 @@ namespace Sample
         public void DefaultHost_OmitsOptInPrimitivesAndHeuristics()
         {
             var host = RunHost(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -80,7 +80,8 @@ namespace Sample
         public void CDataHost_CallsCDataPrimitive_WithoutDocumentHeuristic()
         {
             var host = RunHost(@"
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -106,7 +107,8 @@ namespace Sample
         public void MarkupHost_CutXmlHead_CarriesItsOwnFlag()
         {
             var host = RunHost(@"
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -129,8 +131,8 @@ namespace Sample
         public void CharGuardHost_CallsAppendEncoded_DefaultDoesNot()
         {
             var guarded = RunHost(@"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {
@@ -151,7 +153,8 @@ namespace Sample
         public void TwoHosts_InOneCompilation_EmitDifferentText()
         {
             var result = Run(@"
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {

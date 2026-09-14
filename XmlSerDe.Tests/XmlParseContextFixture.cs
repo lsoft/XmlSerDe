@@ -1,5 +1,6 @@
 using System;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using Xunit;
 using roschar = System.ReadOnlySpan<char>;
 
