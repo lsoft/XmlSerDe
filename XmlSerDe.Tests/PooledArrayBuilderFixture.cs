@@ -1,8 +1,8 @@
 using System;
 using System.Linq;
 using System.Text;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using Xunit;
 
 namespace XmlSerDe.Tests

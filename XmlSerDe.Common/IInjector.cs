@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using roschar = System.ReadOnlySpan<char>;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe
 {
     public interface IInjector
     {

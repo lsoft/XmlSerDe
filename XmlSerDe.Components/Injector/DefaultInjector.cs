@@ -2,10 +2,11 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using roschar = System.ReadOnlySpan<char>;
 
-namespace XmlSerDe.Components.Injector
+namespace XmlSerDe
 {
     public class DefaultInjector : InjectorBase
     {
@@ -28,9 +29,9 @@ namespace XmlSerDe.Components.Injector
 #endif
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out global::System.DateTime result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out global::System.DateTime result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "dateTime".AsSpan();
@@ -42,9 +43,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out global::System.DateTime? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out global::System.DateTime? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "dateTime".AsSpan();
@@ -78,9 +79,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out Guid result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out Guid result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "guid".AsSpan();
@@ -92,9 +93,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out global::System.Guid? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out global::System.Guid? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "guid".AsSpan();
@@ -118,9 +119,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out bool result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out bool result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "boolean".AsSpan();
@@ -132,9 +133,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out bool? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out bool? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "boolean".AsSpan();
@@ -158,9 +159,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out sbyte result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out sbyte result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "byte".AsSpan();
@@ -172,9 +173,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out sbyte? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out sbyte? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "byte".AsSpan();
@@ -198,9 +199,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out byte result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out byte result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "unsignedByte".AsSpan();
@@ -212,9 +213,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out byte? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out byte? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "unsignedByte".AsSpan();
@@ -238,9 +239,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out ushort result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out ushort result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "unsignedShort".AsSpan();
@@ -252,9 +253,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out ushort? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out ushort? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "unsignedShort".AsSpan();
@@ -278,9 +279,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out short result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out short result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "short".AsSpan();
@@ -292,9 +293,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out short? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out short? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "short".AsSpan();
@@ -318,9 +319,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out uint result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out uint result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "unsignedInt".AsSpan();
@@ -332,9 +333,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out uint? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out uint? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "unsignedInt".AsSpan();
@@ -358,9 +359,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out int result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out int result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "int".AsSpan();
@@ -372,9 +373,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out int? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out int? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "int".AsSpan();
@@ -398,9 +399,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out ulong result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out ulong result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "unsignedLong".AsSpan();
@@ -412,9 +413,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out ulong? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out ulong? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "unsignedLong".AsSpan();
@@ -438,9 +439,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out long result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out long result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "long".AsSpan();
@@ -452,9 +453,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out long? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out long? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "long".AsSpan();
@@ -478,9 +479,9 @@ namespace XmlSerDe.Components.Injector
 
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out decimal result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out decimal result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "decimal".AsSpan();
@@ -492,9 +493,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out decimal? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out decimal? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "decimal".AsSpan();
@@ -519,9 +520,9 @@ namespace XmlSerDe.Components.Injector
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out float result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out float result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "float".AsSpan();
@@ -533,9 +534,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out float? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out float? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "float".AsSpan();
@@ -549,20 +550,20 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void ParseBody(roschar body, out float result)
         {
-            result = global::XmlSerDe.Common.XmlNumberLexis.ParseSingle(body);
+            result = global::XmlSerDe.Internal.XmlNumberLexis.ParseSingle(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void ParseBody(roschar body, out float? result)
         {
-            result = global::XmlSerDe.Common.XmlNumberLexis.ParseSingle(body);
+            result = global::XmlSerDe.Internal.XmlNumberLexis.ParseSingle(body);
         }
 
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out double result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out double result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "double".AsSpan();
@@ -574,9 +575,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out double? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out double? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "double".AsSpan();
@@ -590,20 +591,20 @@ namespace XmlSerDe.Components.Injector
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void ParseBody(roschar body, out double result)
         {
-            result = global::XmlSerDe.Common.XmlNumberLexis.ParseDouble(body);
+            result = global::XmlSerDe.Internal.XmlNumberLexis.ParseDouble(body);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void ParseBody(roschar body, out double? result)
         {
-            result = global::XmlSerDe.Common.XmlNumberLexis.ParseDouble(body);
+            result = global::XmlSerDe.Internal.XmlNumberLexis.ParseDouble(body);
         }
 
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out char result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out char result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "char".AsSpan();
@@ -615,9 +616,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out char? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out char? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "char".AsSpan();
@@ -630,7 +631,7 @@ namespace XmlSerDe.Components.Injector
         }
         /// <summary>
         /// В документе лежит кодовая точка числом, а не сам символ, - см.
-        /// <see cref="global::XmlSerDe.Common.IExhauster.Append(char)"/>.
+        /// <see cref="global::XmlSerDe.IExhauster.Append(char)"/>.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void ParseBody(roschar body, out char result)
@@ -647,9 +648,9 @@ namespace XmlSerDe.Components.Injector
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out TimeSpan result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out TimeSpan result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "duration".AsSpan();
@@ -661,9 +662,9 @@ namespace XmlSerDe.Components.Injector
             ParseBody(xmlNode.Internals, out result);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out TimeSpan? result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out TimeSpan? result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "duration".AsSpan();
@@ -693,9 +694,9 @@ namespace XmlSerDe.Components.Injector
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void Parse(ref global::XmlSerDe.Common.XmlParseContext context, roschar fullNode, out string result)
+        public override void Parse(ref global::XmlSerDe.XmlParseContext context, roschar fullNode, out string result)
         {
-            var xmlNode = new global::XmlSerDe.Common.XmlNode2(context, fullNode);
+            var xmlNode = new global::XmlSerDe.XmlNode2(context, fullNode);
             var xmlNodeDeclaredType = xmlNode.DeclaredNodeType;
 
             var returnType = "string".AsSpan();
@@ -709,7 +710,7 @@ namespace XmlSerDe.Components.Injector
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void ParseBody(roschar body, out string result)
         {
-            result = global::XmlSerDe.Common.XmlTextDecoder.DecodeElementText(body);
+            result = global::XmlSerDe.Internal.XmlTextDecoder.DecodeElementText(body);
         }
 
 

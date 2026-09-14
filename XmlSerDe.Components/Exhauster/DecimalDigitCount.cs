@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace XmlSerDe.Components.Exhauster
+namespace XmlSerDe.Internal
 {
     /// <summary>
     /// <c>log2(n)+1</c> без <see cref="System.Numerics.BitOperations"/> на ns2.0.
@@ -46,6 +46,7 @@ namespace XmlSerDe.Components.Exhauster
     /// Таблица <c>digits[log2(n)]</c>. Верхняя оценка: для 8 и 9 даёт 2
     /// вместо 1, и так на каждой границе степени двойки ниже степени десяти.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class DecimalDigitsLog
     {
         private static readonly byte[] Digits32Table =

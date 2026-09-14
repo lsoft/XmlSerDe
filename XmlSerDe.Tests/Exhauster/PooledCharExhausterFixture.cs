@@ -1,8 +1,8 @@
 using System;
 using System.IO;
 using System.Text;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerDe.Tests.Complex;
 using XmlSerDe.Tests.Deep;
 using XmlSerDe.Tests.Huge;

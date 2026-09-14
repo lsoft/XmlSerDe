@@ -4,13 +4,24 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Xml;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerDe.Generator.Helper;
 
 namespace XmlSerDe.Generator.Producer
 {
     internal readonly struct BuiltinSourceProducer
     {
+        /// <summary>
+        /// Пространство имён генерируемого хелпера - в сборке потребителя.
+        ///
+        /// Раньше здесь стоял <c>typeof(BuiltinSourceProducer).Namespace</c>, то есть
+        /// внутреннее пространство самого генератора: каждая сборка потребителя
+        /// экспортировала наружу <c>XmlSerDe.Internal.BuiltinCodeHelper</c>.
+        /// Две такие сборки в одном графе ссылок давали CS0436 на каждом обращении.
+        /// </summary>
+        public const string BuiltinCodeHelperNamespace = "XmlSerDe.Internal";
+
         public const string BuiltinCodeHelperClassName = "BuiltinCodeHelper";
         public const string CutXmlHeadMethodName = "CutXmlHead";
         public const string AppendXmlHeadMethodName = "AppendXmlHead";
@@ -110,14 +121,14 @@ namespace XmlSerDe.Generator.Producer
             var sb = new StringBuilder();
 
             sb.AppendLine($@"
-namespace {typeof(BuiltinSourceProducer).Namespace}");
+namespace {BuiltinSourceProducer.BuiltinCodeHelperNamespace}");
 
             sb.AppendLine($$"""
 {
     using System;
     using roschar = System.ReadOnlySpan<char>;
 
-    public static partial class {{BuiltinCodeHelperClassName}}
+    internal static partial class {{BuiltinCodeHelperClassName}}
     {
         private static readonly string XmlHead = "<?xml version=\"1.0\" encoding=\"utf-8\"?>";
 
@@ -144,7 +155,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             var injectorTypeAliasName = "inj" + injectorTypeGlobalName.GetHashCode().ToString().Replace("-", "_");
 
             sb.AppendLine($@"
-namespace {typeof(BuiltinSourceProducer).Namespace}");
+namespace {BuiltinSourceProducer.BuiltinCodeHelperNamespace}");
 
             sb.AppendLine($$"""
 {
@@ -154,7 +165,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
     using MethodImpl = global::System.Runtime.CompilerServices.MethodImplAttribute;
     using MethodImplOptions = global::System.Runtime.CompilerServices.MethodImplOptions;
 
-    public static partial class {{BuiltinCodeHelperClassName}}
+    internal static partial class {{BuiltinCodeHelperClassName}}
     {
 
 """);
@@ -175,14 +186,14 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             var sb = new StringBuilder();
 
             sb.AppendLine($@"
-namespace {typeof(BuiltinSourceProducer).Namespace}");
+namespace {BuiltinSourceProducer.BuiltinCodeHelperNamespace}");
 
             sb.AppendLine($$"""
 {
     using System;
     using roschar = System.ReadOnlySpan<char>;
 
-    public static partial class {{BuiltinCodeHelperClassName}}
+    internal static partial class {{BuiltinCodeHelperClassName}}
     {
 
 """);
@@ -212,7 +223,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             var exhaustTypeAliasName = "exh" + exhaustTypeGlobalName.GetHashCode().ToString().Replace("-", "_");
 
             sb.AppendLine($@"
-namespace {typeof(BuiltinSourceProducer).Namespace}");
+namespace {BuiltinSourceProducer.BuiltinCodeHelperNamespace}");
 
             sb.AppendLine($$"""
 {
@@ -222,7 +233,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
     using MethodImpl = global::System.Runtime.CompilerServices.MethodImplAttribute;
     using MethodImplOptions = global::System.Runtime.CompilerServices.MethodImplOptions;
 
-    public static partial class {{BuiltinCodeHelperClassName}}
+    internal static partial class {{BuiltinCodeHelperClassName}}
     {
 
 """);
@@ -276,7 +287,7 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
                 var index = trimmedXml.IndexOf(endOfHead);
                 if (index < 0)
                 {
-                    throw new global::XmlSerDe.Common.XmlDocumentException("Closing '?>' not found for xml declaration.");
+                    throw new global::XmlSerDe.XmlDocumentException("Closing '?>' not found for xml declaration.");
                 }
 
                 headless = trimmedXml.Slice(index + endOfHead.Length);
@@ -287,8 +298,8 @@ namespace {typeof(BuiltinSourceProducer).Namespace}");
             }
 
             var features = markup
-                ? global::XmlSerDe.Common.XmlFeature.Markup
-                : global::XmlSerDe.Common.XmlFeature.None;
+                ? global::XmlSerDe.XmlFeature.Markup
+                : global::XmlSerDe.XmlFeature.None;
 
             return {{typeof(XmlNode2).FullName}}.{{nameof(XmlNode2.SkipPrologMisc)}}(features, headless);
         }

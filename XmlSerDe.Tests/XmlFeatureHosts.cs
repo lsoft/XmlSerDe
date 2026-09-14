@@ -1,6 +1,6 @@
 using System;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace XmlSerDe.Tests
 {
@@ -71,7 +71,7 @@ namespace XmlSerDe.Tests
     /// «строка по-прежнему разбирается через <see cref="IInjector"/>» было
     /// проверено поведением, а не только текстом сгенерированного файла.
     /// </summary>
-    public sealed class SuffixInjector : XmlSerDe.Components.Injector.DefaultInjector
+    public sealed class SuffixInjector : XmlSerDe.DefaultInjector
     {
         public int StringCalls;
 

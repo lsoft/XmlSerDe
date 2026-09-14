@@ -7,7 +7,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Text;
 using XmlSerDe.Generator.Helper;
 using System.Xml.Serialization;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using System.Reflection;
 
 namespace XmlSerDe.Generator.Producer
@@ -22,9 +23,9 @@ namespace XmlSerDe.Generator.Producer
         /// с телом по умолчанию и никого не задевает. Интерфейсы остались - их
         /// реализуют сами базы, - но контрактом для генератора служат базы.
         /// </summary>
-        public const string ExhausterBaseFullName = "XmlSerDe.Common.ExhausterBase";
+        public const string ExhausterBaseFullName = "XmlSerDe.ExhausterBase";
 
-        public const string InjectorBaseFullName = "XmlSerDe.Common.InjectorBase";
+        public const string InjectorBaseFullName = "XmlSerDe.InjectorBase";
 
         public const string HeadDeserializeMethodName = "Deserialize";
         public const string HeadSerializeMethodName = "Serialize";
@@ -51,7 +52,7 @@ namespace XmlSerDe.Generator.Producer
         /// </summary>
         public const string RootElementSerializeMethodName = "SerializeRootElement";
 
-        public static readonly string BuiltinFullClassName = "global::" + typeof(BuiltinSourceProducer).Namespace + "." + BuiltinSourceProducer.BuiltinCodeHelperClassName;
+        public static readonly string BuiltinFullClassName = "global::" + BuiltinSourceProducer.BuiltinCodeHelperNamespace + "." + BuiltinSourceProducer.BuiltinCodeHelperClassName;
         public static readonly string BuiltinSerializeHeadFullMethodName = BuiltinFullClassName + "." + HeadSerializeMethodName;
         public static readonly string BuiltinSerializeHeadlessFullMethodName = BuiltinFullClassName + "." + HeadlessSerializeMethodName;
 
@@ -225,7 +226,7 @@ namespace {_targetNamespace}");
         private readonly void GenerateCutXmlHeadMethod()
         {
             var helper =
-                $"global::{typeof(BuiltinSourceProducer).Namespace}"
+                $"global::{BuiltinSourceProducer.BuiltinCodeHelperNamespace}"
                 + $".{BuiltinSourceProducer.BuiltinCodeHelperClassName}"
                 + $".{BuiltinSourceProducer.CutXmlHeadMethodName}";
 
@@ -311,7 +312,7 @@ namespace {_targetNamespace}");
         {
             if(appendXmlHead)
             {
-                global::{{typeof(BuiltinSourceProducer).Namespace}}.{{BuiltinSourceProducer.BuiltinCodeHelperClassName}}.{{BuiltinSourceProducer.AppendXmlHeadMethodName}}(exh);
+                global::{{BuiltinSourceProducer.BuiltinCodeHelperNamespace}}.{{BuiltinSourceProducer.BuiltinCodeHelperClassName}}.{{BuiltinSourceProducer.AppendXmlHeadMethodName}}(exh);
             }
 
             {{rootMethodName}}(exh, obj);
@@ -1395,7 +1396,7 @@ namespace {_targetNamespace}");
         private static void {{HeadDeserializeMethodName}}({{injectorType.ToGlobalDisplayString()}} inj, roschar fullNode, roschar xmlnsAttributeName, out {{ssGlobalName}} result)
         {
             {{XmlHeadFullName}} xmlNode = new();
-            {{XmlScanFullName}}.{{_binding.ReadHead}}({{_binding.ReadHeadInvocation("fullNode", "xmlnsAttributeName", "xmlNode")}});{{_guards.AfterReadHeadStatement("            ", "xmlNode")}}
+            {{XmlScanFullName}}.{{_binding.ReadHead}}({{_binding.ReadHeadInvocation("fullNode", "xmlnsAttributeName", "xmlNode")}});{{_guards.AfterReadHeadStatement("            ", "xmlNode")}}{{_guards.RootHeadStatement("            ", "xmlNode")}}
             var xmlNodeBody = xmlNode.{{nameof(XmlHead.IsBodyless)}} ? roschar.Empty : fullNode.Slice(xmlNode.{{nameof(XmlHead.TotalLength)}});
             {{HeadedDeserializeMethodName}}(inj, ref xmlNode, xmlNodeBody, out result, {{_guards.RootBodyConsumedArgument}});{{_guards.RootTailStatement("            ", "fullNode", "xmlNode")}}
         }
@@ -1510,6 +1511,19 @@ namespace {_targetNamespace}");
             }
             else
             {
+                //проверка стоит ровно здесь, у места, которое её и нарушает: с фабрикой
+                //никакого new T() не пишется, и required-член ничему не мешает
+                if (TryFindUnassignableRequiredMember(subject, out var requiredMember))
+                {
+                    throw new GenerationRefusedException(
+                        $"{subject.ToFullDisplayString()}.{requiredMember.Name} is a required member:"
+                        + $" the generated deserializer creates the type with new {subject.Name}()"
+                        + $" and cannot satisfy it (CS9035)."
+                        + $" Drop 'required', or add a parameterless constructor marked with [SetsRequiredMembers],"
+                        + $" or supply the instance with [XmlFactory]"
+                        );
+                }
+
                 _sb.AppendLine($$"""
             result = new {{ssGlobalName}}();
 """);
@@ -2180,6 +2194,105 @@ if(!{{child2VarName}}.{{nameof(XmlHead.DeclaredNodeType)}}.SequenceEqual("{{item
             return FilterMembers(compilation, GetMembersBaseFirst(type));
         }
 
+        /// <summary>
+        /// Все члены-кандидаты - до всякого отбора, в том же порядке и с тем же
+        /// разрешением скрытых через <c>new</c>, что и у
+        /// <see cref="SelectSerializableMembers"/>.
+        ///
+        /// Нужно это одному месту - обходчику графа фасада: чтобы сверить наш отбор
+        /// с отбором System.Xml.Serialization, обоим нужен один и тот же исходный
+        /// список. Свой такой же список обходчик строить не может: разойдись они,
+        /// сверка сравнивала бы не то с тем.
+        /// </summary>
+        public static List<ISymbol> SelectCandidateMembers(
+            INamedTypeSymbol type
+            )
+        {
+            return GetMembersBaseFirst(type);
+        }
+
+        /// <summary>
+        /// Член, помеченный <c>required</c>, которого сгенерированный <c>new T()</c>
+        /// задать не может.
+        ///
+        /// <c>required</c> - проверка компилятора, а не рефлексии: штатный
+        /// <see cref="System.Xml.Serialization.XmlSerializer"/> такой тип
+        /// сериализует и читает как ни в чём не бывало (проверено прогоном), а вот
+        /// сгенерированный код на <c>new T()</c> не компилируется вовсе - CS9035.
+        /// Причём неважно, участвует ли сам член в обмене: <c>[XmlIgnore]</c> на нём
+        /// ошибку не снимает, требование задать его стоит на конструкторе.
+        ///
+        /// Единственное исключение - конструктор без параметров, помеченный
+        /// <c>[SetsRequiredMembers]</c>: он обещает компилятору, что задал всё сам,
+        /// и <c>new T()</c> становится законным.
+        /// </summary>
+        public static bool TryFindUnassignableRequiredMember(
+            INamedTypeSymbol type,
+            out ISymbol member
+            )
+        {
+            member = null!;
+
+            if (HasSetsRequiredMembersParameterlessConstructor(type))
+            {
+                return false;
+            }
+
+            //база первой: имя в диагностике не должно прыгать от того, с какой
+            //стороны графа мы в этот тип пришли
+            var layers = new List<INamedTypeSymbol>();
+            for (var current = type; current is not null && current.BaseType is not null; current = current.BaseType)
+            {
+                layers.Add(current);
+            }
+            layers.Reverse();
+
+            foreach (var layer in layers)
+            {
+                foreach (var candidate in layer.GetMembers())
+                {
+                    if (candidate is IPropertySymbol property && property.IsRequired)
+                    {
+                        member = property;
+                        return true;
+                    }
+                    if (candidate is IFieldSymbol field && field.IsRequired)
+                    {
+                        member = field;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static bool HasSetsRequiredMembersParameterlessConstructor(
+            INamedTypeSymbol type
+            )
+        {
+            foreach (var constructor in type.InstanceConstructors)
+            {
+                if (constructor.Parameters.Length != 0)
+                {
+                    continue;
+                }
+
+                foreach (var attribute in constructor.GetAttributes())
+                {
+                    if (attribute.AttributeClass?.ToFullDisplayString() == SetsRequiredMembersAttributeFullName)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private const string SetsRequiredMembersAttributeFullName =
+            "System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute";
+
         private static List<ISymbol> FilterMembers(
             Compilation compilation,
             List<ISymbol> members
@@ -2311,7 +2424,15 @@ if(!{{child2VarName}}.{{nameof(XmlHead.DeclaredNodeType)}}.SequenceEqual("{{item
         {
             foreach (var member in members)
             {
-                if (member.DeclaredAccessibility.In(Accessibility.Private, Accessibility.Protected)) //TODO: what about other Accessibilities?
+                //берётся только публичный член - ровно то, что делает
+                //System.Xml.Serialization своим BindingFlags.Public (снято прогоном:
+                //internal и protected internal он не видит так же, как private).
+                //
+                //Раньше здесь отсеивались только private и protected, и internal-член
+                //уезжал в документ, которого у BCL на том же типе нет. В drop-in это
+                //к тому же стоило ускорения целиком: сверка состава членов видела
+                //лишний элемент и отказывалась от типа.
+                if (member.DeclaredAccessibility != Accessibility.Public)
                 {
                     continue;
                 }
@@ -2386,7 +2507,7 @@ if(!{{child2VarName}}.{{nameof(XmlHead.DeclaredNodeType)}}.SequenceEqual("{{item
         {
             if (BuiltinSourceProducer.TryGetBuiltin(_compilation, type, out _))
             {
-                return typeof(BuiltinSourceProducer).Namespace + "." + BuiltinSourceProducer.BuiltinCodeHelperClassName;
+                return BuiltinSourceProducer.BuiltinCodeHelperNamespace + "." + BuiltinSourceProducer.BuiltinCodeHelperClassName;
             }
             else
             {
@@ -2772,7 +2893,7 @@ if(!{{child2VarName}}.{{nameof(XmlHead.DeclaredNodeType)}}.SequenceEqual("{{item
                     var typegn = type.ToGlobalDisplayString();
                     if (!IsDerivedFrom(type, ExhausterBaseFullName))
                     {
-                        throw new InvalidOperationException($"Type {typegn} must be derived from {ExhausterBaseFullName}. Implementing XmlSerDe.Common.IExhauster is not enough: only a base class lets a new member arrive with a default implementation instead of breaking every implementer.");
+                        throw new InvalidOperationException($"Type {typegn} must be derived from {ExhausterBaseFullName}. Implementing XmlSerDe.IExhauster is not enough: only a base class lets a new member arrive with a default implementation instead of breaking every implementer.");
                     }
 
                     exhaustList.Add(type);
@@ -2788,7 +2909,7 @@ if(!{{child2VarName}}.{{nameof(XmlHead.DeclaredNodeType)}}.SequenceEqual("{{item
                     var typegn = type.ToGlobalDisplayString();
                     if (!IsDerivedFrom(type, InjectorBaseFullName))
                     {
-                        throw new InvalidOperationException($"Type {typegn} must be derived from {InjectorBaseFullName} (XmlSerDe.Components.Injector.DefaultInjector already is). Implementing XmlSerDe.Common.IInjector is not enough: only a base class lets a new member arrive with a default implementation instead of breaking every implementer.");
+                        throw new InvalidOperationException($"Type {typegn} must be derived from {InjectorBaseFullName} (XmlSerDe.DefaultInjector already is). Implementing XmlSerDe.IInjector is not enough: only a base class lets a new member arrive with a default implementation instead of breaking every implementer.");
                     }
 
                     injectorList.Add(type);

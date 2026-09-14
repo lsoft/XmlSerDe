@@ -6,7 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 #endif
 
-namespace XmlSerDe.Common
+namespace XmlSerDe.Internal
 {
     /// <summary>
     /// Накопитель элементов для члена типа <c>T[]</c> или <c>List&lt;T&gt;</c>
@@ -24,6 +24,7 @@ namespace XmlSerDe.Common
     /// генерируемого метода и не должна стоить ещё одного объекта в куче.
     /// Копировать её нельзя - копия разделит буфер с оригиналом.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public struct PooledArrayBuilder<T>
     {
         /// <summary>

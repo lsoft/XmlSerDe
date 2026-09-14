@@ -1,7 +1,8 @@
 using System;
 using System.Globalization;
 using System.Xml;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using Xunit;
 
 namespace XmlSerDe.Tests

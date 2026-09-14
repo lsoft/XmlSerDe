@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe
 {
     public interface IExhauster
     {

@@ -1,6 +1,6 @@
 using System;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe
 {
     /// <summary>
     /// Opt-in XML 1.0 constructions that a native serializer understands.

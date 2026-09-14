@@ -4,9 +4,10 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Xml;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
-namespace XmlSerDe.Components.Exhauster
+namespace XmlSerDe
 {
     /// <summary>
     /// Строковой сток: документ лежит в одном <c>char[]</c> из пула.

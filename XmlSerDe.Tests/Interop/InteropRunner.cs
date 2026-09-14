@@ -116,7 +116,7 @@ namespace XmlSerDe.Tests.Interop
             //направление 1: XmlSerDe читает то, что написал BCL
             try
             {
-                var body = global::XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                var body = global::XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(
                     expectedXml.AsSpan()
                     );
                 xmlSerDeRead(body, out var ours);

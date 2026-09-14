@@ -5,11 +5,12 @@ using System.Buffers;
 using System.Runtime.CompilerServices;
 using roschar = System.ReadOnlySpan<char>;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe.Internal
 {
     /// <summary>
     /// Что стоит в позиции курсора.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public enum XmlHeadKind : byte
     {
         /// <summary>
@@ -34,6 +35,7 @@ namespace XmlSerDe.Common
     /// заканчивается, и знать не должна: границу устанавливает сам разбор
     /// (см. <see cref="XmlScan.ReadHead"/>).
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public readonly ref struct XmlHead
     {
         public readonly XmlHeadKind Kind;
@@ -304,6 +306,7 @@ namespace XmlSerDe.Common
     /// (docs/opt-in-xml-features.md §9.1). Булевы параметры остались только у
     /// разметочных вариантов - это не POCO-hot-path.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class XmlScan
     {
         public static roschar XmlnsSpan
@@ -1198,6 +1201,62 @@ namespace XmlSerDe.Common
 
                 index += current.TotalLength;
             }
+        }
+
+        /// <summary>
+        /// Страж <see cref="XmlGuard.ForeignRootNamespace"/>: корень, объявивший
+        /// пространство имён по умолчанию, отвергается.
+        ///
+        /// Ищется ровно одна форма - атрибут <c>xmlns</c> без префикса и с
+        /// непустым значением. <c>xmlns:что-то="..."</c> сюда не попадает
+        /// намеренно: <c>xmlns:xsi</c> и <c>xmlns:xsd</c> штатный сериализатор
+        /// пишет на каждом документе, и отказ по ним отверг бы всё, что он
+        /// производит. <c>xmlns=""</c> - законное «здесь пространства нет», оно
+        /// проходит.
+        ///
+        /// Зовётся только на корне и только у хоста, который этот страж включил,
+        /// поэтому цена - один проход по голове одного элемента за документ.
+        /// </summary>
+        public static void EnsureNoForeignRootNamespace(roschar fullHead, roschar declaredNodeType)
+        {
+            //'<' плюс имя: дальше начинаются атрибуты
+            var index = 1 + declaredNodeType.Length;
+
+            while (true)
+            {
+                if (index < 0 || index >= fullHead.Length)
+                {
+                    return;
+                }
+
+                ParseFirstFoundAttribute(fullHead, index, out var current);
+                if (current.Attribute.IsEmpty)
+                {
+                    return;
+                }
+
+                if (current.TotalLength <= 0)
+                {
+                    throw new XmlDocumentException("Attribute parsing made no progress.");
+                }
+
+                if (current.Attribute.Prefix.IsEmpty
+                    && current.Attribute.Name.SequenceEqual(XmlnsSpan)
+                    && !current.Attribute.Value.IsEmpty)
+                {
+                    ThrowForeignRootNamespace(declaredNodeType, current.Attribute.Value);
+                }
+
+                index += current.TotalLength;
+            }
+        }
+
+        private static void ThrowForeignRootNamespace(roschar declaredNodeType, roschar ns)
+        {
+            throw new XmlDocumentException(
+                "<" + declaredNodeType.ToString() + " xmlns='" + ns.ToString() + "'> was not expected:"
+                + " XML namespaces are not supported, and the element names alone happen to match."
+                );
         }
 
         /// <summary>

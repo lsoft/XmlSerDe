@@ -21,8 +21,8 @@ namespace XmlSerDe.Tests
         public static IEnumerable<MetadataReference> References()
         {
             //без обращения к типу сборка может быть ещё не загружена
-            _ = typeof(XmlSerDe.Common.IExhauster).FullName;
-            _ = typeof(XmlSerDe.Components.Injector.DefaultInjector).FullName;
+            _ = typeof(XmlSerDe.IExhauster).FullName;
+            _ = typeof(XmlSerDe.DefaultInjector).FullName;
             _ = typeof(XmlSerDe.Compat.XmlSerializer).FullName;
             _ = typeof(System.Xml.Serialization.XmlRootAttribute).FullName;
 

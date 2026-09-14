@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using XmlSerDe.Components.Exhauster;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
 using XmlSerDe.Tests;
 using XmlSerDe.Tests.Complex;
 using XmlSerDe.Tests.Complex.Subject;

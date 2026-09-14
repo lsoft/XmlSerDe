@@ -1,7 +1,7 @@
 //the generator copies these usings into the generated file, so System is required here
 using System;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerDe.Tests.Complex.Subject;
 using XmlSerDe.Tests.Deep.Subject;
 

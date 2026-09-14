@@ -3,9 +3,10 @@ using System.Buffers;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
-namespace XmlSerDe.Components.Exhauster
+namespace XmlSerDe
 {
     /// <summary>
     /// UTF-8 string to binary exhauster (mostly) based on rented buffers.

@@ -1,5 +1,6 @@
 ﻿#if NETSTANDARD
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace XmlSerDe.Generator.Producer
 {
@@ -24,10 +25,10 @@ namespace XmlSerDe.Generator.Producer
         /// </summary>
         private const string NewLine = "\r\n";
 
-        private const string XmlScanFullName = "global::XmlSerDe.Common.XmlScan";
-        private const string DocumentErrorsFullName = "global::XmlSerDe.Common.XmlDocumentErrors";
-        private const string DocumentExceptionFullName = "global::XmlSerDe.Common.XmlDocumentException";
-        private const string CharGuardFullName = "global::XmlSerDe.Common.XmlCharGuard";
+        private const string XmlScanFullName = "global::XmlSerDe.Internal.XmlScan";
+        private const string DocumentErrorsFullName = "global::XmlSerDe.XmlDocumentErrors";
+        private const string DocumentExceptionFullName = "global::XmlSerDe.XmlDocumentException";
+        private const string CharGuardFullName = "global::XmlSerDe.Internal.XmlCharGuard";
 
         public readonly XmlGuard Guards;
 
@@ -62,6 +63,8 @@ namespace XmlSerDe.Generator.Producer
 
         private readonly bool _illegalChars;
 
+        private readonly bool _foreignRootNamespace;
+
         /// <summary>
         /// Есть ли хоть один страж. От этого зависит форма исключения (§6):
         /// хост со стражами отдаёт наружу пару BCL, хост без них - сегодняшний
@@ -83,7 +86,8 @@ namespace XmlSerDe.Generator.Producer
             string ensureNoTrailingContent,
             bool matchingEndTags,
             bool uniqueAttributes,
-            bool illegalChars
+            bool illegalChars,
+            bool foreignRootNamespace
             )
         {
             Guards = guards;
@@ -92,6 +96,7 @@ namespace XmlSerDe.Generator.Producer
             _matchingEndTags = matchingEndTags;
             _uniqueAttributes = uniqueAttributes;
             _illegalChars = illegalChars;
+            _foreignRootNamespace = foreignRootNamespace;
             ExpectedEndNameParameter = matchingEndTags
                 ? ", roschar " + ExpectedEndNameVariable
                 : "";
@@ -122,7 +127,8 @@ namespace XmlSerDe.Generator.Producer
                 ensureNoTrailingContent,
                 Has(guards, XmlGuard.MatchingEndTags),
                 Has(guards, XmlGuard.UniqueAttributes),
-                Has(guards, XmlGuard.IllegalChars)
+                Has(guards, XmlGuard.IllegalChars),
+                Has(guards, XmlGuard.ForeignRootNamespace)
                 );
         }
 
@@ -262,6 +268,29 @@ namespace XmlSerDe.Generator.Producer
             return NewLine + indent
                 + "if(" + headVar + "." + nameof(XmlHead.HasAttributes) + ") "
                 + XmlScanFullName + "." + nameof(XmlScan.EnsureUniqueAttributes)
+                + "(" + headVar + "." + nameof(XmlHead.FullHead)
+                + ", " + headVar + "." + nameof(XmlHead.DeclaredNodeType) + ");";
+        }
+
+        /// <summary>
+        /// Что делают после чтения головы <b>корня</b> - и только его.
+        ///
+        /// Отдельный крюк рядом с <see cref="AfterReadHeadStatement"/>, а не флаг
+        /// внутри него, именно потому, что тот зовётся с трёх мест: корень,
+        /// ребёнок и элемент коллекции. Проверка пространства имён нужна ровно на
+        /// корне - там она стоит один разбор головы за документ, а на каждом
+        /// элементе стоила бы столько же, сколько сам разбор.
+        /// </summary>
+        public string RootHeadStatement(string indent, string headVar)
+        {
+            if (!_foreignRootNamespace)
+            {
+                return "";
+            }
+
+            return NewLine + indent
+                + "if(" + headVar + "." + nameof(XmlHead.HasAttributes) + ") "
+                + XmlScanFullName + "." + nameof(XmlScan.EnsureNoForeignRootNamespace)
                 + "(" + headVar + "." + nameof(XmlHead.FullHead)
                 + ", " + headVar + "." + nameof(XmlHead.DeclaredNodeType) + ");";
         }

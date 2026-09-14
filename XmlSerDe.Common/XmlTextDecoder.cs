@@ -3,7 +3,7 @@ using System.Buffers;
 using System.Runtime.CompilerServices;
 using roschar = System.ReadOnlySpan<char>;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe.Internal
 {
     /// <summary>
     /// Раскрытие ссылок (XML 1.0 §4.1) и секций CDATA (§2.7) прямо из спана.
@@ -21,6 +21,7 @@ namespace XmlSerDe.Common
     /// amp, lt, gt, apos, quot) и символьные ссылки &amp;#NN; / &amp;#xNN;.
     /// Всё остальное - исключение.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class XmlTextDecoder
     {
         /// <summary>

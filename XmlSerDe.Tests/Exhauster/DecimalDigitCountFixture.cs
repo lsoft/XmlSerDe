@@ -1,5 +1,6 @@
 using System.Globalization;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using Xunit;
 
 namespace XmlSerDe.Tests.Exhauster

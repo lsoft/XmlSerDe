@@ -2,8 +2,7 @@
 
 using System;
 using System.Collections.Generic;
-using XmlSerDe.Components.Exhauster;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
 using XmlSerDe.Tests.Interop.Subject;
 
 namespace XmlSerDe.Tests.Interop

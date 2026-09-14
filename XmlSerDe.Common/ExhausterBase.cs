@@ -33,7 +33,7 @@
 
 using System;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe
 {
     public abstract class ExhausterBase : IExhauster
     {

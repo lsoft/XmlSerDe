@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
 using Xunit;
 
 namespace XmlSerDe.Tests
@@ -180,8 +180,8 @@ namespace Sample
         private static string RunHost(string subjectName, string hostName)
         {
             var hostSource = @"
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace Sample
 {

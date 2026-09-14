@@ -385,6 +385,287 @@ public static class Entry
             Assert.Contains("typeof(global::Ok)", result.Registration);
         }
 
+        #region состав членов: то, что мы пропускаем, а BCL пишет (и наоборот)
+
+        /// <summary>
+        /// Полифилы под net472: <c>required</c> и <c>init</c> компилятор ищет по
+        /// полному имени типа, а не по сборке, поэтому объявить их в самом
+        /// исходнике достаточно.
+        ///
+        /// Под net8/net10 эти типы в corlib уже есть, и объявлять их второй раз
+        /// нельзя: ссылки тестовая сборка берёт у себя самой, обе объявления
+        /// оказываются видимы одновременно, и <c>[SetsRequiredMembers]</c>
+        /// перестаёт связываться. Поэтому полифилы подставляются только там,
+        /// где их правда нет.
+        /// </summary>
+        private static string ModernMemberPolyfills =>
+            typeof(object).Assembly.GetType("System.Runtime.CompilerServices.RequiredMemberAttribute") is null
+                ? ModernMemberPolyfillSource
+                : "";
+
+        private const string ModernMemberPolyfillSource = @"
+namespace System.Runtime.CompilerServices
+{
+    internal static class IsExternalInit { }
+    internal sealed class RequiredMemberAttribute : Attribute { }
+    [AttributeUsage(AttributeTargets.All, AllowMultiple = true)]
+    internal sealed class CompilerFeatureRequiredAttribute : Attribute
+    {
+        public CompilerFeatureRequiredAttribute(string featureName) { }
+    }
+}
+namespace System.Diagnostics.CodeAnalysis
+{
+    [AttributeUsage(AttributeTargets.Constructor)]
+    internal sealed class SetsRequiredMembersAttribute : Attribute { }
+}
+";
+
+        /// <summary>
+        /// Худший из возможных исходов для drop-in, и он не про документ, а про
+        /// сборку: <c>required</c> - проверка компилятора, рефлексию она не касается,
+        /// поэтому штатный сериализатор такой тип обслуживает как ни в чём не бывало
+        /// (проверено прогоном в обе стороны), а сгенерированный <c>new T()</c>
+        /// не компилируется вовсе - CS9035. То есть добавление одного
+        /// <c>global using</c> превращало собирающийся проект в несобирающийся,
+        /// с ошибкой в коде, которого потребитель не писал.
+        ///
+        /// Отказ нужен даже там, где сам член прекрасно сериализуется, и даже там,
+        /// где он помечен <c>[XmlIgnore]</c>: требование задать его стоит
+        /// на конструкторе, а не на члене.
+        /// </summary>
+        [Theory]
+        [InlineData("public class Bad { public int Z { get; set; } public required int Y { get; set; } }")]
+        [InlineData("public class Bad { public int Z { get; set; } public required int Y { get; init; } }")]
+        [InlineData("public class Bad { public int Z { get; set; } [XmlIgnore] public required int Y { get; set; } }")]
+        [InlineData("public class Bad { public int Z { get; set; } public required int Y; }")]
+        [InlineData("public class BadBase { public required int Y { get; set; } } public class Bad : BadBase { public int Z { get; set; } }")]
+        public void RequiredMember_RefusesWholeType_Test(string declaration)
+        {
+            var result = Run(Preamble + ModernMemberPolyfills + declaration + @"
+
+public static class Entry
+{
+    public static object Make() => new XmlSerializer(typeof(Bad));
+}
+");
+
+            Assert.Null(result.Registration);
+
+            var message = Assert.Single(result.CompatRefusals).GetMessage();
+            Assert.Contains("required", message);
+            Assert.Contains("Y", message);
+        }
+
+        /// <summary>
+        /// Обратная сторона: конструктор без параметров, помеченный
+        /// <c>[SetsRequiredMembers]</c>, обещает компилятору, что задал всё сам, -
+        /// <c>new T()</c> становится законным, и отказывать не за что.
+        /// </summary>
+        [Fact]
+        public void RequiredMember_WithSetsRequiredMembers_StaysAccelerated_Test()
+        {
+            var result = Run(Preamble + ModernMemberPolyfills + @"
+public class Ok
+{
+    //полное имя, а не using: полифилы выше уже объявили пространства имён,
+    //и using после них - CS1529
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public Ok() { }
+
+    public int Z { get; set; }
+    public required int Y { get; set; }
+}
+
+public static class Entry
+{
+    public static object Make() => new XmlSerializer(typeof(Ok));
+}
+");
+
+            Assert.Empty(result.CompatRefusals);
+            Assert.Contains("typeof(global::Ok)", result.Registration);
+        }
+
+        /// <summary>
+        /// Член, который System.Xml.Serialization пишет, а наш отбор выбрасывает.
+        /// Отказ здесь был структурно невозможен: обходчик перебирал уже отобранные
+        /// члены, и то, что отбор кого-то выбросил, до него не доходило вовсе -
+        /// код выходил валидный, тип отчитывался ускоренным, а документ получался
+        /// другой, с потерей данных в обе стороны.
+        ///
+        /// Каждая строка снята прогоном рядом с System.Xml.Serialization:
+        /// <c>init</c>-свойство он пишет и читает, свойство без сеттера типа
+        /// <c>Collection&lt;T&gt;</c> и наследника <c>List&lt;T&gt;</c> наполняет
+        /// через <c>Add</c>, <c>readonly</c>-поле такого же типа - тоже.
+        /// </summary>
+        [Theory]
+        [InlineData("public class Bad { public int Z { get; set; } public int Y { get; init; } }", "init-only")]
+        [InlineData("public class Bad { public int Z { get; set; } public System.Collections.ObjectModel.Collection<int> Y { get; } = new(); }", "Add")]
+        [InlineData("public class MyList : List<int> { } public class Bad { public int Z { get; set; } public MyList Y { get; } = new(); }", "Add")]
+        [InlineData("public class MyList : List<int> { } public class Bad { public int Z { get; set; } public readonly MyList Y = new(); }", "Add")]
+        public void MemberSerializedByBclButSkippedHere_RefusesWholeType_Test(string declaration, string because)
+        {
+            var result = Run(Preamble + ModernMemberPolyfills + declaration + @"
+
+public static class Entry
+{
+    public static object Make() => new XmlSerializer(typeof(Bad));
+}
+");
+
+            Assert.Null(result.Registration);
+
+            var message = Assert.Single(result.CompatRefusals).GetMessage();
+            Assert.Contains("Y", message);
+            Assert.Contains(because, message);
+        }
+
+        /// <summary>
+        /// Обратное расхождение: член, который пишем мы, а System.Xml.Serialization
+        /// не видит, - и потому в документе оказывается лишний элемент.
+        ///
+        /// Остался один случай: свойство без геттера. BCL его не пишет, потому что
+        /// значение брать неоткуда, а наш отбор его пропускал - и сгенерированный
+        /// код потом не компилировался бы вовсе.
+        ///
+        /// <c>internal</c> отсюда ушёл: его теперь не берёт и наш отбор - см.
+        /// <see cref="InternalMember_IsSkippedLikeTheBclDoes_StaysAccelerated_Test"/>.
+        /// </summary>
+        [Theory]
+        [InlineData("public class Bad { public int Z { get; set; } private int _y; public int Y { set { _y = value; } } }")]
+        public void MemberSkippedByBclButWrittenHere_RefusesWholeType_Test(string declaration)
+        {
+            var result = Run(Preamble + declaration + @"
+
+public static class Entry
+{
+    public static object Make() => new XmlSerializer(typeof(Bad));
+}
+");
+
+            Assert.Null(result.Registration);
+
+            var message = Assert.Single(result.CompatRefusals).GetMessage();
+            Assert.Contains("Y", message);
+            Assert.Contains("skips this member", message);
+        }
+
+        /// <summary>
+        /// <c>internal</c>, <c>protected internal</c> и поле - всё это
+        /// System.Xml.Serialization не видит, потому что берёт члены через
+        /// <c>BindingFlags.Public</c> (снято прогоном). Наш отбор теперь тоже не
+        /// видит, значит расхождения нет и отказываться не от чего: тип ускоряется.
+        ///
+        /// Тест стоит здесь именно как предохранитель от лечения не того места.
+        /// Пока отбор брал internal, ровно эти три формы давали отказ - и всякий
+        /// POCO с одним internal-свойством терял ускорение из-за особенности
+        /// нативного пути, к drop-in отношения не имеющей.
+        /// </summary>
+        [Theory]
+        [InlineData("public class Ok { public int Z { get; set; } internal int Y { get; set; } }")]
+        [InlineData("public class Ok { public int Z { get; set; } internal int Y; }")]
+        [InlineData("public class Ok { public int Z { get; set; } protected internal int Y { get; set; } }")]
+        public void InternalMember_IsSkippedLikeTheBclDoes_StaysAccelerated_Test(string declaration)
+        {
+            var result = Run(Preamble + declaration + @"
+
+public static class Entry
+{
+    public static object Make() => new XmlSerializer(typeof(Ok));
+}
+");
+
+            Assert.Empty(result.CompatRefusals);
+            Assert.NotNull(result.Registration);
+            Assert.Contains("typeof(global::Ok)", result.Registration);
+        }
+
+        /// <summary>
+        /// Третья порода: не расхождение, а отказ самого System.Xml.Serialization.
+        /// Непубличный сеттер он не прощает - «Cannot deserialize type ... because
+        /// it contains property ... which has no public setter» летит уже из
+        /// конструктора <c>XmlSerializer</c> (снято прогоном на private, protected
+        /// и internal set). Ускорять здесь нечего, а сгенерированный код ещё и
+        /// не скомпилировался бы (CS0272); фолбэк воспроизводит исключение BCL
+        /// слово в слово.
+        /// </summary>
+        [Theory]
+        [InlineData("public class Bad { public int Z { get; set; } public int Y { get; private set; } }", "no public setter")]
+        [InlineData("public class Bad { public int Z { get; set; } public int Y { get; protected set; } }", "no public setter")]
+        [InlineData("public class Bad { public int Z { get; set; } public int Y { get; internal set; } }", "no public setter")]
+        [InlineData("public class Bad { public int Z { get; set; } public int Y { private get; set; } }", "no public getter")]
+        [InlineData("public class Bad { public int Z { get; set; } public Dictionary<string, int> Y { get; } = new(); }", "IDictionary")]
+        public void BclRefusesTheTypeItself_RefusesWholeType_Test(string declaration, string because)
+        {
+            var result = Run(Preamble + declaration + @"
+
+public static class Entry
+{
+    public static object Make() => new XmlSerializer(typeof(Bad));
+}
+");
+
+            Assert.Null(result.Registration);
+
+            var message = Assert.Single(result.CompatRefusals).GetMessage();
+            Assert.Contains("Y", message);
+            Assert.Contains(because, message);
+        }
+
+        /// <summary>
+        /// Главный предохранитель этой правки. Сверка состава членов обязана молчать
+        /// там, где наш пропуск <b>совпадает</b> с пропуском System.Xml.Serialization:
+        /// отказ по такому случаю - потеря ускорения ни за что, и он унёс бы с собой
+        /// почти всякий настоящий POCO.
+        ///
+        /// Каждая строка снята прогоном: свойство без сеттера типа строки, массива,
+        /// числа и сложного типа BCL не пишет; <c>readonly</c>-поле не-коллекции -
+        /// тоже; <c>readonly</c>-поле и свойство без сеттера типа
+        /// <c>List&lt;T&gt;</c> он наполняет через <c>Add</c> - и мы так же;
+        /// <c>[XmlIgnore]</c>, private, protected, const и static пропускают оба.
+        /// </summary>
+        [Fact]
+        public void SkipsThatMatchBcl_StayAccelerated_Test()
+        {
+            var result = Run(Preamble + @"
+public class Child { public int Q { get; set; } }
+
+public class Ok
+{
+    public int Number { get; set; }
+
+    public string Str { get; } = ""s"";
+    public int[] Arr { get; } = new int[] { 1 };
+    public int Num { get; } = 2;
+    public Child Cmp { get; } = new Child();
+
+    public readonly int RoNum = 3;
+    public readonly string RoStr = ""r"";
+    public readonly int[] RoArr = new int[] { 4 };
+
+    public List<int> FilledProperty { get; } = new List<int>();
+    public readonly List<int> FilledField = new List<int>();
+
+    [XmlIgnore] public int Ignored { get; set; }
+    private int _private;
+    protected int Protected;
+    public const int Konst = 5;
+    public static int Stat = 6;
+}
+
+public static class Entry
+{
+    public static object Make() => new XmlSerializer(typeof(Ok));
+}
+");
+
+            Assert.Empty(result.CompatRefusals);
+            Assert.Contains("typeof(global::Ok)", result.Registration);
+        }
+
+        #endregion
+
         /// <summary>
         /// Точка вызова - не только конструктор. <c>FromTypes</c> называет несколько
         /// типов сразу, и все они обязаны попасть в реестр: иначе подмена одной

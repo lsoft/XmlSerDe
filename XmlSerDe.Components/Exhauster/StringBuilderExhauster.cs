@@ -2,9 +2,10 @@ using System;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
-namespace XmlSerDe.Components.Exhauster
+namespace XmlSerDe
 {
     /// <summary>
     /// Exhauster that writes into StringBuilder.

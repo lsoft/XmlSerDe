@@ -6,9 +6,8 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerDe.Tests.Complex.Subject;
 using Xunit;
 
@@ -236,7 +235,7 @@ namespace XmlSerDe.Tests.Complex
             var first = Deserialize_SystemXml(ser_xmlserde);
             var ser_xmlserde_span = ser_system.AsSpan();
             var second = Deserialize_XmlSerDe(
-                global::XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                global::XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(
                     ser_xmlserde_span
                     )
                 );

@@ -21,9 +21,8 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Xml.Serialization;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace System.Runtime.CompilerServices { internal static class IsExternalInit { } }
 ";
@@ -106,6 +105,137 @@ namespace Sample
             Assert.Contains("obj.L", run.Host, StringComparison.Ordinal);
             Assert.Contains("result.Z =", run.Host, StringComparison.Ordinal);
         }
+
+        /// <summary>
+        /// Непубличный член не попадает в обмен вовсе - ни на запись, ни на чтение.
+        /// Это правило <c>System.Xml.Serialization</c>, который берёт члены через
+        /// <c>BindingFlags.Public</c> (снято прогоном: <c>internal</c> ему так же
+        /// невидим, как <c>private</c>).
+        ///
+        /// Раньше отбор выбрасывал только <c>private</c> и <c>protected</c>, и
+        /// <c>internal</c>-член уезжал в документ, которого у штатного сериализатора
+        /// на том же типе нет. Ломающее изменение: из документов, где такой элемент
+        /// был, он пропадёт.
+        /// </summary>
+        [Fact]
+        public void NonPublicMembers_AreSkipped()
+        {
+            var run = Compile(Preamble + @"
+namespace Sample
+{
+    public class Holder
+    {
+        public int Taken { get; set; }
+        internal int HiddenInternalProperty { get; set; }
+        internal int HiddenInternalField;
+        protected internal int HiddenProtectedInternal { get; set; }
+        private protected int HiddenPrivateProtected { get; set; }
+        protected int HiddenProtected { get; set; }
+        private int HiddenPrivate { get; set; }
+    }
+
+    [XmlSubject(typeof(Holder), true)]
+    public partial class Host { }
+}
+");
+
+            AssertCompiles(run);
+            Assert.Contains("result.Taken =", run.Host, StringComparison.Ordinal);
+
+            //одна общая приставка, потому что искать по слову «Internal» нельзя:
+            //сгенерированный код сам живёт рядом с пространством XmlSerDe.Internal
+            Assert.DoesNotContain("Hidden", run.Host, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// <c>required</c> роняло сборку <b>потребителя</b>: генератор писал
+        /// <c>new T()</c>, а компилятор требовал задать член в инициализаторе
+        /// объекта - CS9035 в файле, которого потребитель не писал. Фолбэка
+        /// на родном пути нет, поэтому исход - диагностика генератора, называющая
+        /// тип и член, и без стектрейса: причина названа словами, читать стек
+        /// здесь некому.
+        /// </summary>
+        [Fact]
+        public void RequiredMember_IsReportedInsteadOfBrokenCode()
+        {
+            var run = Compile(Preamble + RequiredPolyfills + @"
+namespace Sample
+{
+    public class Holder
+    {
+        public int Z { get; set; }
+        public required int Y { get; set; }
+    }
+
+    [XmlSubject(typeof(Holder), true)]
+    public partial class Host { }
+}
+");
+
+            var error = Assert.Single(run.GeneratorDiagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
+            var message = error.GetMessage();
+            Assert.Contains("Sample.Holder", message, StringComparison.Ordinal);
+            Assert.Contains("Y", message, StringComparison.Ordinal);
+            Assert.Contains("required", message, StringComparison.Ordinal);
+            Assert.DoesNotContain("XmlSerDe.Generator.Producer", message, StringComparison.Ordinal);
+
+            Assert.DoesNotContain(run.CompileErrors, d => d.Id == "CS9035");
+        }
+
+        /// <summary>
+        /// Конструктор без параметров, помеченный <c>[SetsRequiredMembers]</c>,
+        /// делает <c>new T()</c> законным - и отказывать не за что.
+        /// </summary>
+        [Fact]
+        public void RequiredMemberWithSetsRequiredMembers_Compiles()
+        {
+            var run = Compile(Preamble + RequiredPolyfills + @"
+namespace Sample
+{
+    public class Holder
+    {
+        [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+        public Holder() { }
+
+        public int Z { get; set; }
+        public required int Y { get; set; }
+    }
+
+    [XmlSubject(typeof(Holder), true)]
+    public partial class Host { }
+}
+");
+
+            AssertCompiles(run);
+            Assert.Contains("result.Y =", run.Host, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Под net472 этих типов нет; компилятор ищет их по полному имени, а не по
+        /// сборке, поэтому объявления в самом исходнике достаточно. Под net8/net10
+        /// они уже есть в corlib, и объявлять их второй раз нельзя - ссылки
+        /// тестовая сборка берёт у себя самой, и оба объявления оказались бы видимы
+        /// одновременно.
+        /// </summary>
+        private static string RequiredPolyfills =>
+            typeof(object).Assembly.GetType("System.Runtime.CompilerServices.RequiredMemberAttribute") is null
+                ? @"
+namespace System.Runtime.CompilerServices
+{
+    internal sealed class RequiredMemberAttribute : Attribute { }
+    [AttributeUsage(AttributeTargets.All, AllowMultiple = true)]
+    internal sealed class CompilerFeatureRequiredAttribute : Attribute
+    {
+        public CompilerFeatureRequiredAttribute(string featureName) { }
+    }
+}
+namespace System.Diagnostics.CodeAnalysis
+{
+    [AttributeUsage(AttributeTargets.Constructor)]
+    internal sealed class SetsRequiredMembersAttribute : Attribute { }
+}
+"
+                : "";
 
         /// <summary>
         /// Член, скрытый через <c>new</c>: обход по слоям наследования отдавал оба,
@@ -193,8 +323,13 @@ namespace B
 
         /// <summary>
         /// Свойство без сеттера с типом на два типовых аргумента роняло генератор
-        /// целиком общей ошибкой со стеком. System.Xml.Serialization такой член
-        /// без сеттера просто не видит.
+        /// целиком общей ошибкой со стеком. Штатный сериализатор такой член не
+        /// пропускает, а отказывается от типа целиком: при построении
+        /// <c>new XmlSerializer(typeof(T))</c> он бросает
+        /// <c>NotSupportedException</c> - "because it implements IDictionary"
+        /// (снято прогоном). Здесь проверяется только то, что генератор не падает;
+        /// расхождение с BCL закрыто на стороне фасада, где такой тип получает отказ
+        /// и уходит в фолбэк за тем же самым исключением.
         /// </summary>
         [Fact]
         public void GetterOnlyDictionary_IsSkippedWithoutCrash()

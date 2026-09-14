@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
 using XmlSerDe.Tests.Complex;
 using XmlSerDe.Tests.Complex.Subject;
 

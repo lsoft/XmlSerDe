@@ -8,8 +8,9 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using roschar = System.ReadOnlySpan<char>;
+using XmlSerDe.Internal;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe
 {
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
     public class XmlExhausterAttribute : Attribute
@@ -764,7 +765,15 @@ namespace XmlSerDe.Common
                 );
         }
     }
+}
 
+//Ниже - то, что обязано быть публичным: это зовёт сгенерированный код, живущий
+//в сборке потребителя, и internal ему недоступен. API от этого не становится,
+//и сказать об этом можно только именем пространства.
+namespace XmlSerDe.Internal
+{
+
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public readonly ref struct AttributeProcessResult
     {
         public readonly ParsedAttribute Attribute;
@@ -808,6 +817,7 @@ namespace XmlSerDe.Common
     }
 
 
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public readonly ref struct ParsedAttribute
     {
         public readonly roschar Prefix; //before :
@@ -840,6 +850,7 @@ namespace XmlSerDe.Common
     /// numeric character reference must resolve to a legal Char), so the
     /// only spec-compliant option is to reject them outright.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class XmlCharGuard
     {
         /// <summary>
@@ -933,6 +944,7 @@ namespace XmlSerDe.Common
     /// Кавычка экранируется, апостроф - нет: значение всегда идёт в двойных кавычках.
     /// Тот же набор замен, что у XmlWriter, символ в символ.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class XmlAttributeEncoder
     {
         /// <summary>
@@ -1187,6 +1199,7 @@ namespace XmlSerDe.Common
     /// Алфавит base64 - это буквы, цифры, <c>+</c>, <c>/</c> и <c>=</c>, поэтому
     /// экранировать здесь нечего ни в теле элемента, ни в значении атрибута.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class XmlBase64
     {
         public static string Encode(byte[] value)

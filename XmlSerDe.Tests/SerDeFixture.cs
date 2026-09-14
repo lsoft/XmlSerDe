@@ -6,9 +6,8 @@ using System.Net;
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
-using XmlSerDe.Components.Injector;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using XmlSerDe.Tests.Complex.Subject;
 using Xunit;
 
@@ -64,7 +63,7 @@ namespace XmlSerDe.Tests
         {
             XmlSerializerDeserializer1.Deserialize(
                 DefaultInjector.Instance,
-                XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(
                     @"<?xml version=""1.0"" encoding=""utf-8""?><XmlObject1></XmlObject1>".AsSpan()
                     ), out XmlObject1 xo);
             Xunit.Assert.NotNull(xo);
@@ -194,7 +193,7 @@ namespace XmlSerDe.Tests
         {
             XmlSerializerDeserializer2.Deserialize(
                 DefaultInjector.Instance,
-                XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(
                     (@"<?xml version=""1.0"" encoding=""utf-8""?>    <XmlObject2><IntProperty>123</IntProperty><StringProperty></StringProperty></XmlObject2>").AsSpan()
                     ),
                 out XmlObject2 xo
@@ -221,7 +220,7 @@ namespace XmlSerDe.Tests
         {
             XmlSerializerDeserializerMarkup.Deserialize(
                 DefaultInjector.Instance,
-                XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(
                     true,
                     (@"<?xml version=""1.0"" encoding=""utf-8""?><!-- comment 1 --><XmlObject2><!-- comment 2 --><IntProperty>123</IntProperty><!-- comment 3 --><StringProperty></StringProperty><!-- comment 4 --></XmlObject2><!-- comment 5 -->").AsSpan()
                     ),
@@ -292,7 +291,7 @@ namespace XmlSerDe.Tests
         {
             XmlSerializerDeserializerMarkup.Deserialize(
                 DefaultInjector.Instance,
-                XmlSerDe.Generator.Producer.BuiltinCodeHelper.CutXmlHead(
+                XmlSerDe.Internal.BuiltinCodeHelper.CutXmlHead(
                     (@"<?xml version=""1.0"" encoding=""utf-8""?><XmlObject2><!-- comment 2a --><!-- comment 2b --><IntProperty>123</IntProperty><!-- comment 3a --><!-- comment 3b --><StringProperty></StringProperty><!-- comment 4a --><!-- comment 4b --></XmlObject2><!-- comment 5a --><!-- comment 5b -->").AsSpan()
                     ),
                 out XmlObject2 xo

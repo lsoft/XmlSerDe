@@ -30,10 +30,10 @@ namespace XmlSerDe.Generator.Compat
         public static readonly string SerializerFullName = "global::" + GeneratedNamespace + "." + SerializerClassName;
 
         public const string RegistryFullName = "global::XmlSerDe.Compat.XmlSerDeRegistry";
-        public const string PooledCharExhausterFullName = "global::XmlSerDe.Components.Exhauster.PooledCharExhauster";
-        public const string LengthEstimatorExhausterFullName = "global::XmlSerDe.Components.Exhauster.LengthEstimatorExhauster";
-        public const string Utf8StreamExhausterFullName = "global::XmlSerDe.Components.Exhauster.Utf8StreamExhauster";
-        public const string InjectorFullName = "global::XmlSerDe.Components.Injector.DefaultInjector";
+        public const string PooledCharExhausterFullName = "global::XmlSerDe.PooledCharExhauster";
+        public const string LengthEstimatorExhausterFullName = "global::XmlSerDe.LengthEstimatorExhauster";
+        public const string Utf8StreamExhausterFullName = "global::XmlSerDe.Utf8StreamExhauster";
+        public const string InjectorFullName = "global::XmlSerDe.DefaultInjector";
 
         /// <summary>
         /// Состав, который скармливается <see cref="ClassSourceProducer"/>: тот же

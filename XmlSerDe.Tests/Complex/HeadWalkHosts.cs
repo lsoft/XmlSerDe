@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Xml.Serialization;
-using XmlSerDe.Common;
-using XmlSerDe.Components.Exhauster;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
 namespace XmlSerDe.Tests.Complex
 {

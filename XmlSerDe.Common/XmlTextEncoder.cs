@@ -2,7 +2,7 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe.Internal
 {
     /// <summary>
     /// Экранирование текста тела элемента. Лексическая форма совпадает с
@@ -10,6 +10,7 @@ namespace XmlSerDe.Common
     /// <c>&amp;#39;</c>, латиница 160–255 и скаляры вне BMP как <c>&amp;#N;</c>.
     /// Пишет сразу в сток, без промежуточной строки.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class XmlTextEncoder
     {
         public static string Encode(string value)

@@ -1,6 +1,6 @@
 using System;
 
-namespace XmlSerDe.Common
+namespace XmlSerDe
 {
     /// <summary>
     /// Ошибка <b>о документе</b>: разбираемый XML не соответствует XML 1.0 или

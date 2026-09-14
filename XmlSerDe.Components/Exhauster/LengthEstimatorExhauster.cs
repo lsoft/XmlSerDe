@@ -1,8 +1,9 @@
 using System;
 using System.Runtime.CompilerServices;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 
-namespace XmlSerDe.Components.Exhauster
+namespace XmlSerDe
 {
     /// <summary>
     /// XML length estimator: integers via a log2 digit table,

@@ -1,6 +1,7 @@
 using System;
 using System.Text;
-using XmlSerDe.Common;
+using XmlSerDe;
+using XmlSerDe.Internal;
 using Xunit;
 
 namespace XmlSerDe.Tests
