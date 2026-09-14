@@ -8,9 +8,42 @@
     <RootNamespace>XmlSerDe.Compat</RootNamespace>
   </PropertyGroup>
 
+  <!--
+    Отдельный пакет, а не часть XmlSerDe, по главному условию слоя: не
+    используешь drop-in - не платишь за него ничем, в том числе лишней сборкой
+    в выходной папке.
+  -->
+  <PropertyGroup>
+    <PackageId>XmlSerDe.Compat</PackageId>
+    <Title>XmlSerDe.Compat</Title>
+    <!--
+      Здесь свои числа, а не числа XmlSerDe: фасад включает все фичи и всех
+      стражей сразу, и это стоит 1.2-1.3x к родному пути. Переносить сюда 4.3x
+      было бы враньём ровно в ту сторону, в которую врать нельзя.
+    -->
+    <Description>Drop-in replacement for System.Xml.Serialization.XmlSerializer backed by XmlSerDe's generated code: existing XmlSerializer call sites keep their shape and get the generated fast path instead. Measured on the same document (.NET 10), with every XML-conformance feature and guard turned on, as the facade does: about 3.3x faster deserialization on 5% of the allocations. A type the generator cannot serve falls back to the BCL serializer and keeps working; every refusal is reported at build time as diagnostic XMLSERDE001. Requires the XmlSerDe package.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
   <ItemGroup>
-    <ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" />
-    <ProjectReference Include="..\XmlSerDe.Components\XmlSerDe.Components.csproj" />
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Зависимость пакета берётся отсюда: PackageId у Components - XmlSerDe,
+      значит в nuspec попадёт ровно он. Common упакован внутри того же пакета,
+      поэтому своей зависимости не порождает.
+
+      PrivateAssets=none обязателен. По умолчанию NuGet пишет проектной ссылке
+      exclude="Build,Analyzers", и тогда потребитель, подключивший только
+      XmlSerDe.Compat, получил бы сборки, но не генератор: compat-код не
+      сгенерировался бы вовсе, а фасад молча отдавал бы всё штатному
+      сериализатору. То есть ускорение исчезло бы ровно у того сценария, ради
+      которого слой и существует.
+    -->
+    <ProjectReference Include="..\XmlSerDe.Components\XmlSerDe.Components.csproj" PrivateAssets="none" />
+    <ProjectReference Include="..\XmlSerDe.Common\XmlSerDe.Common.csproj" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">

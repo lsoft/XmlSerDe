@@ -1,0 +1,38 @@
+<Project>
+
+  <!--
+    Общие свойства всех проектов решения. Упаковочные метаданные здесь, а не
+    в каждом csproj, потому что расходиться им нельзя: версия, лицензия и ссылка
+    на репозиторий обязаны совпадать у всех пакетов, иначе NuGet покажет два
+    разных источника одной библиотеки.
+  -->
+  <PropertyGroup>
+    <Version>0.1.0-alpha.1</Version>
+    <!--
+      Версия сборки без суффикса и без последней цифры: prerelease-метка живёт
+      только в версии пакета, а AssemblyVersion на неё меняться не должна -
+      иначе каждая альфа ломала бы привязки сборок.
+    -->
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+
+    <Authors>lsoft</Authors>
+    <Copyright>Copyright (c) 2023 Vyacheslav Avdeev</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/lsoft/XmlSerDe</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/lsoft/XmlSerDe</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>xml;serialization;deserialization;source-generator;performance;allocation-free</PackageTags>
+
+    <!--
+      Символы и исходники: отладчик должен уметь зайти внутрь пакета. SourceLink
+      для GitHub встроен в SDK начиная с 8.0, отдельная ссылка на пакет не нужна.
+    -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+</Project>

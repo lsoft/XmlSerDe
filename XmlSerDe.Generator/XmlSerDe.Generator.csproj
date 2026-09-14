@@ -5,10 +5,30 @@
     <Nullable>enable</Nullable>
     <WarningsAsErrors>nullable;CS8766;CS8767</WarningsAsErrors>
     <IncludeBuildOutput>false</IncludeBuildOutput>
+    <!-- анализатор едет внутри пакета XmlSerDe, своего пакета у него нет -->
+    <IsPackable>false</IsPackable>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-    <NoWarn>RS1035</NoWarn>
+    <!--
+      RS1035 - генератор читает свойства сборки, это ему положено.
+      RS2002 - дескрипторы XMLSERDE001/002 строятся на лету, под выбранную
+      строгость, и потому не видны анализатору через SupportedDiagnostics. В файле
+      выпуска они нужны ровно за тем же, за чем и остальные: идентификатор - это
+      обещание, по нему пишут подавления.
+    -->
+    <NoWarn>RS1035;RS2002</NoWarn>
   </PropertyGroup>
+
+  <!--
+    Отслеживание выпуска диагностик. Без этих двух файлов анализатор анализаторов
+    предупреждает RS2008 на каждое правило, а у пакета, который везёт диагностики,
+    это ещё и единственный способ не дать их идентификаторам разъехаться между
+    версиями: по идентификатору пишут подавления в чужих проектах.
+  -->
+  <ItemGroup>
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4">
@@ -36,4 +56,4 @@
       <LastGenOutput>GeneratorResources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
   </ItemGroup>
-</Project>
+</Project>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>Latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Smoke</RootNamespace>
+
+    <!--
+      Обе настройки стоят здесь нарочно. Без шапки сгенерированных файлов
+      GenerateDocumentationFile даёт сотни CS1591, а алиас roschar - CS8981;
+      с TreatWarningsAsErrors любое из этого означает, что проект потребителя
+      не собирается вовсе.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="__PACKAGE_ID__" Version="__PACKAGE_VERSION__" />
+  </ItemGroup>
+
+</Project>

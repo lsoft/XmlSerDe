@@ -4,6 +4,8 @@
     <LangVersion>Latest</LangVersion>
     <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
+    <!-- сборка едет внутри пакета XmlSerDe, своего пакета у неё нет -->
+    <IsPackable>false</IsPackable>
     <WarningsAsErrors>nullable;CS8766;CS8767</WarningsAsErrors>
   </PropertyGroup>
 
