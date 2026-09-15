@@ -892,7 +892,7 @@ namespace {_targetNamespace}");
         /// Оба условия складываются через &amp;&amp;, потому что оба могут стоять на
         /// одном члене и оба означают "не писать".
         /// </summary>
-        private static string? GetPresenceGuard(ISymbol member)
+        private readonly string? GetPresenceGuard(ISymbol member)
         {
             var guards = new List<string>();
 
@@ -902,9 +902,17 @@ namespace {_targetNamespace}");
                 guards.Add($"obj.{specified.CsName()}");
             }
 
-            if (member.TryGetDefaultValue(out var defaultValue))
+            //умолчание несопоставимого с членом типа охраны не даёт вовсе: у BCL
+            //такое значение не совпадает никогда, и член пишется всегда - см.
+            //XmlPresenceHelper.TryGetComparableLiteral
+            if (member.TryGetDefaultValue(out var defaultValue)
+                && defaultValue.TryGetComparableLiteral(
+                    _compilation,
+                    ParseMember(_compilation, member).Symbol,
+                    out var literal
+                    ))
             {
-                guards.Add($"obj.{member.CsName()} != {defaultValue.ToLiteral()}");
+                guards.Add($"obj.{member.CsName()} != {literal}");
             }
 
             if (guards.Count == 0)
@@ -2492,9 +2500,14 @@ if(!{{child2VarName}}.{{nameof(XmlHead.DeclaredNodeType)}}.SequenceEqual("{{item
             {
                 //на коллекции XmlElement означает совсем другую форму - элементы
                 //без обёртки вовсе, - и промолчать здесь значило бы выдать документ,
-                //не совпадающий с тем, что написано на самом члене
-                throw new InvalidOperationException(
-                    $"{typeof(XmlElementAttribute).Name} on collection member {member.Name}"
+                //не совпадающий с тем, что написано на самом члене.
+                //
+                //Отказ, а не падение: причина названа словами вместе с именем типа
+                //и члена, и стектрейс к ней ничего не добавляет - см. комментарий
+                //у GenerationRefusedException
+                throw new GenerationRefusedException(
+                    $"{member.ContainingType.ToFullDisplayString()}.{member.Name}:"
+                    + $" {typeof(XmlElementAttribute).Name} on a collection member"
                     + $" is not supported: it declares items without a wrapping element."
                     + $" Use {typeof(XmlArrayAttribute).Name} to rename the wrapper"
                     );

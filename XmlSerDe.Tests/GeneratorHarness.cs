@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace XmlSerDe.Tests
@@ -79,6 +80,60 @@ namespace XmlSerDe.Tests
                     return false;
                 }
             }
+        }
+
+        /// <summary>
+        /// Результат прогона: что генератор написал, на что пожаловался сам и
+        /// что об этом сказал компилятор.
+        /// </summary>
+        public sealed class CompileRun
+        {
+            public Dictionary<string, string> Sources { get; set; } = new();
+            public List<Diagnostic> GeneratorDiagnostics { get; set; } = new();
+            public List<Diagnostic> CompileErrors { get; set; } = new();
+
+            public string Host => Sources.Single(s => s.Key.EndsWith("Host.g.cs", StringComparison.Ordinal)).Value;
+        }
+
+        /// <summary>
+        /// Гоняет генератор по тексту и компилирует его вывод вместе с исходником.
+        /// Смысл именно в компиляции: ошибка сборки пользователя видна тогда как
+        /// диагностика внутри теста, а не как красный тестовый проект целиком.
+        /// </summary>
+        public static CompileRun Compile(string source, string assemblyName)
+        {
+            var compilation = CSharpCompilation.Create(
+                assemblyName,
+                new[] { CSharpSyntaxTree.ParseText(source, path: "source.cs"), },
+                References(),
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+                );
+
+            var driver = CSharpGeneratorDriver.Create(
+                new[] { new global::XmlSerDe.Generator.XmlDeserializeGenerator().AsSourceGenerator(), }
+                );
+
+            driver
+                .RunGeneratorsAndUpdateCompilation(compilation, out var output, out var generatorDiagnostics)
+                .GetRunResult();
+
+            var run = new CompileRun
+            {
+                GeneratorDiagnostics = generatorDiagnostics.ToList(),
+                CompileErrors = output.GetDiagnostics()
+                    .Where(d => d.Severity == DiagnosticSeverity.Error)
+                    .ToList(),
+            };
+
+            foreach (var tree in output.SyntaxTrees)
+            {
+                if (tree.FilePath.EndsWith(".g.cs", StringComparison.Ordinal))
+                {
+                    run.Sources[tree.FilePath] = tree.ToString();
+                }
+            }
+
+            return run;
         }
     }
 }
