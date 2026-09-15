@@ -4,6 +4,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Xunit;
+using CompileRun = XmlSerDe.Tests.GeneratorHarness.CompileRun;
 
 namespace XmlSerDe.Tests
 {
@@ -385,15 +386,6 @@ namespace Sample
 
         #region прогон генератора и компиляция его вывода
 
-        private sealed class CompileRun
-        {
-            public Dictionary<string, string> Sources { get; set; } = new();
-            public List<Diagnostic> GeneratorDiagnostics { get; set; } = new();
-            public List<Diagnostic> CompileErrors { get; set; } = new();
-
-            public string Host => Sources.Single(s => s.Key.EndsWith("Host.g.cs", StringComparison.Ordinal)).Value;
-        }
-
         private static void AssertCompiles(CompileRun run)
         {
             Assert.True(
@@ -421,38 +413,7 @@ namespace Sample
 
         private static CompileRun Compile(string source)
         {
-            var compilation = CSharpCompilation.Create(
-                "GeneratedShapeCompileFixtureAssembly",
-                new[] { CSharpSyntaxTree.ParseText(source, path: "source.cs"), },
-                GeneratorHarness.References(),
-                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-                );
-
-            var driver = CSharpGeneratorDriver.Create(
-                new[] { new global::XmlSerDe.Generator.XmlDeserializeGenerator().AsSourceGenerator(), }
-                );
-
-            driver
-                .RunGeneratorsAndUpdateCompilation(compilation, out var output, out var generatorDiagnostics)
-                .GetRunResult();
-
-            var run = new CompileRun
-            {
-                GeneratorDiagnostics = generatorDiagnostics.ToList(),
-                CompileErrors = output.GetDiagnostics()
-                    .Where(d => d.Severity == DiagnosticSeverity.Error)
-                    .ToList(),
-            };
-
-            foreach (var tree in output.SyntaxTrees)
-            {
-                if (tree.FilePath.EndsWith(".g.cs", StringComparison.Ordinal))
-                {
-                    run.Sources[tree.FilePath] = tree.ToString();
-                }
-            }
-
-            return run;
+            return GeneratorHarness.Compile(source, "GeneratedShapeCompileFixtureAssembly");
         }
 
         #endregion
